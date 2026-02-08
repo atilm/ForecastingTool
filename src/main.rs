@@ -6,7 +6,6 @@ use clap::Parser;
 struct CliArgs {
     #[arg(short, long)]
     name: String,
-    // Define CLI arguments here
 }
 
 fn main() {
