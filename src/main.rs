@@ -1,5 +1,15 @@
 mod domain;
 
+use clap::Parser;
+
+#[derive(Parser)]
+struct CliArgs {
+    #[arg(short, long)]
+    name: String,
+    // Define CLI arguments here
+}
+
 fn main() {
-    println!("Hello, world!");
+    let args = CliArgs::parse();
+    println!("Hello, {}!", args.name);
 }
