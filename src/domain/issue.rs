@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use chrono::NaiveDate;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Issue {
@@ -6,9 +7,9 @@ pub struct Issue {
 	pub title: Option<String>,
 	pub description: Option<String>,
 	pub status: Option<String>,
-	pub created_date: Option<String>,
-	pub start_date: Option<String>,
-	pub done_date: Option<String>,
+	pub created_date: Option<NaiveDate>,
+	pub start_date: Option<NaiveDate>,
+	pub done_date: Option<NaiveDate>,
 }
 
 impl Issue {
@@ -22,9 +23,9 @@ impl Issue {
 		map.insert("title".to_string(), self.title.clone());
 		map.insert("description".to_string(), self.description.clone());
 		map.insert("status".to_string(), self.status.clone());
-		map.insert("created_date".to_string(), self.created_date.clone());
-		map.insert("start_date".to_string(), self.start_date.clone());
-		map.insert("done_date".to_string(), self.done_date.clone());
+		map.insert("created_date".to_string(), self.created_date.map(|d| d.to_string()));
+		map.insert("start_date".to_string(), self.start_date.map(|d| d.to_string()));
+		map.insert("done_date".to_string(), self.done_date.map(|d| d.to_string()));
 		map
 	}
 }
@@ -52,9 +53,9 @@ mod tests {
 			title: Some("A title".into()),
 			description: None,
 			status: Some("Done".into()),
-			created_date: Some("2025-01-01".into()),
+			created_date: Some(NaiveDate::from_ymd_opt(2025, 1, 1).unwrap()),
 			start_date: None,
-			done_date: Some("2025-02-01".into()),
+			done_date: Some(NaiveDate::from_ymd_opt(2025, 2, 1).unwrap()),
 		};
 
 		let dict = issue.to_dict();
