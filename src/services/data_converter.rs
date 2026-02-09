@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use crate::domain::throughput::{self, Throughput};
+use crate::domain::throughput::Throughput;
 use crate::services::data_source::{DataQuery, DataSource, DataSourceError};
-use chrono::Datelike;
+use chrono::{Datelike, NaiveDate};
 
 pub struct DataConverter {
     data_source: Box<dyn DataSource>,
@@ -13,35 +13,35 @@ impl DataConverter {
         Self { data_source }
     }
 
-    pub async fn get_throughput_data(&self, data_query: DataQuery) -> Result<Vec<Throughput>, DataSourceError> {
+    pub async fn get_throughput_data(
+        &self,
+        data_query: DataQuery,
+    ) -> Result<Vec<Throughput>, DataSourceError> {
         let issues = self.data_source.get_issues(data_query).await?;
 
-        let minimum_done_date = issues
-            .iter()
-            .filter_map(|issue| issue.done_date)
-            .min()
-            .ok_or(DataSourceError::NotFound)?;
-        let maximum_done_date = issues
-            .iter()
-            .filter_map(|issue| issue.done_date)
-            .max()
-            .ok_or(DataSourceError::NotFound)?;
+        let done_dates: Vec<NaiveDate> =
+            issues.iter().filter_map(|issue| issue.done_date).collect();
+        let min_date = *done_dates.iter().min().ok_or(DataSourceError::NotFound)?;
+        let max_date = *done_dates.iter().max().ok_or(DataSourceError::NotFound)?;
+
+        let mut date_counts: BTreeMap<NaiveDate, usize> = BTreeMap::new();
+        for date in done_dates {
+            *date_counts.entry(date).or_insert(0) += 1;
+        }
+
+        fn is_weekend(date: NaiveDate) -> bool {
+            matches!(date.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun)
+        }
 
         let mut throughput_data = Vec::new();
-
-        for date in minimum_done_date.iter_days().take_while(|&d| d <= maximum_done_date) {
-            if date.weekday() == chrono::Weekday::Sat || date.weekday() == chrono::Weekday::Sun {
+        for date in min_date.iter_days().take_while(|&d| d <= max_date) {
+            if is_weekend(date) {
                 continue;
             }
 
-            let completed_issues = issues
-                .iter()
-                .filter(|issue| issue.done_date == Some(date))
-                .count();
-
             throughput_data.push(Throughput {
                 date,
-                completed_issues,
+                completed_issues: *date_counts.get(&date).unwrap_or(&0),
             });
         }
 
@@ -63,7 +63,10 @@ mod tests {
 
     #[async_trait::async_trait]
     impl DataSource for MockDataSource {
-        async fn get_epic(&self, _epic_id: &str) -> Result<crate::domain::epic::Epic, DataSourceError> {
+        async fn get_epic(
+            &self,
+            _epic_id: &str,
+        ) -> Result<crate::domain::epic::Epic, DataSourceError> {
             Err(DataSourceError::Other("not used".to_string()))
         }
 
@@ -77,9 +80,9 @@ mod tests {
         // Arrange
         let done_dates = vec![
             NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(), // Thursday
-            NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(), 
+            NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
             NaiveDate::from_ymd_opt(2026, 1, 5).unwrap(), // Monday
-            NaiveDate::from_ymd_opt(2026, 1, 5).unwrap(), 
+            NaiveDate::from_ymd_opt(2026, 1, 5).unwrap(),
             NaiveDate::from_ymd_opt(2026, 1, 5).unwrap(),
             NaiveDate::from_ymd_opt(2026, 1, 7).unwrap(), // Wednesday
         ];
@@ -116,9 +119,11 @@ mod tests {
 
         let expected_throughput = expected_throughput_data
             .into_iter()
-            .map(|(date, completed_issues)| Throughput { date, completed_issues })
+            .map(|(date, completed_issues)| Throughput {
+                date,
+                completed_issues,
+            })
             .collect::<Vec<_>>();
         assert_eq!(result, expected_throughput);
     }
 }
-
