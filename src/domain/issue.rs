@@ -1,5 +1,7 @@
 use chrono::NaiveDate;
 
+use crate::domain::estimate::Estimate;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IssueStatus {
     ToDo,
@@ -7,11 +9,18 @@ pub enum IssueStatus {
     Done,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IssueId {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Issue {
-    pub issue_id: Option<String>,
+    pub issue_id: Option<IssueId>,
     pub summary: Option<String>,
     pub description: Option<String>,
+    pub estimate: Option<Estimate>,
+    pub dependencies: Vec<IssueId>,
     pub status: Option<IssueStatus>,
     pub created_date: Option<NaiveDate>,
     pub start_date: Option<NaiveDate>,
@@ -26,6 +35,8 @@ impl Issue {
 
 #[cfg(test)]
 mod tests {
+    use assert_cmd::assert;
+
     use super::*;
 
     #[test]
@@ -34,6 +45,8 @@ mod tests {
         assert_eq!(issue.issue_id, None);
         assert_eq!(issue.summary, None);
         assert_eq!(issue.description, None);
+        assert_eq!(issue.estimate, None);
+        assert!(issue.dependencies.is_empty());
         assert_eq!(issue.status, None);
         assert_eq!(issue.created_date, None);
         assert_eq!(issue.start_date, None);

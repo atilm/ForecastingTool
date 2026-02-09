@@ -1,10 +1,12 @@
 use chrono::NaiveDate;
 
+use crate::domain::issue::IssueId;
+
 use super::issue::{Issue, IssueStatus};
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Epic {
-	pub issue_id: Option<String>,
+	pub issue_id: Option<IssueId>,
 	pub summary: Option<String>,
 	pub description: Option<String>,
 	pub status: Option<IssueStatus>,

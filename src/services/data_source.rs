@@ -16,6 +16,7 @@ pub enum DataSourceError {
 }
 
 /// Describes an interface for retrieving Epic and Issue information.
+#[async_trait::async_trait]
 pub trait DataSource {
     async fn get_epic(&self, epic_id: &str) -> Result<Epic, DataSourceError>;
 }
