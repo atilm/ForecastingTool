@@ -1,4 +1,5 @@
 mod domain;
+mod services;
 
 use clap::Parser;
 
