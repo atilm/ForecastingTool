@@ -141,6 +141,7 @@ impl JiraApiClient {
         params.insert("fields", fields);
 
         let payload = self.fetch_json(&url, &params).await?;
+
         let issues = payload
             .get("issues")
             .and_then(|value| value.as_array())
