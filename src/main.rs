@@ -1,3 +1,5 @@
+use tokio;
+
 mod domain;
 mod services;
 
@@ -9,7 +11,8 @@ struct CliArgs {
     name: String,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = CliArgs::parse();
     println!("Hello, {}!", args.name);
 }
