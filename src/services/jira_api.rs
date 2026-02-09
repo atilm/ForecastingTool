@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::domain::epic::Epic;
 use crate::domain::issue::IssueId;
 use crate::domain::issue::{Issue, IssueStatus};
-use crate::services::data_source::{DataSource, DataSourceError};
+use crate::services::data_source::{DataSource, DataQuery, DataSourceError};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -217,6 +217,12 @@ impl DataSource for JiraApiClient {
         epic.issues = issues_of_epic;
 
         Ok(epic)
+    }
+
+    async fn get_issues(&self, query: DataQuery) -> Result<Vec<Issue>, DataSourceError> {
+        match query {
+            DataQuery::StringQuery(jql) => self.get_issues_by_jql(&jql).await,
+        }
     }
 }
 
