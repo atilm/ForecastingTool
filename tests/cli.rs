@@ -1,13 +1,10 @@
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use chrono::NaiveDate;
-use forecasts::domain::throughput::Throughput;
-use forecasts::services::throughput_yaml::serialize_throughput_to_yaml;
 use predicates::prelude::*;
 use std::env;
 use std::fs;
-use std::net::SocketAddr;
-use std::sync::Mutex;
+use tokio::task;
+use warp::Filter;
 
 #[test]
 fn test_cli_help() -> Result<(), Box<dyn std::error::Error>> {
@@ -19,85 +16,83 @@ fn test_cli_help() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_get_throughput_data() {
-    let mut server = mockito::Server::new_async().await;
-    let url = server.url();
-
-    server
-        .mock("GET", "/search/jql")
-        .with_status(200)
-        .with_header("content-type", "application/json")
-        .with_body(
-            r#"{
-  "isLast": false,
-  "issues": [
-    {
-      "fields": {
-        "created": "2026-01-12T10:13:04.983+0100",
-        "actualStartDate": "2026-01-22T10:57:00.000+0100",
-        "actualEndDate": "2026-01-26T08:42:00.000+0100",
-        "description": { 
-          "content": [
+    let issues_response = serde_json::json!({
+        "isLast": false,
+        "issues": [
             {
-              "content": [
-                {
-                  "text": "A description text.",
-                  "type": "text"
-                }
-              ],
-              "type": "paragraph"
-            }
-          ],
-          "type": "doc",
-          "version": 1
-        },
-        "status": {
-          "name": "Done",
-          "statusCategory": {
-            "name": "Done"
-          }
-        },
-        "summary": "A first task"
-      },
-      "key": "ABC-123"
-    },
-    {
-      "fields": {
-        "created": "2026-01-11T10:13:04.983+0100",
-        "actualStartDate": "2026-01-22T10:57:00.000+0100",
-        "actualEndDate": "2026-01-28T08:42:00.000+0100",
-        "description": { 
-          "content": [
+                "fields": {
+                    "created": "2026-01-12T10:13:04.983+0100",
+                    "actualStartDate": "2026-01-22T10:57:00.000+0100",
+                    "actualEndDate": "2026-01-26T08:42:00.000+0100",
+                    "description": {
+                        "content": [
+                            {
+                                "content": [
+                                    {
+                                        "text": "A description text.",
+                                        "type": "text"
+                                    }
+                                ],
+                                "type": "paragraph"
+                            }
+                        ],
+                        "type": "doc",
+                        "version": 1
+                    },
+                    "status": {
+                        "name": "Done",
+                        "statusCategory": {
+                            "name": "Done"
+                        }
+                    },
+                    "summary": "A first task"
+                },
+                "key": "ABC-123"
+            },
             {
-              "content": [
-                {
-                  "text": "Another description text.",
-                  "type": "text"
-                }
-              ],
-              "type": "paragraph"
+                "fields": {
+                    "created": "2026-01-11T10:13:04.983+0100",
+                    "actualStartDate": "2026-01-22T10:57:00.000+0100",
+                    "actualEndDate": "2026-01-28T08:42:00.000+0100",
+                    "description": {
+                        "content": [
+                            {
+                                "content": [
+                                    {
+                                        "text": "Another description text.",
+                                        "type": "text"
+                                    }
+                                ],
+                                "type": "paragraph"
+                            }
+                        ],
+                        "type": "doc",
+                        "version": 1
+                    },
+                    "status": {
+                        "name": "Done",
+                        "statusCategory": {
+                            "name": "Done"
+                        }
+                    },
+                    "summary": "A second task"
+                },
+                "key": "ABC-124"
             }
-          ],
-          "type": "doc",
-          "version": 1
-        },
-        "status": {
-          "name": "Done",
-          "statusCategory": {
-            "name": "Done"
-          }
-        },
-        "summary": "A second task"
-      },
-      "key": "ABC-124"
-    }
-  ],
-  "nextPageToken": "ChkjU3RyaW5nJlNVRlhSVlE9JUludCZPQT09EDIY8sP-ncQzIkpwcm9qZWN0ID0gSUFXRVQgQU5EIHR5cGUgSU4gKFN0b3J5LCAiUHJvZHVjdGlvbiBEZWZlY3QiKSBBTkQgc3RhdHVzID0gRG9uZSoCW10="
-}"#,
-        ).create_async().await;
+        ],
+        "nextPageToken": "ChkjU3RyaW5nJlNVRlhSVlE9JUludCZPQT09EDIY8sP-ncQzIkpwcm9qZWN0ID0gSUFXRVQgQU5EIHR5cGUgSU4gKFN0b3J5LCAiUHJvZHVjdGlvbiBEZWZlY3QiKSBBTkQgc3RhdHVzID0gRG9uZSoCW10="
+    });
 
-    let base_url = url;
+    let issues_route = warp::path("search")
+        .and(warp::path("jql"))
+        .and(warp::get())
+        .map(move || warp::reply::json(&issues_response));
+    let (addr, server) = warp::serve(issues_route).bind_ephemeral(([127, 0, 0, 1], 0));
+    tokio::spawn(server);
+
+    let base_url = format!("http://{}", addr);
     let config_yaml = format!(
         r#"
 base_url: {base_url}
@@ -117,22 +112,29 @@ actual_end_date_field_id: actualEndDate
         env::set_var("JIRA_API_TOKEN", "mocktoken");
     }
 
-    let output_path = "test_output.yaml";
+    let output_file = assert_fs::NamedTempFile::new("test_output.yaml").unwrap();
+    let output_path = output_file.path();
 
-    let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
-    cmd.args(&[
-        "get-throughput",
-        "-j",
-        "project = TEST",
-        "-c",
-        config_path.to_str().unwrap(),
-        "-o",
-        output_path,
-    ]);
+    let config_arg = config_path.to_str().unwrap().to_string();
+    let output_arg = output_path.to_str().unwrap().to_string();
+    task::spawn_blocking(move || {
+        let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
+        cmd.args(&[
+            "get-throughput",
+            "-j",
+            "project = TEST",
+            "-c",
+            &config_arg,
+            "-o",
+            &output_arg,
+        ]);
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Throughput data written to"));
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("Throughput data written to"));
+    })
+    .await
+    .unwrap();
 
     let output = fs::read_to_string(output_path).unwrap();
     assert!(output.contains("2026-01-26"));
