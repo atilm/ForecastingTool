@@ -97,6 +97,7 @@ async fn test_get_throughput_data() {
         r#"
 base_url: {base_url}
 project_key: MOCK
+throughput_query: project = TEST
 estimation_field_id: estimate
 start_date_field_id: startDate
 actual_start_date_field_id: actualStartDate
@@ -121,8 +122,6 @@ actual_end_date_field_id: actualEndDate
         let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
         cmd.args(&[
             "get-throughput",
-            "-j",
-            "project = TEST",
             "-c",
             &config_arg,
             "-o",

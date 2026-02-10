@@ -8,6 +8,8 @@
     * [ ] as csv ?
   * [ ] Export velocity data
   * [ ] Export list of issues with estimates
+  * [ ] Plot data
+    * [x] Plot throughput data
   * [ ] different output formats
     * [ ] `yaml`
     * [ ] markdown

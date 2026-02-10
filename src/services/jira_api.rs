@@ -17,6 +17,7 @@ use crate::services::data_source::{DataSource, DataQuery, DataSourceError};
 pub struct JiraProjectMetaData {
     pub base_url: String,
     pub project_key: String,
+    pub throughput_query: String,
     pub estimation_field_id: String,
     pub start_date_field_id: String,
     pub actual_start_date_field_id: String,
@@ -28,6 +29,7 @@ impl Default for JiraProjectMetaData {
         Self {
             base_url: String::new(),
             project_key: String::new(),
+            throughput_query: String::new(),
             estimation_field_id: String::new(),
             start_date_field_id: String::new(),
             actual_start_date_field_id: String::new(),

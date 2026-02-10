@@ -28,9 +28,6 @@ enum Commands {
     },
     /// Get throughput data from Jira and serialize to YAML
     GetThroughput {
-        /// JQL query string
-        #[arg(short, long)]
-        jql: String,
         /// Path to Jira config YAML
         #[arg(short, long)]
         config: String,
@@ -48,7 +45,7 @@ async fn main() {
         Commands::Hello { name } => {
             println!("Hello, {}!", name);
         }
-        Commands::GetThroughput { jql, config, output } => {
+        Commands::GetThroughput { config, output } => {
             // Load Jira config
             let config_parser = JiraConfigParser;
             let jira_project = match config_parser.parse(&config) {
@@ -58,6 +55,7 @@ async fn main() {
                     return;
                 }
             };
+
             // Load auth from env
             let auth = match AuthData::from_env() {
                 Ok(auth) => auth,
@@ -67,7 +65,7 @@ async fn main() {
                 }
             };
             // Create JiraApiClient
-            let api_client = match JiraApiClient::new(jira_project, auth) {
+            let api_client = match JiraApiClient::new(jira_project.clone(), auth) {
                 Ok(client) => client,
                 Err(e) => {
                     eprintln!("Failed to create JiraApiClient: {e:?}");
@@ -76,7 +74,7 @@ async fn main() {
             };
             let data_converter = DataConverter::new(Box::new(api_client));
             // Fetch throughput data
-            let throughput = match data_converter.get_throughput_data(DataQuery::StringQuery(jql)).await {
+            let throughput = match data_converter.get_throughput_data(DataQuery::StringQuery(jira_project.throughput_query)).await {
                 Ok(data) => data,
                 Err(e) => {
                     eprintln!("Failed to get throughput data: {e:?}");
