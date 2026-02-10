@@ -142,19 +142,59 @@ impl JiraApiClient {
         params.insert("jql", jql.to_string());
         params.insert("fields", fields);
 
-        let payload = self.fetch_json(&url, &params).await?;
+        let mut mapped = Vec::new();
+        let mut last_page_token: Option<String> = None;
 
-        let issues = payload
-            .get("issues")
-            .and_then(|value| value.as_array())
-            .ok_or(DataSourceError::Parse)?;
+        loop {
+            let payload = self.fetch_json(&url, &params).await?;
 
-        let mut mapped = Vec::with_capacity(issues.len());
-        for issue in issues {
-            if let Some(issue_obj) = issue.as_object() {
-                let mapped_issue = self.map_issue(issue_obj)?;
-                mapped.push(mapped_issue);
+            let issues = payload
+                .get("issues")
+                .and_then(|value| value.as_array())
+                .ok_or(DataSourceError::Parse)?;
+
+            for issue in issues {
+                if let Some(issue_obj) = issue.as_object() {
+                    let mapped_issue = self.map_issue(issue_obj)?;
+                    mapped.push(mapped_issue);
+                }
             }
+
+            if let Some(token) = payload.get("nextPageToken").and_then(|value| value.as_str()) {
+                if last_page_token.as_deref() == Some(token) {
+                    break;
+                }
+                last_page_token = Some(token.to_string());
+                params.insert("nextPageToken", token.to_string());
+                params.remove("startAt");
+                continue;
+            }
+
+            if payload
+                .get("isLast")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+            {
+                break;
+            }
+
+            let start_at = payload.get("startAt").and_then(|value| value.as_u64());
+            let max_results = payload.get("maxResults").and_then(|value| value.as_u64());
+            let total = payload.get("total").and_then(|value| value.as_u64());
+
+            if let (Some(start_at), Some(max_results), Some(total)) =
+                (start_at, max_results, total)
+            {
+                let next_start_at = start_at.saturating_add(max_results);
+                if next_start_at >= total {
+                    break;
+                }
+                params.remove("nextPageToken");
+                params.insert("startAt", next_start_at.to_string());
+                continue;
+            }
+
+            break;
         }
 
         Ok(mapped)
@@ -297,3 +337,4 @@ fn adf_to_text(value: &Value) -> String {
 
     output
 }
+
