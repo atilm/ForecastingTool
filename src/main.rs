@@ -1,15 +1,12 @@
-use tokio;
-
 mod domain;
 mod services;
 
 use clap::{Parser, Subcommand};
-use std::fs::File;
-use std::io::BufWriter;
 use crate::services::jira_api::{JiraApiClient, JiraConfigParser, AuthData};
 use crate::services::data_converter::DataConverter;
 use crate::services::throughput_yaml::serialize_throughput_to_yaml;
 use crate::services::data_source::DataQuery;
+use crate::services::simulation::simulate_from_throughput_file;
 
 
 #[derive(Parser)]
@@ -29,6 +26,24 @@ enum Commands {
         /// Output YAML file
         #[arg(short, long)]
         output: String,
+    },
+    /// Simulate completion dates from throughput data
+    SimulateN {
+        /// Throughput YAML file
+        #[arg(short = 'f', long)]
+        throughput: String,
+        /// Output YAML file
+        #[arg(short, long)]
+        output: String,
+        /// Number of simulation iterations
+        #[arg(short, long)]
+        iterations: usize,
+        /// Number of issues to simulate
+        #[arg(short, long)]
+        number_of_issues: usize,
+        /// Simulation start date (YYYY-MM-DD)
+        #[arg(short, long)]
+        start_date: String,
     },
 }
 
@@ -74,18 +89,53 @@ async fn main() {
                 }
             };
             // Serialize to YAML
-            let file = match File::create(&output) {
-                Ok(f) => f,
+            let mut buffer = Vec::new();
+            if let Err(e) = serialize_throughput_to_yaml(&mut buffer, &throughput) {
+                eprintln!("Failed to serialize throughput to YAML: {e:?}");
+                return;
+            }
+            if let Err(e) = tokio::fs::write(&output, buffer).await {
+                eprintln!("Failed to write output file: {e:?}");
+            } else {
+                println!("Throughput data written to {output}");
+            }
+        }
+        Commands::SimulateN {
+            throughput,
+            output,
+            iterations,
+            number_of_issues,
+            start_date,
+        } => {
+            let simulation = match simulate_from_throughput_file(
+                &throughput,
+                iterations,
+                number_of_issues,
+                &start_date,
+            )
+            .await
+            {
+                Ok(result) => result,
                 Err(e) => {
-                    eprintln!("Failed to create output file: {e:?}");
+                    eprintln!("Failed to simulate by throughput: {e:?}");
                     return;
                 }
             };
-            let mut writer = BufWriter::new(file);
-            if let Err(e) = serialize_throughput_to_yaml(&mut writer, &throughput) {
-                eprintln!("Failed to serialize throughput to YAML: {e:?}");
+
+            let yaml = match serde_yaml::to_string(&simulation) {
+                Ok(contents) => contents,
+                Err(e) => {
+                    eprintln!("Failed to serialize simulation output: {e:?}");
+                    return;
+                }
+            };
+
+            if let Err(e) = tokio::fs::write(&output, yaml).await {
+                eprintln!("Failed to write simulation output: {e:?}");
             } else {
-                println!("Throughput data written to {output}");
+                println!(
+                    "Simulation result for {number_of_issues} items written to {output}"
+                );
             }
         }
     }

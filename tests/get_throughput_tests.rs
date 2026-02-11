@@ -7,7 +7,7 @@ use std::fs;
 use tokio::task;
 use warp::Filter;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test()]
 async fn test_get_throughput_data() {
     let issues_response = serde_json::json!({
         "issues": [
