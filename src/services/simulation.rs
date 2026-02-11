@@ -35,7 +35,6 @@ pub(crate) struct SimulationPercentile {
 pub(crate) struct SimulationReport {
     pub start_date: String,
     pub simulated_items: usize,
-    pub psimulated_items: usize,
     pub p0: SimulationPercentile,
     pub p50: SimulationPercentile,
     pub p85: SimulationPercentile,
@@ -109,7 +108,6 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
     Ok(SimulationReport {
         start_date: start_date.format("%Y-%m-%d").to_string(),
         simulated_items: number_of_issues,
-        psimulated_items: number_of_issues,
         p0: SimulationPercentile {
             days: p0_days,
             date: end_date_from_days(start_date, p0_days).format("%Y-%m-%d").to_string(),

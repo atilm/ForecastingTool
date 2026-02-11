@@ -58,7 +58,7 @@ async fn simulate_by_throughput() {
     //    date: 2026-02-19
     assert!(output.contains("report:"));
     assert!(output.contains("start_date:"));
-    assert!(output.contains("psimulated_items:"));
+    assert!(output.contains("simulated_items:"));
     assert!(output.contains("p0:"));
     assert!(output.contains("p50:"));
     assert!(output.contains("p85:"));
