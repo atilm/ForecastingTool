@@ -21,11 +21,6 @@ struct CliArgs {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Print hello message
-    Hello {
-        #[arg(short, long)]
-        name: String,
-    },
     /// Get throughput data from Jira and serialize to YAML
     GetThroughput {
         /// Path to Jira config YAML
@@ -42,9 +37,6 @@ enum Commands {
 async fn main() {
     let args = CliArgs::parse();
     match args.command {
-        Commands::Hello { name } => {
-            println!("Hello, {}!", name);
-        }
         Commands::GetThroughput { config, output } => {
             // Load Jira config
             let config_parser = JiraConfigParser;

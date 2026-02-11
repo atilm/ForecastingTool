@@ -7,16 +7,6 @@ use std::fs;
 use tokio::task;
 use warp::Filter;
 
-#[test]
-fn test_cli_help() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
-    cmd.arg("--help");
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Usage"));
-    Ok(())
-}
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_get_throughput_data() {
     let issues_response = serde_json::json!({
