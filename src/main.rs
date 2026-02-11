@@ -107,11 +107,13 @@ async fn main() {
             number_of_issues,
             start_date,
         } => {
+            let histogram_path = format!("{output}.png");
             let simulation = match simulate_from_throughput_file(
                 &throughput,
                 iterations,
                 number_of_issues,
                 &start_date,
+                &histogram_path,
             )
             .await
             {
@@ -136,6 +138,7 @@ async fn main() {
                 println!(
                     "Simulation result for {number_of_issues} items written to {output}"
                 );
+                println!("Simulation histogram written to {histogram_path}");
             }
         }
     }
