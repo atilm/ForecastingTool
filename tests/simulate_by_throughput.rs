@@ -41,7 +41,6 @@ async fn simulate_by_throughput() {
     fs::remove_file(output_arg).unwrap();
 
     // The output should contain a report with the following structure:
-    // report:
     //  start_date: 2026-01-30
     //  simulated_items: 10
     //  p0: 
@@ -56,7 +55,6 @@ async fn simulate_by_throughput() {
     //  p100:
     //    days: 20
     //    date: 2026-02-19
-    assert!(output.contains("report:"));
     assert!(output.contains("start_date:"));
     assert!(output.contains("simulated_items:"));
     assert!(output.contains("p0:"));

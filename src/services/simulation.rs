@@ -37,14 +37,13 @@ pub(crate) struct SimulationPercentile {
 pub(crate) struct SimulationReport {
     pub start_date: String,
     pub simulated_items: usize,
-    pub psimulated_items: usize,
     pub p0: SimulationPercentile,
     pub p50: SimulationPercentile,
     pub p85: SimulationPercentile,
     pub p100: SimulationPercentile,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct SimulationOutput {
     pub report: SimulationReport,
     pub results: Vec<usize>,
@@ -56,7 +55,7 @@ pub(crate) async fn simulate_from_throughput_file(
     number_of_issues: usize,
     start_date: &str,
     histogram_path: &str,
-) -> Result<SimulationOutput, SimulationError> {
+) -> Result<SimulationReport, SimulationError> {
     let throughput_yaml = tokio::fs::read_to_string(throughput_path).await?;
     let throughput = deserialize_throughput_from_yaml_str(&throughput_yaml)?;
     let start_date = NaiveDate::parse_from_str(start_date, "%Y-%m-%d")
@@ -64,7 +63,7 @@ pub(crate) async fn simulate_from_throughput_file(
 
     let simulation = run_simulation(&throughput, iterations, number_of_issues, start_date)?;
     write_histogram_png(histogram_path, &simulation.results).await?;
-    Ok(simulation)
+    Ok(simulation.report)
 }
 
 pub(crate) fn run_simulation(
@@ -114,7 +113,6 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
     let report = SimulationReport {
         start_date: start_date.format("%Y-%m-%d").to_string(),
         simulated_items: number_of_issues,
-        psimulated_items: number_of_issues,
         p0: SimulationPercentile {
             days: p0_days,
             date: end_date_from_days(start_date, p0_days).format("%Y-%m-%d").to_string(),

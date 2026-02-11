@@ -3,9 +3,8 @@
 * [ ] Download data from web APIs
   * [ ] Supported APIs
     * [ ] JIRA
-  * [x] Export throughput data
-    * [ ] Configurable by query string in config file
-    * [ ] as csv ?
+  * [x] ~~Export throughput data~~
+    * [x] ~~Configurable by query string in config file~~
   * [ ] Export velocity data
   * [ ] Export list of issues with estimates
   * [ ] Plot data
@@ -15,8 +14,8 @@
     * [ ] markdown
 * [ ] Generate Forecasts
   * [ ] By Monte Carlo Simulation
-    * [x] Based on empirical throughput data
-      * [x] choose daily throughput randomly
+    * [x] ~~Based on empirical throughput data~~
+      * [x] ~~choose daily throughput randomly~~
     * [ ] Based on empirical velocity as story / points per day
       * [ ] calculate velocity from 
       * [ ] choose size of work package randomly from beta distribution
@@ -31,12 +30,13 @@
   * [ ] Output simulation inputs and results
     * [ ] report in yaml format
       * [x] used input source
-      * [x] different percentiles: 0, 50, 85, 100
-      * [x] durations in days
+      * [x] ~~different percentiles: 0, 50, 85, 100~~
+      * [x] ~~durations in days~~
+      * [x] ~~end dates~~
     * [ ] `stdout`
       * [x] info from yaml report, plus
       * [x] start and completion dates
     * [ ] Dependency diagram (mermaid)
     * [ ] Gantt diagram (mermaid)
-    * [ ] Histogram (`png`)
+    * [x] ~~Histogram (`png`)~~
     * [ ] Burn down chart (`png`)
