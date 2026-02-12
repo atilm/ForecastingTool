@@ -54,7 +54,7 @@ fn render_plot_png(
         .max()
         .unwrap_or(0);
     let max_y = max_completed.saturating_add(1).max(1) as i32;
-    let max_x = (throughput.len().saturating_sub(1).max(1)) as i32;
+    let max_x = throughput.len().max(1) as i32;
 
     let root = BitMapBackend::new(output_path, (900, 600)).into_drawing_area();
     root.fill(&WHITE)
@@ -62,9 +62,9 @@ fn render_plot_png(
 
     let mut chart = ChartBuilder::on(&root)
         .margin(20)
-        .caption("Throughput Over Time", ("sans-serif", 28))
-        .x_label_area_size(40)
-        .y_label_area_size(50)
+        .caption("Throughput Over Time", ("sans-serif", 30))
+        .x_label_area_size(55)
+        .y_label_area_size(65)
         .build_cartesian_2d(0..max_x, 0..max_y)
         .map_err(|e| ThroughputPlotError::Plot(e.to_string()))?;
 
@@ -74,6 +74,8 @@ fn render_plot_png(
         .disable_mesh()
         .x_desc("Date")
         .y_desc("Completed issues")
+        .label_style(("sans-serif", 18))
+        .axis_desc_style(("sans-serif", 22))
         .x_labels(label_count)
         .x_label_formatter(&|index| {
             if *index < 0 {
@@ -88,24 +90,15 @@ fn render_plot_png(
         .draw()
         .map_err(|e| ThroughputPlotError::Plot(e.to_string()))?;
 
-    let series = throughput
-        .iter()
-        .enumerate()
-        .map(|(idx, item)| (idx as i32, item.completed_issues as i32));
-
+    let bar_color = RGBColor(30, 122, 204);
+    let bar_style = ShapeStyle::from(&bar_color).filled().stroke_width(1);
     chart
-        .draw_series(LineSeries::new(series, BLUE.stroke_width(2)))
-        .map_err(|e| ThroughputPlotError::Plot(e.to_string()))?;
-
-    chart
-        .draw_series(
-            throughput
-                .iter()
-                .enumerate()
-                .map(|(idx, item)| {
-                    Circle::new((idx as i32, item.completed_issues as i32), 4, BLUE.filled())
-                }),
-        )
+        .draw_series(throughput.iter().enumerate().map(|(idx, item)| {
+            Rectangle::new(
+                [(idx as i32, 0), (idx as i32 + 1, item.completed_issues as i32)],
+                bar_style.clone(),
+            )
+        }))
         .map_err(|e| ThroughputPlotError::Plot(e.to_string()))?;
 
     root.present()

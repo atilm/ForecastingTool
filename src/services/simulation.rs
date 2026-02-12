@@ -226,22 +226,28 @@ fn render_histogram_png(output_path: &str, results: &[usize]) -> Result<(), Simu
     let max_x = max_value.saturating_add(1);
     let mut chart = ChartBuilder::on(&root)
         .margin(20)
-        .caption("Simulation Results", ("sans-serif", 28))
-        .x_label_area_size(30)
-        .y_label_area_size(40)
+        .caption("Simulation Results", ("sans-serif", 30))
+        .x_label_area_size(55)
+        .y_label_area_size(65)
         .build_cartesian_2d(min_value..max_x, 0..(max_count + 1))
         .map_err(|e| SimulationError::Histogram(e.to_string()))?;
 
     chart
         .configure_mesh()
         .disable_mesh()
+        .x_desc("Duration in days")
+        .y_desc("Frequency")
+        .label_style(("sans-serif", 18))
+        .axis_desc_style(("sans-serif", 22))
         .draw()
         .map_err(|e| SimulationError::Histogram(e.to_string()))?;
 
+    let bar_color = RGBColor(30, 122, 204);
+    let bar_style = ShapeStyle::from(&bar_color).filled().stroke_width(1);
     chart
         .draw_series(
             Histogram::vertical(&chart)
-                .style(BLUE.filled())
+                .style(bar_style)
                 .data(results.iter().map(|value| (*value, 1))),
         )
         .map_err(|e| SimulationError::Histogram(e.to_string()))?;
