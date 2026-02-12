@@ -36,4 +36,13 @@ pub enum Commands {
         #[arg(short, long)]
         start_date: String,
     },
+    /// Plot throughput data from YAML into a PNG chart
+    PlotThroughput {
+        /// Throughput YAML file
+        #[arg(short, long)]
+        input: String,
+        /// Output PNG file
+        #[arg(short, long)]
+        output: String,
+    },
 }
