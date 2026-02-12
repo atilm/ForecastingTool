@@ -1,52 +1,14 @@
+mod commands;
 mod domain;
 mod services;
 
-use clap::{Parser, Subcommand};
-use crate::services::jira_api::{JiraApiClient, JiraConfigParser, AuthData};
+use crate::commands::base_commands::{CliArgs, Commands};
 use crate::services::data_converter::DataConverter;
-use crate::services::throughput_yaml::serialize_throughput_to_yaml;
 use crate::services::data_source::DataQuery;
+use crate::services::jira_api::{AuthData, JiraApiClient, JiraConfigParser};
 use crate::services::simulation::simulate_from_throughput_file;
-
-
-#[derive(Parser)]
-#[command(author, version, about)]
-struct CliArgs {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    /// Get throughput data from Jira and serialize to YAML
-    GetThroughput {
-        /// Path to Jira config YAML
-        #[arg(short, long)]
-        config: String,
-        /// Output YAML file
-        #[arg(short, long)]
-        output: String,
-    },
-    /// Simulate completion dates from throughput data
-    SimulateN {
-        /// Throughput YAML file
-        #[arg(short = 'f', long)]
-        throughput: String,
-        /// Output YAML file
-        #[arg(short, long)]
-        output: String,
-        /// Number of simulation iterations
-        #[arg(short, long)]
-        iterations: usize,
-        /// Number of issues to simulate
-        #[arg(short, long)]
-        number_of_issues: usize,
-        /// Simulation start date (YYYY-MM-DD)
-        #[arg(short, long)]
-        start_date: String,
-    },
-}
-
+use crate::services::throughput_yaml::serialize_throughput_to_yaml;
+use clap::Parser;
 
 #[tokio::main]
 async fn main() {
@@ -81,7 +43,10 @@ async fn main() {
             };
             let data_converter = DataConverter::new(Box::new(api_client));
             // Fetch throughput data
-            let throughput = match data_converter.get_throughput_data(DataQuery::StringQuery(jira_project.throughput_query)).await {
+            let throughput = match data_converter
+                .get_throughput_data(DataQuery::StringQuery(jira_project.throughput_query))
+                .await
+            {
                 Ok(data) => data,
                 Err(e) => {
                     eprintln!("Failed to get throughput data: {e:?}");
@@ -135,12 +100,9 @@ async fn main() {
             if let Err(e) = tokio::fs::write(&output, yaml).await {
                 eprintln!("Failed to write simulation output: {e:?}");
             } else {
-                println!(
-                    "Simulation result for {number_of_issues} items written to {output}"
-                );
+                println!("Simulation result for {number_of_issues} items written to {output}");
                 println!("Simulation histogram written to {histogram_path}");
             }
         }
     }
 }
-
