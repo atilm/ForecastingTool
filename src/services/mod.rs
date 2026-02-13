@@ -3,5 +3,6 @@ pub mod jira_api;
 pub mod data_converter;
 pub mod throughput_yaml;
 pub mod project_yaml;
+pub mod project_simulation;
 pub mod simulation;
 pub mod throughput_plot;

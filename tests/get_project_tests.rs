@@ -53,7 +53,8 @@ async fn test_get_project_data() {
     assert!(output.contains("id: ABC-123"));
     assert!(output.contains("summary: A first task"));
     assert!(output.contains("description: A description text."));
-    assert!(output.contains("estimate: 5"));
+    assert!(output.contains("type: story_points"));
+    assert!(output.contains("value: 5"));
     assert!(output.contains("created_date: 2026-01-12"));
     assert!(output.contains("start_date: 2026-01-22"));
     assert!(output.contains("done_date: 2026-01-26"));

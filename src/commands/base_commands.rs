@@ -36,6 +36,18 @@ pub enum Commands {
         #[arg(short, long)]
         output: String,
     },
+    /// Simulate project completion with dependency-aware Monte Carlo
+    Simulate {
+        /// Project YAML file
+        #[arg(short, long)]
+        input: String,
+        /// Output YAML file
+        #[arg(short, long)]
+        output: String,
+        /// Number of simulation iterations
+        #[arg(short, long, default_value_t = 10000)]
+        iterations: usize,
+    },
     /// Simulate completion dates from throughput data
     SimulateN {
         /// Throughput YAML file
