@@ -29,8 +29,10 @@ pub fn generate_gantt_diagram(
     }
 
     let mut lines = Vec::new();
+    lines.push("".to_string());
+    lines.push(format!("# {} Timeline", project.name));
+    lines.push("```mermaid".to_string());
     lines.push("gantt".to_string());
-    lines.push(format!("    title {} Gantt Chart", project.name));
     lines.push("    dateFormat  DD-MM-YYYY".to_string());
 
     for issue in &project.work_packages {
@@ -65,6 +67,7 @@ pub fn generate_gantt_diagram(
             end_date_wp.format("%d-%m-%Y")
         ));
     }
+    lines.push("```".to_string());
 
     Ok(lines.join("\n"))
 }
@@ -166,8 +169,8 @@ mod tests {
         let start_date = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
 
         let diagram = generate_gantt_diagram(&project, &simulation, start_date, 85.0).unwrap();
+        assert!(diagram.contains("# Demo Timeline"));
         assert!(diagram.contains("gantt"));
-        assert!(diagram.contains("title Demo Gantt Chart"));
         assert!(diagram.contains("A Name A"));
         assert!(diagram.contains("B Name B"));
         assert!(diagram.contains("01-01-2026"));
