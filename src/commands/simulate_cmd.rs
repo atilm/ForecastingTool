@@ -42,7 +42,7 @@ pub async fn simulate_command(cmd: Commands) {
             Err(e) => eprintln!("Failed to load project for gantt diagram: {e:?}"),
         }
 
-        let yaml = match serde_yaml::to_string(&simulation) {
+        let yaml = match serde_yaml::to_string(&simulation.report) {
             Ok(contents) => contents,
             Err(e) => {
                 eprintln!("Failed to serialize simulation output: {e:?}");

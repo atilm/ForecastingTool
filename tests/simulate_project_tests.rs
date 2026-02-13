@@ -66,9 +66,9 @@ work_packages:
     .unwrap();
 
     let output = fs::read_to_string(output_file.path()).unwrap();
-    assert!(output.contains("report:"));
-    assert!(output.contains("results:"));
     assert!(output.contains("start_date: 2026-02-01"));
+    assert!(output.contains("simulated_items:"));
+    assert!(output.contains("p0:"));
 
     assert!(fs::metadata(&histogram_path).is_ok());
     assert!(fs::metadata(&gantt_path).is_ok());
