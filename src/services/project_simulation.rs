@@ -9,7 +9,13 @@ use crate::domain::issue::{Issue, IssueStatus};
 use crate::domain::project::Project;
 use crate::services::histogram::HistogramError;
 use crate::services::project_yaml::{load_project_from_yaml_file, ProjectYamlError};
-use crate::services::simulation_types::{SimulationOutput, SimulationPercentile, SimulationReport};
+use crate::services::simulation_types::{
+    SimulationOutput,
+    SimulationPercentile,
+    SimulationReport,
+    WorkPackagePercentiles,
+    WorkPackageSimulation,
+};
 use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
@@ -194,9 +200,18 @@ fn run_simulation_with_rng<R: Rng + ?Sized>(
         },
     };
 
+    let work_packages = nodes
+        .values()
+        .map(|node| WorkPackageSimulation {
+            id: node.id.clone(),
+            percentiles: percentiles_from_values(&node.samples),
+        })
+        .collect();
+
     let output = SimulationOutput {
         report,
         results: total_durations,
+        work_packages: Some(work_packages),
     };
     Ok(output)
 }
@@ -396,6 +411,25 @@ fn percentile_value(sorted_values: &[f32], percentile: f64) -> f32 {
     let position = (percentile / 100.0) * (sorted_values.len() as f64 - 1.0);
     let index = position.round() as usize;
     sorted_values[index]
+}
+
+fn percentiles_from_values(values: &[f32]) -> WorkPackagePercentiles {
+    if values.is_empty() {
+        return WorkPackagePercentiles {
+            p0: 0.0,
+            p50: 0.0,
+            p85: 0.0,
+            p100: 0.0,
+        };
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    WorkPackagePercentiles {
+        p0: percentile_value(&sorted, 0.0),
+        p50: percentile_value(&sorted, 50.0),
+        p85: percentile_value(&sorted, 85.0),
+        p100: percentile_value(&sorted, 100.0),
+    }
 }
 
 #[derive(Debug, Clone)]

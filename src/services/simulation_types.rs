@@ -17,7 +17,22 @@ pub struct SimulationReport {
 }
 
 #[derive(Serialize, Debug, Clone)]
+pub struct WorkPackagePercentiles {
+    pub p0: f32,
+    pub p50: f32,
+    pub p85: f32,
+    pub p100: f32,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct WorkPackageSimulation {
+    pub id: String,
+    pub percentiles: WorkPackagePercentiles,
+}
+
+#[derive(Serialize, Debug, Clone)]
 pub struct SimulationOutput {
     pub report: SimulationReport,
     pub results: Vec<f32>,
+    pub work_packages: Option<Vec<WorkPackageSimulation>>,
 }
