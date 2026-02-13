@@ -27,6 +27,15 @@ pub enum Commands {
         #[arg(short, long)]
         output: String,
     },
+    /// Plot project dependencies as a Mermaid diagram
+    PlotProject {
+        /// Project YAML file
+        #[arg(short, long)]
+        input: String,
+        /// Output Markdown file
+        #[arg(short, long)]
+        output: String,
+    },
     /// Get project data from Jira and serialize to YAML
     GetProject {
         /// Path to Jira config YAML
