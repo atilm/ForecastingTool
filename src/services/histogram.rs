@@ -26,12 +26,17 @@ fn render_histogram_png(output_path: &str, results: &[f32]) -> Result<(), Histog
         .cloned()
         .fold(f32::INFINITY, f32::min);
     let max_value = results
-        .iter()
-        .cloned()
-        .fold(f32::NEG_INFINITY, f32::max);
+    .iter()
+    .cloned()
+    .fold(f32::NEG_INFINITY, f32::max);
+
+    let range = max_value - min_value;
+    let square_root_of_n = (results.len() as f32).sqrt();
+    let bin_width: f32 = range / square_root_of_n;
+
     let mut counts: std::collections::BTreeMap<i32, usize> = std::collections::BTreeMap::new();
     for value in results {
-        let bucket = (*value * 100.0).round() as i32;
+        let bucket = (*value / bin_width).round() as i32;
         *counts.entry(bucket).or_insert(0usize) += 1;
     }
     let max_count = *counts.values().max().unwrap_or(&1);
@@ -62,18 +67,16 @@ fn render_histogram_png(output_path: &str, results: &[f32]) -> Result<(), Histog
         .y_desc("Frequency")
         .label_style(("sans-serif", 18))
         .axis_desc_style(("sans-serif", 22))
-        .x_label_formatter(&|value| format!("{:.2}", *value as f32 / 100.0))
+        .x_label_formatter(&|value| format!("{:.2}", *value as f32 * bin_width))
         .draw()
         .map_err(|e| HistogramError::Render(e.to_string()))?;
 
     let bar_color = RGBColor(30, 122, 204);
-    let bar_style = ShapeStyle::from(&bar_color).filled().stroke_width(1);
+    let bar_style = ShapeStyle::from(&bar_color).filled();
     chart
-        .draw_series(
-            Histogram::vertical(&chart)
-                .style(bar_style)
-                .data(counts.iter().map(|(value, count)| (*value, *count))),
-        )
+        .draw_series(counts.iter().map(|(value, count)| {
+            Rectangle::new([(*value, 0), (*value + 1, *count)], bar_style)
+        }))
         .map_err(|e| HistogramError::Render(e.to_string()))?;
 
     root.present()
