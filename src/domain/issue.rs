@@ -21,6 +21,7 @@ pub struct Issue {
     pub description: Option<String>,
     pub estimate: Option<Estimate>,
     pub dependencies: Vec<IssueId>,
+    pub subgraph: Option<String>,
     pub status: Option<IssueStatus>,
     pub created_date: Option<NaiveDate>,
     pub start_date: Option<NaiveDate>,
@@ -45,6 +46,7 @@ mod tests {
         assert_eq!(issue.description, None);
         assert_eq!(issue.estimate, None);
         assert!(issue.dependencies.is_empty());
+        assert_eq!(issue.subgraph, None);
         assert_eq!(issue.status, None);
         assert_eq!(issue.created_date, None);
         assert_eq!(issue.start_date, None);

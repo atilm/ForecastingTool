@@ -56,6 +56,35 @@ pub fn generate_flow_diagram(project: &Project) -> String {
         }
     }
 
+    let mut subgraph_map: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    for issue in &project.work_packages {
+        if let Some(name) = issue.subgraph.as_deref() {
+            subgraph_map
+                .entry(name.to_string())
+                .or_default()
+                .push(issue.issue_id.as_ref().map(|id| id.id.clone()).unwrap_or_default());
+        }
+    }
+
+    if !subgraph_map.is_empty() {
+        lines.push(String::new());
+        let mut names: Vec<_> = subgraph_map.keys().cloned().collect();
+        names.sort();
+        for (idx, name) in names.iter().enumerate() {
+            let ids = &subgraph_map[name];
+            lines.push(format!("    subgraph {name}"));
+            for id in ids {
+                lines.push(format!("        {id}"));
+            }
+            lines.push("    end".to_string());
+            if idx + 1 < names.len() {
+                lines.push(String::new());
+            }
+        }
+        lines.push(String::new());
+    }
+
     lines.join("\n")
 }
 
@@ -79,53 +108,56 @@ mod tests {
     use super::*;
     use crate::services::project_yaml::deserialize_project_from_yaml_str;
 
-    const YAML_CONTENT: &str = r#"
-name: My Project
-work_packages:
-  - id: WP1
-    summary: Work package 1
-    description: |
-      This is
-      work package 1.
-    dependencies: null
-    estimate:
-      type: story_points
-      value: 5
-  - id: WP2
-    summary: Work package 2
-    estimate:
-      type: three_point
-      optimistic: 1
-      most_likely: 5
-      pessimistic: 10
-    dependencies: [WP1]
-  - id: WP3
-    summary: Work package 3
-    description: |
-      This is another
-      work package 3.
-    estimate:
-      type: three_point
-      optimistic: 1
-      most_likely: 5
-      pessimistic: 10
-    dependencies: [WP1]
-  - id: WP4
-    summary: Work package 4
-    estimate:
-      type: three_point
-      optimistic: 0
-      most_likely: 0
-      pessimistic: 0
-    dependencies: [WP2, WP3]
-"#;
+        const YAML_CONTENT: &str = concat!(
+                "name: My Project\n",
+                "work_packages:\n",
+                "  - id: WP1\n",
+                "    summary: Work package 1\n",
+                "    description: |\n",
+                "      This is\n",
+                "      work package 1.\n",
+                "    dependencies: null\n",
+                "    estimate:\n",
+                "      type: story_points\n",
+                "      value: 5\n",
+                "  - id: WP2\n",
+                "    summary: Work package 2\n",
+                "    subgraph: Midphase\n",
+                "    estimate:\n",
+                "      type: three_point\n",
+                "      optimistic: 1\n",
+                "      most_likely: 5\n",
+                "      pessimistic: 10\n",
+                "    dependencies: [WP1]\n",
+                "  - id: WP3\n",
+                "    summary: Work package 3\n",
+                "    description: |\n",
+                "      This is another\n",
+                "      work package 3.\n",
+                "    subgraph: Endphase\n",
+                "    estimate:\n",
+                "      type: three_point\n",
+                "      optimistic: 1\n",
+                "      most_likely: 5\n",
+                "      pessimistic: 10\n",
+                "    dependencies: [WP1]\n",
+                "  - id: WP4\n",
+                "    summary: Work package 4\n",
+                "    subgraph: Endphase\n",
+                "    estimate:\n",
+                "      type: three_point\n",
+                "      optimistic: 0\n",
+                "      most_likely: 0\n",
+                "      pessimistic: 0\n",
+                "    dependencies: [WP2, WP3]\n",
+        );
 
     #[test]
     fn generate_flow_diagram_matches_expected() {
         let project = deserialize_project_from_yaml_str(YAML_CONTENT).unwrap();
         let diagram = generate_flow_diagram(&project);
 
-        let expected = "flowchart TD\n    WP1[WP1\n    Work package 1]\n    WP2[WP2\n    Work package 2]\n    WP3[WP3\n    Work package 3]\n    WP4[WP4\n    Work package 4]\n    WP1 --> WP2\n    WP1 --> WP3\n    WP2 --> WP4\n    WP3 --> WP4";
+        let expected = "flowchart TD\n    WP1[WP1\n    Work package 1]\n    WP2[WP2\n    Work package 2]\n    WP3[WP3\n    Work package 3]\n    WP4[WP4\n    Work package 4]\n    WP1 --> WP2\n    WP1 --> WP3\n    WP2 --> WP4\n    WP3 --> WP4\n\n    subgraph Endphase\n        WP3\n        WP4\n    end\n\n    subgraph Midphase\n        WP2\n    end\n";
         assert_eq!(diagram, expected);
     }
 

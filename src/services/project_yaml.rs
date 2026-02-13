@@ -41,6 +41,7 @@ struct IssueRecord {
     start_date: Option<String>,
     done_date: Option<String>,
     dependencies: Option<Vec<String>>,
+    subgraph: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -80,6 +81,7 @@ pub fn deserialize_project_from_yaml_str(input: &str) -> Result<Project, Project
         issue.created_date = parse_date_opt(issue_record.created_date.as_deref())?;
         issue.start_date = parse_date_opt(issue_record.start_date.as_deref())?;
         issue.done_date = parse_date_opt(issue_record.done_date.as_deref())?;
+        issue.subgraph = issue_record.subgraph;
         issue.dependencies = match issue_record.dependencies {
             None => Vec::new(),
             Some(values) if values.is_empty() => {
@@ -140,6 +142,7 @@ fn issue_to_record(issue: &Issue) -> IssueRecord {
         } else {
             Some(issue.dependencies.iter().map(|id| id.id.clone()).collect())
         },
+        subgraph: issue.subgraph.clone(),
     }
 }
 
