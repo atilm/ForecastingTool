@@ -48,7 +48,7 @@ pub enum Commands {
         #[arg(short, long)]
         start_date: String,
         /// Number of simulation iterations
-        #[arg(short, long, default_value_t = 10000)]
+        #[arg(short = 'n', long, default_value_t = 10000)]
         iterations: usize,
     },
     /// Simulate completion dates from throughput data
@@ -60,7 +60,7 @@ pub enum Commands {
         #[arg(short, long)]
         output: String,
         /// Number of simulation iterations
-        #[arg(short, long)]
+        #[arg(short, long, default_value_t = 10000)]
         iterations: usize,
         /// Number of issues to simulate
         #[arg(short, long)]

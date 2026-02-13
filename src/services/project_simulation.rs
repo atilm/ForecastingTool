@@ -423,6 +423,8 @@ mod tests {
     use super::*;
     use crate::domain::issue::{IssueId, IssueStatus};
     use chrono::NaiveDate;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
 
     fn build_done_issue(id: &str, points: f32, start: NaiveDate, done: NaiveDate) -> Issue {
         let mut issue = Issue::new();
@@ -433,6 +435,35 @@ mod tests {
         issue.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
             estimate: Some(points),
         }));
+        issue
+    }
+
+    fn build_three_point_issue(id: &str, days: f32, deps: &[&str]) -> Issue {
+        let mut issue = Issue::new();
+        issue.issue_id = Some(IssueId { id: id.to_string() });
+        issue.estimate = Some(Estimate::ThreePoint(ThreePointEstimate {
+            optimistic: Some(days),
+            most_likely: Some(days),
+            pessimistic: Some(days),
+        }));
+        issue.dependencies = deps
+            .iter()
+            .map(|dep| IssueId { id: (*dep).to_string() })
+            .collect();
+        issue
+    }
+
+    fn build_story_point_issue(id: &str, points: f32, deps: &[&str]) -> Issue {
+        let mut issue = Issue::new();
+        issue.issue_id = Some(IssueId { id: id.to_string() });
+        issue.status = Some(IssueStatus::ToDo);
+        issue.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
+            estimate: Some(points),
+        }));
+        issue.dependencies = deps
+            .iter()
+            .map(|dep| IssueId { id: (*dep).to_string() })
+            .collect();
         issue
     }
 
@@ -488,5 +519,70 @@ mod tests {
 
         let error = simulate_project(&project, 10, "2026-01-01").unwrap_err();
         assert!(matches!(error, ProjectSimulationError::CyclicDependencies));
+    }
+
+    #[test]
+    fn simulate_project_with_dependencies_matches_critical_path() {
+        let base = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+        let done_issue = build_done_issue(
+            "DONE-1",
+            100.0,
+            base,
+            base + chrono::Duration::days(1),
+        );
+
+        // WP0, WP1, WP2, WP3, expected duration
+        let test_cases = vec![
+            (1.0, 1.0, 1.0, 1.0, 2.0), // Crit path: WP0 -> WP2 -> FIN
+            (6.0, 1.0, 0.0, 1.0, 6.0), // Crit path: WP0 -> FIN       
+            (2.0, 1.0, 4.0, 1.0, 6.0), // Crit path: WP0 -> WP2 -> FIN
+            (1.0, 5.0, 2.0, 1.0, 7.0), // Crit path: WP1 -> WP2 -> FIN
+            (1.0, 5.0, 1.0, 4.0, 9.0), // Crit path: WP1 -> WP3 -> FIN
+        ];
+
+        // The dependency graph for the test is:
+        //
+        //    WP0      WP1        SP-1   SP-2
+        //     |        |
+        //     |        |
+        //     |    +---+----+
+        //     |    |        |
+        //     +---WP2      WP3
+        //     |    |        |
+        //     +----+--+-----+
+        //            |
+        //           FIN
+        for (idx, (wp0, wp1, wp2, wp3, expected)) in test_cases.into_iter().enumerate() {
+            let mut rng = StdRng::seed_from_u64(42 + idx as u64);
+            let project = Project {
+                name: "Dependent Project".to_string(),
+                work_packages: vec![
+                    done_issue.clone(),
+                    build_story_point_issue("SP-1", 1.0, &[]),
+                    build_story_point_issue("SP-2", 1.0, &[]),
+                    build_three_point_issue("WP0", wp0, &[]),
+                    build_three_point_issue("WP1", wp1, &[]),
+                    build_three_point_issue("WP2", wp2, &["WP0", "WP1"]),
+                    build_three_point_issue("WP3", wp3, &["WP1"]),
+                    build_three_point_issue("FIN", 0.0, &["WP0", "WP2", "WP3"]),
+                ],
+            };
+
+            let output = run_simulation_with_rng(
+                &project,
+                &topological_sort(&project).unwrap(),
+                Some(calculate_project_velocity(&project).unwrap()),
+                25,
+                base,
+                &mut rng,
+            )
+            .unwrap();
+
+            let p50 = output.report.p50.days;
+            assert!(
+                p50 >= expected && p50 <= expected + 0.25,
+                "expected ~{expected} days, got {p50}"
+            );
+        }
     }
 }
