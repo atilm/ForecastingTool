@@ -138,7 +138,7 @@ impl JiraApiClient {
     async fn get_issues_by_jql(&self, jql: &str) -> Result<Vec<Issue>, DataSourceError> {
         let url = format!("{}/search/jql", self.jira_project.base_url);
         let fields = format!(
-            "summary,description,status,created,{},{},{}",
+            "summary,description,statusCategory,created,{},{},{}",
             self.jira_project.actual_start_date_field_id,
             self.jira_project.actual_end_date_field_id,
             self.jira_project.estimation_field_id
@@ -221,7 +221,7 @@ impl JiraApiClient {
         });
         mapped.summary = get_field_string(fields, "summary");
         mapped.description = get_field_description(fields, "description");
-        mapped.status = get_field_status(fields);
+        mapped.status = get_field_status_category(fields);
         mapped.created_date = parse_date_opt(get_field_string(fields, "created").as_deref());
         mapped.estimate = get_field_f32(fields, &self.jira_project.estimation_field_id).map(
             |value| Estimate::StoryPoint(StoryPointEstimate {
@@ -243,7 +243,7 @@ impl DataSource for JiraApiClient {
     async fn get_epic(&self, epic_id: &str) -> Result<Epic, DataSourceError> {
         let url = format!("{}/issue/{epic_id}", self.jira_project.base_url);
         let fields = format!(
-            "summary,description,status,{},duedate",
+            "summary,description,statusCategory,{},duedate",
             self.jira_project.start_date_field_id
         );
         let mut params = HashMap::new();
@@ -262,7 +262,7 @@ impl DataSource for JiraApiClient {
         epic.issue_id = Some(IssueId { id: epic_id.to_string()} );
         epic.summary = get_field_string(fields, "summary");
         epic.description = get_field_description(fields, "description");
-        epic.status = get_field_status(fields);
+        epic.status = get_field_status_category(fields);
         epic.start_date = parse_date_opt(
             get_field_string(fields, &self.jira_project.start_date_field_id).as_deref(),
         );
@@ -319,9 +319,9 @@ fn get_field_description(fields: &serde_json::Map<String, Value>, key: &str) -> 
     })
 }
 
-fn get_field_status(fields: &serde_json::Map<String, Value>) -> Option<IssueStatus> {
+fn get_field_status_category(fields: &serde_json::Map<String, Value>) -> Option<IssueStatus> {
     let status_name = fields
-        .get("status")
+        .get("statusCategory")
         .and_then(|value| value.get("name"))
         .and_then(|value| value.as_str());
     match status_name.map(|value| value.to_ascii_lowercase()) {

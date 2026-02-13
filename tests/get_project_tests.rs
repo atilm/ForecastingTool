@@ -17,7 +17,7 @@ async fn test_get_project_data() {
                     "actualEndDate": "2026-01-26T08:42:00.000+0100",
                     "estimate": 5,
                     "description": "A description text.",
-                    "status": {
+                    "statusCategory": {
                         "name": "Done"
                     },
                     "summary": "A first task"
@@ -30,7 +30,7 @@ async fn test_get_project_data() {
                     "actualStartDate": "2026-01-22T10:57:00.000+0100",
                     "actualEndDate": "2026-01-26T08:42:00.000+0100",
                     "description": "A description text.",
-                    "status": {
+                    "statusCategory": {
                         "name": "In Progress"
                     },
                     "summary": "A second task"

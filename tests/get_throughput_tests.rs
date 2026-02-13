@@ -31,11 +31,8 @@ async fn test_get_throughput_data() {
                         "type": "doc",
                         "version": 1
                     },
-                    "status": {
-                        "name": "Done",
-                        "statusCategory": {
-                            "name": "Done"
-                        }
+                    "statusCategory": {
+                        "name": "Done"
                     },
                     "summary": "A first task"
                 },
@@ -61,11 +58,8 @@ async fn test_get_throughput_data() {
                         "type": "doc",
                         "version": 1
                     },
-                    "status": {
-                        "name": "Done",
-                        "statusCategory": {
-                            "name": "Done"
-                        }
+                    "statusCategory": {
+                        "name": "Done"
                     },
                     "summary": "A second task"
                 },
@@ -104,7 +98,7 @@ async fn get_issues_paginates_start_at() {
                     "actualStartDate": "2026-01-22T10:57:00.000+0100",
                     "actualEndDate": "2026-01-26T08:42:00.000+0100",
                     "description": "First description.",
-                    "status": {
+                    "statusCategory": {
                         "name": "Done"
                     },
                     "summary": "A first task"
@@ -125,7 +119,7 @@ async fn get_issues_paginates_start_at() {
                     "actualStartDate": "2026-01-22T10:57:00.000+0100",
                     "actualEndDate": "2026-01-28T08:42:00.000+0100",
                     "description": "Second description.",
-                    "status": {
+                    "statusCategory": {
                         "name": "Done"
                     },
                     "summary": "A second task"
