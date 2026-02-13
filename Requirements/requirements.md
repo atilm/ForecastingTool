@@ -8,9 +8,9 @@
   * [ ] Export velocity data
   * [ ] Export list of issues with estimates
   * [ ] Plot data
-    * [x] Plot throughput data
+    * [x] ~~Plot throughput data~~
   * [ ] different output formats
-    * [ ] `yaml`
+    * [x] ~~`yaml`~~
     * [ ] markdown
 * [ ] Generate Forecasts
   * [ ] By Monte Carlo Simulation

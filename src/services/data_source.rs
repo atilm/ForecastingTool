@@ -1,4 +1,4 @@
-use crate::domain::{epic::Epic, issue::Issue};
+use crate::domain::{epic::Epic, issue::Issue, project::Project};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -24,4 +24,5 @@ pub enum DataQuery {
 pub trait DataSource {
     async fn get_epic(&self, epic_id: &str) -> Result<Epic, DataSourceError>;
     async fn get_issues(&self, query: DataQuery) -> Result<Vec<Issue>, DataSourceError>;
+    async fn get_project(&self, query: DataQuery) -> Result<Project, DataSourceError>;
 }

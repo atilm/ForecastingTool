@@ -35,8 +35,6 @@ impl Issue {
 
 #[cfg(test)]
 mod tests {
-    use assert_cmd::assert;
-
     use super::*;
 
     #[test]

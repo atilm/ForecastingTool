@@ -8,7 +8,9 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::domain::epic::Epic;
+use crate::domain::estimate::{Estimate, StoryPointEstimate};
 use crate::domain::issue::IssueId;
+use crate::domain::project::Project;
 use crate::domain::issue::{Issue, IssueStatus};
 use crate::services::data_source::{DataSource, DataQuery, DataSourceError};
 
@@ -18,6 +20,7 @@ pub struct JiraProjectMetaData {
     pub base_url: String,
     pub project_key: String,
     pub throughput_query: String,
+    pub project_query: String,
     pub estimation_field_id: String,
     pub start_date_field_id: String,
     pub actual_start_date_field_id: String,
@@ -30,6 +33,7 @@ impl Default for JiraProjectMetaData {
             base_url: String::new(),
             project_key: String::new(),
             throughput_query: String::new(),
+            project_query: String::new(),
             estimation_field_id: String::new(),
             start_date_field_id: String::new(),
             actual_start_date_field_id: String::new(),
@@ -134,9 +138,10 @@ impl JiraApiClient {
     async fn get_issues_by_jql(&self, jql: &str) -> Result<Vec<Issue>, DataSourceError> {
         let url = format!("{}/search/jql", self.jira_project.base_url);
         let fields = format!(
-            "summary,description,status,created,{},{}",
+            "summary,description,status,created,{},{},{}",
             self.jira_project.actual_start_date_field_id,
-            self.jira_project.actual_end_date_field_id
+            self.jira_project.actual_end_date_field_id,
+            self.jira_project.estimation_field_id
         );
         let mut params = HashMap::new();
         params.insert("jql", jql.to_string());
@@ -218,6 +223,11 @@ impl JiraApiClient {
         mapped.description = get_field_description(fields, "description");
         mapped.status = get_field_status(fields);
         mapped.created_date = parse_date_opt(get_field_string(fields, "created").as_deref());
+        mapped.estimate = get_field_f32(fields, &self.jira_project.estimation_field_id).map(
+            |value| Estimate::StoryPoint(StoryPointEstimate {
+                estimate: Some(value),
+            }),
+        );
         mapped.start_date = parse_date_opt(
             get_field_string(fields, &self.jira_project.actual_start_date_field_id).as_deref(),
         );
@@ -267,11 +277,32 @@ impl DataSource for JiraApiClient {
             DataQuery::StringQuery(jql) => self.get_issues_by_jql(&jql).await,
         }
     }
+
+    async fn get_project(&self, query: DataQuery) -> Result<Project, DataSourceError> {
+        match query {
+            DataQuery::StringQuery(jql) => {
+                let issues = self.get_issues_by_jql(&jql).await?;
+                Ok(crate::domain::project::Project {
+                    name: self.jira_project.project_key.clone(),
+                    work_packages: issues,
+                })
+            }
+        }
+    }
 }
 
 fn get_field_string(fields: &serde_json::Map<String, Value>, key: &str) -> Option<String> {
     fields.get(key).and_then(|value| match value {
         Value::String(text) => Some(text.clone()),
+        Value::Null => None,
+        _ => None,
+    })
+}
+
+fn get_field_f32(fields: &serde_json::Map<String, Value>, key: &str) -> Option<f32> {
+    fields.get(key).and_then(|value| match value {
+        Value::Number(number) => number.as_f64().map(|value| value as f32),
+        Value::String(text) => text.parse::<f32>().ok(),
         Value::Null => None,
         _ => None,
     })

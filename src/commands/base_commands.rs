@@ -18,6 +18,23 @@ pub enum Commands {
         #[arg(short, long)]
         output: String,
     },
+    /// Plot throughput data from YAML into a PNG chart
+    PlotThroughput {
+        /// Throughput YAML file
+        #[arg(short, long)]
+        input: String,
+        /// Output PNG file
+        #[arg(short, long)]
+        output: String,
+    },
+    GetProject {
+        /// Path to Jira config YAML
+        #[arg(short, long)]
+        config: String,
+        /// Output YAML file
+        #[arg(short, long)]
+        output: String,
+    },
     /// Simulate completion dates from throughput data
     SimulateN {
         /// Throughput YAML file
@@ -35,14 +52,5 @@ pub enum Commands {
         /// Simulation start date (YYYY-MM-DD)
         #[arg(short, long)]
         start_date: String,
-    },
-    /// Plot throughput data from YAML into a PNG chart
-    PlotThroughput {
-        /// Throughput YAML file
-        #[arg(short, long)]
-        input: String,
-        /// Output PNG file
-        #[arg(short, long)]
-        output: String,
     },
 }
