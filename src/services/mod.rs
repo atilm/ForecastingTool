@@ -4,5 +4,7 @@ pub mod data_converter;
 pub mod throughput_yaml;
 pub mod project_yaml;
 pub mod project_simulation;
+pub mod simulation_types;
+pub mod histogram;
 pub mod simulation;
 pub mod throughput_plot;

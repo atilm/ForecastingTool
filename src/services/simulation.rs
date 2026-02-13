@@ -1,12 +1,12 @@
 use crate::domain::throughput::Throughput;
 use crate::services::throughput_yaml::{deserialize_throughput_from_yaml_str, ThroughputYamlError};
 use chrono::{Datelike, NaiveDate, Weekday};
-use plotters::prelude::*;
 use rand::seq::SliceRandom;
 use rand::Rng;
-use serde::Serialize;
 use thiserror::Error;
 
+use crate::services::histogram::{write_histogram_png, HistogramError};
+use crate::services::simulation_types::{SimulationOutput, SimulationPercentile, SimulationReport};
 #[derive(Error, Debug)]
 pub enum SimulationError {
     #[error("failed to read throughput file: {0}")]
@@ -24,29 +24,7 @@ pub enum SimulationError {
     #[error("throughput data has no nonzero values")]
     ZeroThroughput,
     #[error("failed to render histogram: {0}")]
-    Histogram(String),
-}
-
-#[derive(Serialize, Debug, Clone)]
-pub(crate) struct SimulationPercentile {
-    pub days: usize,
-    pub date: String,
-}
-
-#[derive(Serialize, Debug, Clone)]
-pub(crate) struct SimulationReport {
-    pub start_date: String,
-    pub simulated_items: usize,
-    pub p0: SimulationPercentile,
-    pub p50: SimulationPercentile,
-    pub p85: SimulationPercentile,
-    pub p100: SimulationPercentile,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct SimulationOutput {
-    pub report: SimulationReport,
-    pub results: Vec<usize>,
+    Histogram(#[from] HistogramError),
 }
 
 pub(crate) async fn simulate_from_throughput_file(
@@ -101,9 +79,9 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
     let mut results = Vec::with_capacity(iterations);
     for _ in 0..iterations {
         let days = simulate_single_run(&throughput_values, number_of_issues, start_date, rng);
-        results.push(days);
+        results.push(days as f32);
     }
-    results.sort_unstable();
+    results.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
     let p0_days = percentile_value(&results, 0.0);
     let p50_days = percentile_value(&results, 50.0);
@@ -160,9 +138,9 @@ fn simulate_single_run<R: Rng + ?Sized>(
     days
 }
 
-fn percentile_value(sorted_values: &[usize], percentile: f64) -> usize {
+fn percentile_value(sorted_values: &[f32], percentile: f64) -> f32 {
     if sorted_values.is_empty() {
-        return 0;
+        return 0.0;
     }
     if percentile <= 0.0 {
         return sorted_values[0];
@@ -175,7 +153,8 @@ fn percentile_value(sorted_values: &[usize], percentile: f64) -> usize {
     sorted_values[index]
 }
 
-fn end_date_from_days(start_date: NaiveDate, days: usize) -> NaiveDate {
+fn end_date_from_days(start_date: NaiveDate, days: f32) -> NaiveDate {
+    let days = days.ceil().max(0.0) as usize;
     if days == 0 {
         return next_workday(start_date);
     }
@@ -197,65 +176,6 @@ fn is_weekend(date: NaiveDate) -> bool {
     matches!(date.weekday(), Weekday::Sat | Weekday::Sun)
 }
 
-async fn write_histogram_png(output_path: &str, results: &[usize]) -> Result<(), SimulationError> {
-    let output_path = output_path.to_string();
-    let results = results.to_vec();
-    tokio::task::spawn_blocking(move || render_histogram_png(&output_path, &results))
-        .await
-        .map_err(|e| SimulationError::Histogram(e.to_string()))??;
-    Ok(())
-}
-
-fn render_histogram_png(output_path: &str, results: &[usize]) -> Result<(), SimulationError> {
-    if results.is_empty() {
-        return Ok(());
-    }
-
-    let min_value = *results.iter().min().unwrap_or(&0);
-    let max_value = *results.iter().max().unwrap_or(&0);
-    let mut counts = std::collections::BTreeMap::new();
-    for value in results {
-        *counts.entry(*value).or_insert(0usize) += 1;
-    }
-    let max_count = *counts.values().max().unwrap_or(&1);
-
-    let root = BitMapBackend::new(output_path, (800, 600)).into_drawing_area();
-    root.fill(&WHITE)
-        .map_err(|e| SimulationError::Histogram(e.to_string()))?;
-
-    let max_x = max_value.saturating_add(1);
-    let mut chart = ChartBuilder::on(&root)
-        .margin(20)
-        .caption("Simulation Results", ("sans-serif", 30))
-        .x_label_area_size(55)
-        .y_label_area_size(65)
-        .build_cartesian_2d(min_value..max_x, 0..(max_count + 1))
-        .map_err(|e| SimulationError::Histogram(e.to_string()))?;
-
-    chart
-        .configure_mesh()
-        .disable_mesh()
-        .x_desc("Duration in days")
-        .y_desc("Frequency")
-        .label_style(("sans-serif", 18))
-        .axis_desc_style(("sans-serif", 22))
-        .draw()
-        .map_err(|e| SimulationError::Histogram(e.to_string()))?;
-
-    let bar_color = RGBColor(30, 122, 204);
-    let bar_style = ShapeStyle::from(&bar_color).filled().stroke_width(1);
-    chart
-        .draw_series(
-            Histogram::vertical(&chart)
-                .style(bar_style)
-                .data(results.iter().map(|value| (*value, 1))),
-        )
-        .map_err(|e| SimulationError::Histogram(e.to_string()))?;
-
-    root.present()
-        .map_err(|e| SimulationError::Histogram(e.to_string()))?;
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests {
@@ -274,11 +194,11 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
         let simulation = run_simulation_with_rng(&throughput, 3, 2, start_date, &mut rng).unwrap();
 
-        assert_eq!(simulation.results, vec![2, 2, 2]);
-        assert_eq!(simulation.report.p0.days, 2);
-        assert_eq!(simulation.report.p100.days, 2);
-        assert_eq!(simulation.report.p50.days, 2);
-        assert_eq!(simulation.report.p85.days, 2);
+        assert_eq!(simulation.results, vec![2.0, 2.0, 2.0]);
+        assert_eq!(simulation.report.p0.days, 2.0);
+        assert_eq!(simulation.report.p100.days, 2.0);
+        assert_eq!(simulation.report.p50.days, 2.0);
+        assert_eq!(simulation.report.p85.days, 2.0);
         assert_eq!(simulation.report.p0.date, "2026-02-02");
         assert_eq!(simulation.report.p100.date, "2026-02-02");
     }

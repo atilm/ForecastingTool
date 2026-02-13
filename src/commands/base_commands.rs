@@ -44,6 +44,9 @@ pub enum Commands {
         /// Output YAML file
         #[arg(short, long)]
         output: String,
+        /// Simulation start date (YYYY-MM-DD)
+        #[arg(short, long)]
+        start_date: String,
         /// Number of simulation iterations
         #[arg(short, long, default_value_t = 10000)]
         iterations: usize,

@@ -20,6 +20,8 @@ pub enum ProjectYamlError {
     InvalidDate(String),
     #[error("invalid status value: {0}")]
     InvalidStatus(String),
+    #[error("missing previous issue for implicit dependency")]
+    MissingPreviousDependency,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -38,8 +40,7 @@ struct IssueRecord {
     created_date: Option<String>,
     start_date: Option<String>,
     done_date: Option<String>,
-    #[serde(default)]
-    dependencies: Vec<String>,
+    dependencies: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -61,6 +62,7 @@ pub async fn load_project_from_yaml_file(path: &str) -> Result<Project, ProjectY
 pub fn deserialize_project_from_yaml_str(input: &str) -> Result<Project, ProjectYamlError> {
     let record: ProjectRecord = serde_yaml::from_str(input)?;
     let mut work_packages = Vec::with_capacity(record.work_packages.len());
+    let mut previous_id: Option<String> = None;
 
     for issue_record in record.work_packages {
         if issue_record.id.trim().is_empty() {
@@ -78,11 +80,17 @@ pub fn deserialize_project_from_yaml_str(input: &str) -> Result<Project, Project
         issue.created_date = parse_date_opt(issue_record.created_date.as_deref())?;
         issue.start_date = parse_date_opt(issue_record.start_date.as_deref())?;
         issue.done_date = parse_date_opt(issue_record.done_date.as_deref())?;
-        issue.dependencies = issue_record
-            .dependencies
-            .into_iter()
-            .map(|id| IssueId { id })
-            .collect();
+        issue.dependencies = match issue_record.dependencies {
+            None => Vec::new(),
+            Some(values) if values.is_empty() => {
+                let previous = previous_id
+                    .clone()
+                    .ok_or(ProjectYamlError::MissingPreviousDependency)?;
+                vec![IssueId { id: previous }]
+            }
+            Some(values) => values.into_iter().map(|id| IssueId { id }).collect(),
+        };
+        previous_id = issue.issue_id.as_ref().map(|id| id.id.clone());
         work_packages.push(issue);
     }
 
@@ -127,11 +135,11 @@ fn issue_to_record(issue: &Issue) -> IssueRecord {
         done_date: issue
             .done_date
             .map(|date| date.format("%Y-%m-%d").to_string()),
-        dependencies: issue
-            .dependencies
-            .iter()
-            .map(|id| id.id.clone())
-            .collect(),
+        dependencies: if issue.dependencies.is_empty() {
+            None
+        } else {
+            Some(issue.dependencies.iter().map(|id| id.id.clone()).collect())
+        },
     }
 }
 
@@ -338,5 +346,35 @@ work_packages:
 
         let error = deserialize_project_from_yaml_str(yaml).unwrap_err();
         assert!(matches!(error, ProjectYamlError::MissingIssueId));
+    }
+
+    #[test]
+    fn deserialize_project_uses_previous_issue_for_empty_dependencies() {
+        let yaml = r#"
+name: Demo
+work_packages:
+  - id: ABC-1
+    dependencies: null
+  - id: ABC-2
+    dependencies: []
+"#;
+
+        let project = deserialize_project_from_yaml_str(yaml).unwrap();
+        let issue = &project.work_packages[1];
+        assert_eq!(issue.dependencies.len(), 1);
+        assert_eq!(issue.dependencies[0].id, "ABC-1");
+    }
+
+    #[test]
+    fn deserialize_project_rejects_empty_dependencies_for_first_issue() {
+        let yaml = r#"
+name: Demo
+work_packages:
+  - id: ABC-1
+    dependencies: []
+"#;
+
+        let error = deserialize_project_from_yaml_str(yaml).unwrap_err();
+        assert!(matches!(error, ProjectYamlError::MissingPreviousDependency));
     }
 }

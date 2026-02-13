@@ -1,14 +1,18 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
 use rand::Rng;
 use rand_distr::{Beta, Distribution};
-use serde::Serialize;
 use thiserror::Error;
 
 use crate::domain::estimate::{Estimate, StoryPointEstimate, ThreePointEstimate};
 use crate::domain::issue::{Issue, IssueStatus};
 use crate::domain::project::Project;
+use crate::services::histogram::HistogramError;
 use crate::services::project_yaml::{load_project_from_yaml_file, ProjectYamlError};
+use crate::services::simulation_types::{SimulationOutput, SimulationPercentile, SimulationReport};
+use petgraph::algo::toposort;
+use petgraph::graph::DiGraph;
+use petgraph::graph::NodeIndex;
 
 #[derive(Error, Debug)]
 pub enum ProjectSimulationError {
@@ -32,48 +36,34 @@ pub enum ProjectSimulationError {
     InvalidVelocityDuration,
     #[error("invalid velocity value")]
     InvalidVelocityValue,
+    #[error("invalid start date: {0}")]
+    InvalidStartDate(String),
+    #[error("missing velocity for story point estimates")]
+    MissingVelocity,
     #[error("dependency {dependency} not found for issue {issue}")]
     UnknownDependency { issue: String, dependency: String },
     #[error("dependency graph has a cycle")]
     CyclicDependencies,
     #[error("invalid estimate values for issue {0}")]
     InvalidEstimate(String),
-}
-
-#[derive(Serialize, Debug, Clone)]
-pub struct SimulationPercentiles {
-    pub p0: f32,
-    pub p50: f32,
-    pub p85: f32,
-    pub p100: f32,
-}
-
-#[derive(Serialize, Debug, Clone)]
-pub struct WorkPackageSimulationReport {
-    pub id: String,
-    pub percentiles: SimulationPercentiles,
-}
-
-#[derive(Serialize, Debug, Clone)]
-pub struct ProjectSimulationReport {
-    pub velocity: f32,
-    pub iterations: usize,
-    pub total: SimulationPercentiles,
-    pub work_packages: Vec<WorkPackageSimulationReport>,
+    #[error("failed to render histogram: {0}")]
+    Histogram(#[from] HistogramError),
 }
 
 pub async fn simulate_project_from_yaml_file(
     path: &str,
     iterations: usize,
-) -> Result<ProjectSimulationReport, ProjectSimulationError> {
+    start_date: &str,
+) -> Result<SimulationOutput, ProjectSimulationError> {
     let project = load_project_from_yaml_file(path).await?;
-    simulate_project(&project, iterations)
+    simulate_project(&project, iterations, start_date)
 }
 
 pub fn simulate_project(
     project: &Project,
     iterations: usize,
-) -> Result<ProjectSimulationReport, ProjectSimulationError> {
+    start_date: &str,
+) -> Result<SimulationOutput, ProjectSimulationError> {
     if iterations == 0 {
         return Err(ProjectSimulationError::InvalidIterations);
     }
@@ -81,10 +71,17 @@ pub fn simulate_project(
         return Err(ProjectSimulationError::EmptyProject);
     }
 
-    let velocity = calculate_project_velocity(project)?;
+    let velocity = if project_has_story_points(project) {
+        Some(calculate_project_velocity(project)?)
+    } else {
+        None
+    };
     let order = topological_sort(project)?;
+    let start_date = chrono::NaiveDate::parse_from_str(start_date, "%Y-%m-%d")
+        .map_err(|_| ProjectSimulationError::InvalidStartDate(start_date.to_string()))?;
     let mut rng = rand::thread_rng();
-    run_simulation_with_rng(project, &order, velocity, iterations, &mut rng)
+    let output = run_simulation_with_rng(project, &order, velocity, iterations, start_date, &mut rng)?;
+    Ok(output)
 }
 
 pub fn calculate_project_velocity(project: &Project) -> Result<f32, ProjectSimulationError> {
@@ -136,10 +133,11 @@ pub fn calculate_project_velocity(project: &Project) -> Result<f32, ProjectSimul
 fn run_simulation_with_rng<R: Rng + ?Sized>(
     project: &Project,
     order: &[String],
-    velocity: f32,
+    velocity: Option<f32>,
     iterations: usize,
+    start_date: chrono::NaiveDate,
     rng: &mut R,
-) -> Result<ProjectSimulationReport, ProjectSimulationError> {
+) -> Result<SimulationOutput, ProjectSimulationError> {
     let mut nodes = build_simulation_nodes(project)?;
     let mut total_durations = Vec::with_capacity(iterations);
 
@@ -166,21 +164,41 @@ fn run_simulation_with_rng<R: Rng + ?Sized>(
         total_durations.push(project_duration);
     }
 
-    let total = percentiles_from_values(&total_durations);
-    let work_packages = nodes
-        .values()
-        .map(|node| WorkPackageSimulationReport {
-            id: node.id.clone(),
-            percentiles: percentiles_from_values(&node.samples),
-        })
-        .collect();
+    total_durations.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let report = SimulationReport {
+        start_date: start_date.format("%Y-%m-%d").to_string(),
+        simulated_items: project.work_packages.len(),
+        p0: SimulationPercentile {
+            days: percentile_value(&total_durations, 0.0),
+            date: end_date_from_days(start_date, percentile_value(&total_durations, 0.0))
+                .format("%Y-%m-%d")
+                .to_string(),
+        },
+        p50: SimulationPercentile {
+            days: percentile_value(&total_durations, 50.0),
+            date: end_date_from_days(start_date, percentile_value(&total_durations, 50.0))
+                .format("%Y-%m-%d")
+                .to_string(),
+        },
+        p85: SimulationPercentile {
+            days: percentile_value(&total_durations, 85.0),
+            date: end_date_from_days(start_date, percentile_value(&total_durations, 85.0))
+                .format("%Y-%m-%d")
+                .to_string(),
+        },
+        p100: SimulationPercentile {
+            days: percentile_value(&total_durations, 100.0),
+            date: end_date_from_days(start_date, percentile_value(&total_durations, 100.0))
+                .format("%Y-%m-%d")
+                .to_string(),
+        },
+    };
 
-    Ok(ProjectSimulationReport {
-        velocity,
-        iterations,
-        total,
-        work_packages,
-    })
+    let output = SimulationOutput {
+        report,
+        results: total_durations,
+    };
+    Ok(output)
 }
 
 fn build_simulation_nodes(
@@ -218,72 +236,52 @@ fn build_simulation_nodes(
 }
 
 fn topological_sort(project: &Project) -> Result<Vec<String>, ProjectSimulationError> {
-    let mut dependencies: HashMap<String, Vec<String>> = HashMap::new();
+    let mut graph: DiGraph<String, ()> = DiGraph::new();
+    let mut indices: HashMap<String, NodeIndex> = HashMap::new();
+
     for issue in &project.work_packages {
         let id = issue
             .issue_id
             .as_ref()
             .map(|issue_id| issue_id.id.clone())
             .ok_or(ProjectSimulationError::MissingIssueId)?;
-        let deps = issue
-            .dependencies
-            .iter()
-            .map(|dep| dep.id.clone())
-            .collect();
-        dependencies.insert(id, deps);
+        indices.entry(id.clone()).or_insert_with(|| graph.add_node(id));
     }
 
-    for (issue_id, deps) in &dependencies {
-        for dep in deps {
-            if !dependencies.contains_key(dep) {
-                return Err(ProjectSimulationError::UnknownDependency {
-                    issue: issue_id.clone(),
-                    dependency: dep.clone(),
-                });
-            }
-        }
-    }
-
-    let mut indegree: HashMap<String, usize> = HashMap::new();
-    let mut adjacency: HashMap<String, Vec<String>> = HashMap::new();
-    for issue_id in dependencies.keys() {
-        indegree.insert(issue_id.clone(), 0);
-    }
-
-    for (issue_id, deps) in &dependencies {
-        for dep in deps {
-            *indegree.entry(issue_id.clone()).or_insert(0) += 1;
-            adjacency.entry(dep.clone()).or_default().push(issue_id.clone());
-        }
-    }
-
-    let mut queue: BTreeSet<String> = indegree
-        .iter()
-        .filter_map(|(id, degree)| if *degree == 0 { Some(id.clone()) } else { None })
-        .collect();
-
-    let mut order = Vec::with_capacity(indegree.len());
-    while let Some(id) = queue.iter().next().cloned() {
-        queue.remove(&id);
-        order.push(id.clone());
-
-        if let Some(children) = adjacency.get(&id) {
-            for child in children {
-                if let Some(value) = indegree.get_mut(child) {
-                    *value = value.saturating_sub(1);
-                    if *value == 0 {
-                        queue.insert(child.clone());
-                    }
+    for issue in &project.work_packages {
+        let id = issue
+            .issue_id
+            .as_ref()
+            .map(|issue_id| issue_id.id.clone())
+            .ok_or(ProjectSimulationError::MissingIssueId)?;
+        let issue_idx = *indices.get(&id).ok_or(ProjectSimulationError::MissingIssueId)?;
+        for dep in &issue.dependencies {
+            let dep_idx = match indices.get(&dep.id) {
+                Some(idx) => *idx,
+                None => {
+                    return Err(ProjectSimulationError::UnknownDependency {
+                        issue: id.clone(),
+                        dependency: dep.id.clone(),
+                    });
                 }
-            }
+            };
+            graph.add_edge(dep_idx, issue_idx, ());
         }
     }
 
-    if order.len() != indegree.len() {
-        return Err(ProjectSimulationError::CyclicDependencies);
+    let sorted = toposort(&graph, None).map_err(|_| ProjectSimulationError::CyclicDependencies)?;
+    let mut id_by_index = HashMap::new();
+    for (id, idx) in indices {
+        id_by_index.insert(idx, id);
     }
 
-    Ok(order)
+    let mut ordered = Vec::with_capacity(sorted.len());
+    for idx in sorted {
+        if let Some(id) = id_by_index.get(&idx) {
+            ordered.push(id.clone());
+        }
+    }
+    Ok(ordered)
 }
 
 fn story_point_value(issue: &Issue) -> Option<f32> {
@@ -295,21 +293,17 @@ fn story_point_value(issue: &Issue) -> Option<f32> {
 
 fn sample_duration<R: Rng + ?Sized>(
     estimate: &Estimate,
-    velocity: f32,
+    velocity: Option<f32>,
     rng: &mut R,
     issue_id: &str,
 ) -> Result<f32, ProjectSimulationError> {
-    if velocity <= 0.0 {
-        return Err(ProjectSimulationError::InvalidVelocityValue);
-    }
-
-    let (optimistic, most_likely, pessimistic) = match estimate {
+    let (optimistic, most_likely, pessimistic, apply_velocity) = match estimate {
         Estimate::StoryPoint(StoryPointEstimate { estimate }) => {
             let value = estimate.ok_or_else(|| {
                 ProjectSimulationError::InvalidEstimate(issue_id.to_string())
             })?;
             let (lower, upper) = fibonacci_bounds(value);
-            (lower, value, upper)
+            (lower, value, upper, true)
         }
         Estimate::ThreePoint(ThreePointEstimate {
             optimistic,
@@ -325,13 +319,22 @@ fn sample_duration<R: Rng + ?Sized>(
             let pessimistic = pessimistic.ok_or_else(|| {
                 ProjectSimulationError::InvalidEstimate(issue_id.to_string())
             })?;
-            (optimistic, most_likely, pessimistic)
+            (optimistic, most_likely, pessimistic, false)
         }
     };
 
-    let sampled_points = beta_pert_sample(optimistic, most_likely, pessimistic, rng)
+    let sampled = beta_pert_sample(optimistic, most_likely, pessimistic, rng)
         .map_err(|_| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
-    Ok(sampled_points / velocity)
+
+    if apply_velocity {
+        let velocity = velocity.ok_or(ProjectSimulationError::MissingVelocity)?;
+        if velocity <= 0.0 {
+            return Err(ProjectSimulationError::InvalidVelocityValue);
+        }
+        Ok(sampled / velocity)
+    } else {
+        Ok(sampled)
+    }
 }
 
 fn beta_pert_sample<R: Rng + ?Sized>(
@@ -380,25 +383,6 @@ fn fibonacci_bounds(value: f32) -> (f32, f32) {
     (last, last)
 }
 
-fn percentiles_from_values(values: &[f32]) -> SimulationPercentiles {
-    if values.is_empty() {
-        return SimulationPercentiles {
-            p0: 0.0,
-            p50: 0.0,
-            p85: 0.0,
-            p100: 0.0,
-        };
-    }
-    let mut sorted = values.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    SimulationPercentiles {
-        p0: percentile_value(&sorted, 0.0),
-        p50: percentile_value(&sorted, 50.0),
-        p85: percentile_value(&sorted, 85.0),
-        p100: percentile_value(&sorted, 100.0),
-    }
-}
-
 fn percentile_value(sorted_values: &[f32], percentile: f64) -> f32 {
     if sorted_values.is_empty() {
         return 0.0;
@@ -420,6 +404,18 @@ struct SimulationNode {
     estimate: Estimate,
     dependencies: Vec<String>,
     samples: Vec<f32>,
+}
+
+fn project_has_story_points(project: &Project) -> bool {
+    project.work_packages.iter().any(|issue| matches!(
+        issue.estimate,
+        Some(Estimate::StoryPoint(StoryPointEstimate { estimate: Some(_) }))
+    ))
+}
+
+fn end_date_from_days(start_date: chrono::NaiveDate, days: f32) -> chrono::NaiveDate {
+    let days = days.ceil().max(0.0) as i64;
+    start_date + chrono::Duration::days(days)
 }
 
 #[cfg(test)]
@@ -490,7 +486,7 @@ mod tests {
             work_packages: vec![issue_a, issue_b],
         };
 
-        let error = simulate_project(&project, 10).unwrap_err();
+        let error = simulate_project(&project, 10, "2026-01-01").unwrap_err();
         assert!(matches!(error, ProjectSimulationError::CyclicDependencies));
     }
 }
