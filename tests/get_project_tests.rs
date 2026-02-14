@@ -60,6 +60,8 @@ async fn test_get_project_data() {
     assert!(output.contains("done_date: 2026-01-26"));
     assert!(output.contains("id: ABC-456"));
     assert!(output.contains("summary: A second task"));
+    assert!(output.contains("dependencies: null")); // First issue should have null dependencies
+    assert!(output.contains("dependencies: []")); // Second issue should have empty dependencies
 }
 
 async fn run_get_project(socket_addr: std::net::SocketAddr) -> Result<String, Box<dyn std::error::Error>> {

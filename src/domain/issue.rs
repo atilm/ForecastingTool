@@ -20,7 +20,7 @@ pub struct Issue {
     pub summary: Option<String>,
     pub description: Option<String>,
     pub estimate: Option<Estimate>,
-    pub dependencies: Vec<IssueId>,
+    pub dependencies: Option<Vec<IssueId>>,
     pub subgraph: Option<String>,
     pub status: Option<IssueStatus>,
     pub created_date: Option<NaiveDate>,
@@ -30,7 +30,10 @@ pub struct Issue {
 
 impl Issue {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            dependencies: Some(Vec::new()),
+            ..Self::default()
+        }
     }
 }
 
@@ -45,7 +48,7 @@ mod tests {
         assert_eq!(issue.summary, None);
         assert_eq!(issue.description, None);
         assert_eq!(issue.estimate, None);
-        assert!(issue.dependencies.is_empty());
+        assert_eq!(issue.dependencies, Some(Vec::new()));
         assert_eq!(issue.subgraph, None);
         assert_eq!(issue.status, None);
         assert_eq!(issue.created_date, None);

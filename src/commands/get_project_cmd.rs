@@ -30,7 +30,7 @@ pub fn get_project_command(cmd: Commands) {
             }
         };
 
-        let project = match api_client
+        let mut project = match api_client
             .get_project(DataQuery::StringQuery(jira_project.project_query))
         {
             Ok(project) => project,
@@ -39,6 +39,15 @@ pub fn get_project_command(cmd: Commands) {
                 return;
             }
         };
+
+        // Set the first issue with empty dependencies to have None dependencies to ensure correct YAML output
+        if let Some(issue) = project
+            .work_packages
+            .iter_mut()
+            .find(|issue| issue.dependencies.as_ref().map_or(false, |deps| deps.is_empty()))
+        {
+            issue.dependencies = None;
+        }
 
         let mut buffer = Vec::new();
         if let Err(e) = serialize_project_to_yaml(&mut buffer, &project) {

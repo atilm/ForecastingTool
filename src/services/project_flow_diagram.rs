@@ -51,8 +51,10 @@ pub fn generate_flow_diagram(project: &Project) -> String {
 
     for issue in &project.work_packages {
         let id = issue.issue_id.as_ref().map(|id| id.id.as_str()).unwrap_or("");
-        for dep in &issue.dependencies {
-            lines.push(format!("    {} --> {id}", dep.id));
+        if let Some(deps) = issue.dependencies.as_ref() {
+            for dep in deps {
+                lines.push(format!("    {} --> {id}", dep.id));
+            }
         }
     }
 

@@ -1,7 +1,6 @@
 # ToDos
 
-* [ ] Remove async
-* [ ] When exporting velocity data, make dependencies [] instead of null
+
 * [ ] Output more result data on stdout
 * [ ] Take weekends and holidays into account
 * [ ] Simulate in parallel

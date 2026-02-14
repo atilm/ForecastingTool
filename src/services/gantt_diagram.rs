@@ -44,18 +44,20 @@ pub fn generate_gantt_diagram(
         let end_time = percentile_value(wp, percentile);
 
         let mut start_time = 0.0_f32;
-        if !issue.dependencies.is_empty() {
-            let mut dep_end_times = Vec::new();
-            for dep in &issue.dependencies {
-                if let Some(dep_wp) = map.get(&dep.id) {
-                    dep_end_times.push(percentile_value(dep_wp, percentile));
+        if let Some(deps) = issue.dependencies.as_ref() {
+            if !deps.is_empty() {
+                let mut dep_end_times = Vec::new();
+                for dep in deps {
+                    if let Some(dep_wp) = map.get(&dep.id) {
+                        dep_end_times.push(percentile_value(dep_wp, percentile));
+                    }
                 }
-            }
-            if let Some(value) = dep_end_times
-                .into_iter()
-                .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            {
-                start_time = value;
+                if let Some(value) = dep_end_times
+                    .into_iter()
+                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                {
+                    start_time = value;
+                }
             }
         }
 
@@ -106,10 +108,15 @@ mod tests {
         let mut issue = Issue::new();
         issue.issue_id = Some(IssueId { id: id.to_string() });
         issue.summary = Some(format!("Name {id}"));
-        issue.dependencies = deps
-            .iter()
-            .map(|dep| IssueId { id: (*dep).to_string() })
-            .collect();
+        issue.dependencies = if deps.is_empty() {
+            None
+        } else {
+            Some(
+                deps.iter()
+                    .map(|dep| IssueId { id: (*dep).to_string() })
+                    .collect(),
+            )
+        };
         issue
     }
 

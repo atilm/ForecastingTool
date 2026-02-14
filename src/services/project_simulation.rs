@@ -232,9 +232,9 @@ fn build_simulation_nodes(
             .ok_or_else(|| ProjectSimulationError::MissingEstimate(id.clone()))?;
         let dependencies = issue
             .dependencies
-            .iter()
-            .map(|dep| dep.id.clone())
-            .collect();
+            .as_ref()
+            .map(|deps| deps.iter().map(|dep| dep.id.clone()).collect())
+            .unwrap_or_default();
 
         nodes.insert(
             id.clone(),
@@ -270,17 +270,19 @@ fn topological_sort(project: &Project) -> Result<Vec<String>, ProjectSimulationE
             .map(|issue_id| issue_id.id.clone())
             .ok_or(ProjectSimulationError::MissingIssueId)?;
         let issue_idx = *indices.get(&id).ok_or(ProjectSimulationError::MissingIssueId)?;
-        for dep in &issue.dependencies {
-            let dep_idx = match indices.get(&dep.id) {
-                Some(idx) => *idx,
-                None => {
-                    return Err(ProjectSimulationError::UnknownDependency {
-                        issue: id.clone(),
-                        dependency: dep.id.clone(),
-                    });
-                }
-            };
-            graph.add_edge(dep_idx, issue_idx, ());
+        if let Some(deps) = issue.dependencies.as_ref() {
+            for dep in deps {
+                let dep_idx = match indices.get(&dep.id) {
+                    Some(idx) => *idx,
+                    None => {
+                        return Err(ProjectSimulationError::UnknownDependency {
+                            issue: id.clone(),
+                            dependency: dep.id.clone(),
+                        });
+                    }
+                };
+                graph.add_edge(dep_idx, issue_idx, ());
+            }
         }
     }
 
@@ -480,10 +482,15 @@ mod tests {
             most_likely: Some(days),
             pessimistic: Some(days),
         }));
-        issue.dependencies = deps
-            .iter()
-            .map(|dep| IssueId { id: (*dep).to_string() })
-            .collect();
+        issue.dependencies = if deps.is_empty() {
+            None
+        } else {
+            Some(
+                deps.iter()
+                    .map(|dep| IssueId { id: (*dep).to_string() })
+                    .collect(),
+            )
+        };
         issue
     }
 
@@ -494,10 +501,15 @@ mod tests {
         issue.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
             estimate: Some(points),
         }));
-        issue.dependencies = deps
-            .iter()
-            .map(|dep| IssueId { id: (*dep).to_string() })
-            .collect();
+        issue.dependencies = if deps.is_empty() {
+            None
+        } else {
+            Some(
+                deps.iter()
+                    .map(|dep| IssueId { id: (*dep).to_string() })
+                    .collect(),
+            )
+        };
         issue
     }
 
@@ -543,8 +555,14 @@ mod tests {
         let base = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
         let mut issue_a = build_done_issue("A", 1.0, base, base + chrono::Duration::days(1));
         let mut issue_b = build_done_issue("B", 1.0, base, base + chrono::Duration::days(2));
-        issue_a.dependencies.push(IssueId { id: "B".to_string() });
-        issue_b.dependencies.push(IssueId { id: "A".to_string() });
+        issue_a
+            .dependencies
+            .get_or_insert_with(Vec::new)
+            .push(IssueId { id: "B".to_string() });
+        issue_b
+            .dependencies
+            .get_or_insert_with(Vec::new)
+            .push(IssueId { id: "A".to_string() });
 
         let project = Project {
             name: "Demo".to_string(),

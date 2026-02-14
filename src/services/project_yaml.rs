@@ -83,14 +83,14 @@ pub fn deserialize_project_from_yaml_str(input: &str) -> Result<Project, Project
         issue.done_date = parse_date_opt(issue_record.done_date.as_deref())?;
         issue.subgraph = issue_record.subgraph;
         issue.dependencies = match issue_record.dependencies {
-            None => Vec::new(),
+            None => None,
             Some(values) if values.is_empty() => {
                 let previous = previous_id
                     .clone()
                     .ok_or(ProjectYamlError::MissingPreviousDependency)?;
-                vec![IssueId { id: previous }]
+                Some(vec![IssueId { id: previous }])
             }
-            Some(values) => values.into_iter().map(|id| IssueId { id }).collect(),
+            Some(values) => Some(values.into_iter().map(|id| IssueId { id }).collect()),
         };
         previous_id = issue.issue_id.as_ref().map(|id| id.id.clone());
         work_packages.push(issue);
@@ -137,11 +137,10 @@ fn issue_to_record(issue: &Issue) -> IssueRecord {
         done_date: issue
             .done_date
             .map(|date| date.format("%Y-%m-%d").to_string()),
-        dependencies: if issue.dependencies.is_empty() {
-            None
-        } else {
-            Some(issue.dependencies.iter().map(|id| id.id.clone()).collect())
-        },
+        dependencies: issue
+            .dependencies
+            .as_ref()
+            .map(|values| values.iter().map(|id| id.id.clone()).collect()),
         subgraph: issue.subgraph.clone(),
     }
 }
@@ -281,7 +280,7 @@ work_packages:
         assert_eq!(project.name, "Demo");
         assert_eq!(issue.issue_id.as_ref().unwrap().id, "ABC-1");
         assert!(matches!(issue.status, Some(IssueStatus::Done)));
-        assert_eq!(issue.dependencies.len(), 1);
+        assert_eq!(issue.dependencies.as_ref().unwrap().len(), 1);
         assert!(matches!(
             issue.estimate,
             Some(Estimate::StoryPoint(StoryPointEstimate { estimate: Some(5.0) }))
@@ -364,8 +363,8 @@ work_packages:
 
         let project = deserialize_project_from_yaml_str(yaml).unwrap();
         let issue = &project.work_packages[1];
-        assert_eq!(issue.dependencies.len(), 1);
-        assert_eq!(issue.dependencies[0].id, "ABC-1");
+        assert_eq!(issue.dependencies.as_ref().unwrap().len(), 1);
+        assert_eq!(issue.dependencies.as_ref().unwrap()[0].id, "ABC-1");
     }
 
     #[test]
@@ -379,5 +378,42 @@ work_packages:
 
         let error = deserialize_project_from_yaml_str(yaml).unwrap_err();
         assert!(matches!(error, ProjectYamlError::MissingPreviousDependency));
+    }
+
+    #[test]
+    fn serialize_project_to_yaml_handles_optional_dependencies() {
+        let mut issue_none = Issue::new();
+        issue_none.issue_id = Some(IssueId {
+            id: "ABC-1".to_string(),
+        });
+        issue_none.dependencies = None;
+
+        let mut issue_empty = Issue::new();
+        issue_empty.issue_id = Some(IssueId {
+            id: "ABC-2".to_string(),
+        });
+        issue_empty.dependencies = Some(Vec::new());
+
+        let mut issue_values = Issue::new();
+        issue_values.issue_id = Some(IssueId {
+            id: "ABC-3".to_string(),
+        });
+        issue_values.dependencies = Some(vec![IssueId {
+            id: "ABC-1".to_string(),
+        }]);
+
+        let project = Project {
+            name: "TEST".to_string(),
+            work_packages: vec![issue_none, issue_empty, issue_values],
+        };
+
+        let mut buffer = Vec::new();
+        serialize_project_to_yaml(&mut buffer, &project).unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+
+        assert!(output.contains("dependencies: null"));
+        assert!(output.contains("dependencies: []"));
+        assert!(output.contains("dependencies:"));
+        assert!(output.contains("- ABC-1"));
     }
 }
