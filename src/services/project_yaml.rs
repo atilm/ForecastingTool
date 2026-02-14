@@ -4,7 +4,9 @@ use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::domain::estimate::{Estimate, StoryPointEstimate, ThreePointEstimate};
+use crate::domain::estimate::{
+    Estimate, ReferenceEstimate, StoryPointEstimate, ThreePointEstimate,
+};
 use crate::domain::issue::{Issue, IssueId, IssueStatus};
 use crate::domain::project::Project;
 
@@ -47,11 +49,16 @@ struct IssueRecord {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum EstimateRecord {
-    StoryPoints { value: f32 },
+    StoryPoints {
+        value: f32,
+    },
     ThreePoint {
         optimistic: f32,
         most_likely: f32,
         pessimistic: f32,
+    },
+    Reference {
+        report_file_path: String,
     },
 }
 
@@ -105,15 +112,11 @@ pub fn deserialize_project_from_yaml_str(input: &str) -> Result<Project, Project
 pub fn serialize_project_to_yaml<W: Write>(writer: &mut W, project: &Project) -> io::Result<()> {
     let record = ProjectRecord {
         name: project.name.clone(),
-        work_packages: project
-            .work_packages
-            .iter()
-            .map(issue_to_record)
-            .collect(),
+        work_packages: project.work_packages.iter().map(issue_to_record).collect(),
     };
 
-    let yaml = serde_yaml::to_string(&record)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let yaml =
+        serde_yaml::to_string(&record).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     writer.write_all(yaml.as_bytes())
 }
 
@@ -159,14 +162,18 @@ fn estimate_from_record(record: EstimateRecord) -> Estimate {
             most_likely: Some(most_likely),
             pessimistic: Some(pessimistic),
         }),
+        EstimateRecord::Reference { report_file_path } => Estimate::Reference(ReferenceEstimate {
+            report_file_path,
+            cached_estimate: None,
+        }),
     }
 }
 
 fn estimate_to_record(estimate: Option<&Estimate>) -> Option<EstimateRecord> {
     match estimate? {
-        Estimate::StoryPoint(StoryPointEstimate { estimate }) => estimate.map(|value| {
-            EstimateRecord::StoryPoints { value }
-        }),
+        Estimate::StoryPoint(StoryPointEstimate { estimate }) => {
+            estimate.map(|value| EstimateRecord::StoryPoints { value })
+        }
         Estimate::ThreePoint(ThreePointEstimate {
             optimistic,
             most_likely,
@@ -181,6 +188,12 @@ fn estimate_to_record(estimate: Option<&Estimate>) -> Option<EstimateRecord> {
             }
             _ => None,
         },
+        Estimate::Reference(ReferenceEstimate {
+            report_file_path,
+            cached_estimate: _,
+        }) => Some(EstimateRecord::Reference {
+            report_file_path: report_file_path.clone(),
+        }),
     }
 }
 
@@ -283,7 +296,9 @@ work_packages:
         assert_eq!(issue.dependencies.as_ref().unwrap().len(), 1);
         assert!(matches!(
             issue.estimate,
-            Some(Estimate::StoryPoint(StoryPointEstimate { estimate: Some(5.0) }))
+            Some(Estimate::StoryPoint(StoryPointEstimate {
+                estimate: Some(5.0)
+            }))
         ));
     }
 

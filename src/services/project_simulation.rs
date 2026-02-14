@@ -4,7 +4,7 @@ use rand::Rng;
 use rand_distr::{Beta, Distribution};
 use thiserror::Error;
 
-use crate::domain::estimate::{Estimate, StoryPointEstimate, ThreePointEstimate};
+use crate::domain::estimate::{Estimate, StoryPointEstimate, ThreePointEstimate, ReferenceEstimate};
 use crate::domain::issue::{Issue, IssueStatus};
 use crate::domain::project::Project;
 use crate::services::histogram::HistogramError;
@@ -318,6 +318,7 @@ fn story_point_value(issue: &Issue) -> Option<f32> {
     match issue.estimate.as_ref()? {
         Estimate::StoryPoint(StoryPointEstimate { estimate }) => *estimate,
         Estimate::ThreePoint(_) => None,
+        Estimate::Reference(_) => None,
     }
 }
 
@@ -335,21 +336,15 @@ fn sample_duration<R: Rng + ?Sized>(
             let (lower, upper) = fibonacci_bounds(value);
             (lower, value, upper, true)
         }
-        Estimate::ThreePoint(ThreePointEstimate {
-            optimistic,
-            most_likely,
-            pessimistic,
+        Estimate::ThreePoint(estimate) => to_three_point_triplet(estimate)?,
+        Estimate::Reference(ReferenceEstimate {
+            report_file_path: _,
+            cached_estimate,
         }) => {
-            let optimistic = optimistic.ok_or_else(|| {
+            let estimate = cached_estimate.as_ref().ok_or_else(|| {
                 ProjectSimulationError::InvalidEstimate(issue_id.to_string())
             })?;
-            let most_likely = most_likely.ok_or_else(|| {
-                ProjectSimulationError::InvalidEstimate(issue_id.to_string())
-            })?;
-            let pessimistic = pessimistic.ok_or_else(|| {
-                ProjectSimulationError::InvalidEstimate(issue_id.to_string())
-            })?;
-            (optimistic, most_likely, pessimistic, false)
+            to_three_point_triplet(estimate)?
         }
     };
 
@@ -365,6 +360,20 @@ fn sample_duration<R: Rng + ?Sized>(
     } else {
         Ok(sampled)
     }
+}
+
+fn to_three_point_triplet(estimate: &ThreePointEstimate) -> Result<(f32, f32, f32, bool), ProjectSimulationError> {
+    let optimistic = estimate.optimistic.ok_or_else(|| {
+        ProjectSimulationError::InvalidEstimate("missing optimistic value".to_string())
+    })?;
+    let most_likely = estimate.most_likely.ok_or_else(|| {
+        ProjectSimulationError::InvalidEstimate("missing most likely value".to_string())
+    })?;
+    let pessimistic = estimate.pessimistic.ok_or_else(|| {
+        ProjectSimulationError::InvalidEstimate("missing pessimistic value".to_string())
+    })?;
+    let apply_velocity = false;
+    Ok((optimistic, most_likely, pessimistic, apply_velocity))
 }
 
 fn beta_pert_sample<R: Rng + ?Sized>(
