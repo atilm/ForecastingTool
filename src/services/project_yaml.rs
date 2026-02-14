@@ -163,10 +163,19 @@ fn estimate_from_record(record: EstimateRecord) -> Estimate {
             pessimistic: Some(pessimistic),
         }),
         EstimateRecord::Reference { report_file_path } => Estimate::Reference(ReferenceEstimate {
-            report_file_path,
-            cached_estimate: None,
+            cached_estimate: get_three_point_estimate_from_report_file(&report_file_path),
+            report_file_path: report_file_path,
         }),
     }
+}
+
+fn get_three_point_estimate_from_report_file(path: &str) -> Option<ThreePointEstimate> {
+    // Placeholder for actual implementation that reads the report file and extracts the percentiles
+    Some(ThreePointEstimate {
+        optimistic: Some(1.0),
+        most_likely: Some(2.0),
+        pessimistic: Some(3.0),
+    })
 }
 
 fn estimate_to_record(estimate: Option<&Estimate>) -> Option<EstimateRecord> {
