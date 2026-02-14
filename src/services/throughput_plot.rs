@@ -15,29 +15,24 @@ pub enum ThroughputPlotError {
     Plot(String),
 }
 
-pub async fn plot_throughput_from_yaml_file(
+pub fn plot_throughput_from_yaml_file(
     input_path: &str,
     output_path: &str,
 ) -> Result<(), ThroughputPlotError> {
-    let throughput_yaml = tokio::fs::read_to_string(input_path).await?;
+    let throughput_yaml = std::fs::read_to_string(input_path)?;
     let throughput = deserialize_throughput_from_yaml_str(&throughput_yaml)?;
     if throughput.is_empty() {
         return Err(ThroughputPlotError::EmptyThroughput);
     }
-    write_plot_png(output_path, &throughput).await?;
+    write_plot_png(output_path, &throughput)?;
     Ok(())
 }
 
-async fn write_plot_png(
+fn write_plot_png(
     output_path: &str,
     throughput: &[Throughput],
 ) -> Result<(), ThroughputPlotError> {
-    let output_path = output_path.to_string();
-    let throughput = throughput.to_vec();
-    tokio::task::spawn_blocking(move || render_plot_png(&output_path, &throughput))
-        .await
-        .map_err(|e| ThroughputPlotError::Plot(e.to_string()))??;
-    Ok(())
+    render_plot_png(output_path, throughput)
 }
 
 fn render_plot_png(
@@ -112,8 +107,8 @@ mod tests {
     use assert_fs::prelude::*;
     use predicates::prelude::*;
 
-    #[tokio::test]
-    async fn plot_throughput_from_yaml_file_writes_png() {
+    #[test]
+    fn plot_throughput_from_yaml_file_writes_png() {
         let throughput_yaml = "- date: 2026-01-26\n  completed_issues: 2\n- date: 2026-01-27\n  completed_issues: 0\n- date: 2026-01-28\n  completed_issues: 3\n";
 
         let input_file = assert_fs::NamedTempFile::new("throughput.yaml").unwrap();
@@ -124,7 +119,6 @@ mod tests {
             input_file.path().to_str().unwrap(),
             output_file.path().to_str().unwrap(),
         )
-        .await
         .unwrap();
 
         output_file.assert(predicate::path::exists());
@@ -132,8 +126,8 @@ mod tests {
         assert!(metadata.len() > 0);
     }
 
-    #[tokio::test]
-    async fn plot_throughput_from_yaml_file_rejects_empty_data() {
+    #[test]
+    fn plot_throughput_from_yaml_file_rejects_empty_data() {
         let input_file = assert_fs::NamedTempFile::new("empty.yaml").unwrap();
         input_file.write_str("[]").unwrap();
         let output_file = assert_fs::NamedTempFile::new("empty.png").unwrap();
@@ -142,7 +136,6 @@ mod tests {
             input_file.path().to_str().unwrap(),
             output_file.path().to_str().unwrap(),
         )
-        .await
         .expect_err("expected empty throughput error");
 
         assert!(matches!(error, ThroughputPlotError::EmptyThroughput));

@@ -1,7 +1,7 @@
 use crate::commands::base_commands::Commands;
 use crate::services::simulation::simulate_from_throughput_file;
 
-pub async fn simulate_n_command(cmd: Commands) {
+pub fn simulate_n_command(cmd: Commands) {
     if let Commands::SimulateN {
         throughput,
         output,
@@ -17,9 +17,7 @@ pub async fn simulate_n_command(cmd: Commands) {
             number_of_issues,
             &start_date,
             &histogram_path,
-        )
-        .await
-        {
+        ) {
             Ok(result) => result,
             Err(e) => {
                 eprintln!("Failed to simulate by throughput: {e:?}");
@@ -35,7 +33,7 @@ pub async fn simulate_n_command(cmd: Commands) {
             }
         };
 
-        if let Err(e) = tokio::fs::write(&output, yaml).await {
+        if let Err(e) = std::fs::write(&output, yaml) {
             eprintln!("Failed to write simulation output: {e:?}");
         } else {
             println!("Simulation result for {number_of_issues} items written to {output}");

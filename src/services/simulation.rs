@@ -27,20 +27,20 @@ pub enum SimulationError {
     Histogram(#[from] HistogramError),
 }
 
-pub(crate) async fn simulate_from_throughput_file(
+pub(crate) fn simulate_from_throughput_file(
     throughput_path: &str,
     iterations: usize,
     number_of_issues: usize,
     start_date: &str,
     histogram_path: &str,
 ) -> Result<SimulationReport, SimulationError> {
-    let throughput_yaml = tokio::fs::read_to_string(throughput_path).await?;
+    let throughput_yaml = std::fs::read_to_string(throughput_path)?;
     let throughput = deserialize_throughput_from_yaml_str(&throughput_yaml)?;
     let start_date = NaiveDate::parse_from_str(start_date, "%Y-%m-%d")
         .map_err(|_| SimulationError::InvalidStartDate(start_date.to_string()))?;
 
     let simulation = run_simulation(&throughput, iterations, number_of_issues, start_date)?;
-    write_histogram_png(histogram_path, &simulation.results).await?;
+    write_histogram_png(histogram_path, &simulation.results)?;
     Ok(simulation.report)
 }
 

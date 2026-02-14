@@ -56,12 +56,12 @@ pub enum ProjectSimulationError {
     Histogram(#[from] HistogramError),
 }
 
-pub async fn simulate_project_from_yaml_file(
+pub fn simulate_project_from_yaml_file(
     path: &str,
     iterations: usize,
     start_date: &str,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
-    let project = load_project_from_yaml_file(path).await?;
+    let project = load_project_from_yaml_file(path)?;
     simulate_project(&project, iterations, start_date)
 }
 

@@ -13,11 +13,11 @@ impl DataConverter {
         Self { data_source }
     }
 
-    pub async fn get_throughput_data(
+    pub fn get_throughput_data(
         &self,
         data_query: DataQuery,
     ) -> Result<Vec<Throughput>, DataSourceError> {
-        let issues = self.data_source.get_issues(data_query).await?;
+        let issues = self.data_source.get_issues(data_query)?;
 
         let done_dates: Vec<NaiveDate> =
             issues.iter().filter_map(|issue| issue.done_date).collect();
@@ -61,20 +61,19 @@ mod tests {
         issues: Vec<Issue>,
     }
 
-    #[async_trait::async_trait]
     impl DataSource for MockDataSource {
-        async fn get_epic(
+        fn get_epic(
             &self,
             _epic_id: &str,
         ) -> Result<crate::domain::epic::Epic, DataSourceError> {
             Err(DataSourceError::Other("not used".to_string()))
         }
 
-        async fn get_issues(&self, _query: DataQuery) -> Result<Vec<Issue>, DataSourceError> {
+        fn get_issues(&self, _query: DataQuery) -> Result<Vec<Issue>, DataSourceError> {
             Ok(self.issues.clone())
         }
 
-        async fn get_project(
+        fn get_project(
             &self,
             _query: DataQuery,
         ) -> Result<crate::domain::project::Project, DataSourceError> {
@@ -82,8 +81,8 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn construct_throughput_from_issue_vector() {
+    #[test]
+    fn construct_throughput_from_issue_vector() {
         // Arrange
         let done_dates = vec![
             NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(), // Thursday
@@ -111,7 +110,6 @@ mod tests {
         let converter: DataConverter = DataConverter::new(data_source);
         let result = converter
             .get_throughput_data(DataQuery::StringQuery("dummy string".to_string()))
-            .await
             .unwrap();
 
         // Assert

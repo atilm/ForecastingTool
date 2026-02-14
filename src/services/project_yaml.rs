@@ -55,8 +55,8 @@ enum EstimateRecord {
     },
 }
 
-pub async fn load_project_from_yaml_file(path: &str) -> Result<Project, ProjectYamlError> {
-    let contents = tokio::fs::read_to_string(path).await?;
+pub fn load_project_from_yaml_file(path: &str) -> Result<Project, ProjectYamlError> {
+    let contents = std::fs::read_to_string(path)?;
     deserialize_project_from_yaml_str(&contents)
 }
 

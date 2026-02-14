@@ -13,13 +13,13 @@ pub enum ProjectDiagramError {
     Parse(#[from] ProjectYamlError),
 }
 
-pub async fn write_project_diagram_markdown(
+pub fn write_project_diagram_markdown(
     input_path: &str,
     output_path: &str,
 ) -> Result<(), ProjectDiagramError> {
-    let project = load_project_from_yaml_file(input_path).await?;
+    let project = load_project_from_yaml_file(input_path)?;
     let markdown = generate_project_markdown(&project);
-    tokio::fs::write(output_path, markdown).await?;
+    std::fs::write(output_path, markdown)?;
     Ok(())
 }
 

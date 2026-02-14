@@ -11,27 +11,26 @@ use crate::commands::simulate_n_cmd::simulate_n_command;
 use crate::commands::simulate_cmd::simulate_command;
 use clap::Parser;
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let args = CliArgs::parse();
     match args.command {
         cmd @ Commands::GetThroughput { .. } => {
-            get_throughput_command(cmd).await;
+            get_throughput_command(cmd);
         }
         cmd @ Commands::PlotThroughput { .. } => {
-            plot_throughput_command(cmd).await;
+            plot_throughput_command(cmd);
         }
         cmd @ Commands::PlotProject { .. } => {
-            plot_project_command(cmd).await;
+            plot_project_command(cmd);
         }
         cmd @ Commands::GetProject { .. } => {
-            get_project_command(cmd).await;
+            get_project_command(cmd);
         }
         cmd @ Commands::SimulateN { .. } => {
-            simulate_n_command(cmd).await;
+            simulate_n_command(cmd);
         }
         cmd @ Commands::Simulate { .. } => {
-            simulate_command(cmd).await;
+            simulate_command(cmd);
         }
     }
 }

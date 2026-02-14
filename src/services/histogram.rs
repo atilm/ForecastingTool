@@ -7,13 +7,8 @@ pub enum HistogramError {
     Render(String),
 }
 
-pub async fn write_histogram_png(output_path: &str, results: &[f32]) -> Result<(), HistogramError> {
-    let output_path = output_path.to_string();
-    let results = results.to_vec();
-    tokio::task::spawn_blocking(move || render_histogram_png(&output_path, &results))
-        .await
-        .map_err(|e| HistogramError::Render(e.to_string()))??;
-    Ok(())
+pub fn write_histogram_png(output_path: &str, results: &[f32]) -> Result<(), HistogramError> {
+    render_histogram_png(output_path, results)
 }
 
 fn render_histogram_png(output_path: &str, results: &[f32]) -> Result<(), HistogramError> {

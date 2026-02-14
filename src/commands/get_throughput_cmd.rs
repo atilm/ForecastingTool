@@ -4,7 +4,7 @@ use crate::services::data_source::DataQuery;
 use crate::services::jira_api::{AuthData, JiraApiClient, JiraConfigParser};
 use crate::services::throughput_yaml::serialize_throughput_to_yaml;
 
-pub async fn get_throughput_command(cmd: Commands) {
+pub fn get_throughput_command(cmd: Commands) {
     println!("This is the get_throughput command");
     if let Commands::GetThroughput { config, output } = cmd {
         let config_parser = JiraConfigParser;
@@ -36,7 +36,6 @@ pub async fn get_throughput_command(cmd: Commands) {
         // Fetch throughput data
         let throughput = match data_converter
             .get_throughput_data(DataQuery::StringQuery(jira_project.throughput_query))
-            .await
         {
             Ok(data) => data,
             Err(e) => {
@@ -50,7 +49,7 @@ pub async fn get_throughput_command(cmd: Commands) {
             eprintln!("Failed to serialize throughput to YAML: {e:?}");
             return;
         }
-        if let Err(e) = tokio::fs::write(&output, buffer).await {
+        if let Err(e) = std::fs::write(&output, buffer) {
             eprintln!("Failed to write output file: {e:?}");
         } else {
             println!("Throughput data written to {output}");

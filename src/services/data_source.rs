@@ -20,9 +20,8 @@ pub enum DataQuery {
 }
 
 /// Describes an interface for retrieving Epic and Issue information.
-#[async_trait::async_trait]
 pub trait DataSource {
-    async fn get_epic(&self, epic_id: &str) -> Result<Epic, DataSourceError>;
-    async fn get_issues(&self, query: DataQuery) -> Result<Vec<Issue>, DataSourceError>;
-    async fn get_project(&self, query: DataQuery) -> Result<Project, DataSourceError>;
+    fn get_epic(&self, epic_id: &str) -> Result<Epic, DataSourceError>;
+    fn get_issues(&self, query: DataQuery) -> Result<Vec<Issue>, DataSourceError>;
+    fn get_project(&self, query: DataQuery) -> Result<Project, DataSourceError>;
 }

@@ -3,7 +3,7 @@ use crate::services::data_source::{DataQuery, DataSource};
 use crate::services::jira_api::{AuthData, JiraApiClient, JiraConfigParser};
 use crate::services::project_yaml::serialize_project_to_yaml;
 
-pub async fn get_project_command(cmd: Commands) {
+pub fn get_project_command(cmd: Commands) {
     if let Commands::GetProject { config, output } = cmd {
         let config_parser = JiraConfigParser;
         let jira_project = match config_parser.parse(&config) {
@@ -32,7 +32,6 @@ pub async fn get_project_command(cmd: Commands) {
 
         let project = match api_client
             .get_project(DataQuery::StringQuery(jira_project.project_query))
-            .await
         {
             Ok(project) => project,
             Err(e) => {
@@ -47,7 +46,7 @@ pub async fn get_project_command(cmd: Commands) {
             return;
         }
 
-        if let Err(e) = tokio::fs::write(&output, buffer).await {
+        if let Err(e) = std::fs::write(&output, buffer) {
             eprintln!("Failed to write output file: {e:?}");
         } else {
             println!("Project data written to {output}");

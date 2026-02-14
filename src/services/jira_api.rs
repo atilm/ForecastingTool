@@ -3,7 +3,8 @@ use std::env;
 use std::fs;
 
 use chrono::NaiveDate;
-use reqwest::{Client, StatusCode};
+use reqwest::blocking::Client;
+use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -101,7 +102,7 @@ impl JiraApiClient {
         })
     }
 
-    async fn fetch_json(
+    fn fetch_json(
         &self,
         url: &str,
         params: &HashMap<&str, String>,
@@ -115,7 +116,6 @@ impl JiraApiClient {
                 Some(self.auth.api_token.clone()),
             )
             .send()
-            .await
             .map_err(|_| DataSourceError::Connection)?;
 
         let status = response.status();
@@ -131,11 +131,10 @@ impl JiraApiClient {
 
         response
             .json::<Value>()
-            .await
             .map_err(|_| DataSourceError::Parse)
     }
 
-    async fn get_issues_by_jql(&self, jql: &str) -> Result<Vec<Issue>, DataSourceError> {
+    fn get_issues_by_jql(&self, jql: &str) -> Result<Vec<Issue>, DataSourceError> {
         let url = format!("{}/search/jql", self.jira_project.base_url);
         let fields = format!(
             "summary,description,statusCategory,created,{},{},{}",
@@ -151,7 +150,7 @@ impl JiraApiClient {
         let mut last_page_token: Option<String> = None;
 
         loop {
-            let payload = self.fetch_json(&url, &params).await?;
+            let payload = self.fetch_json(&url, &params)?;
 
             let issues = payload
                 .get("issues")
@@ -238,9 +237,8 @@ impl JiraApiClient {
     }
 }
 
-#[async_trait::async_trait]
 impl DataSource for JiraApiClient {
-    async fn get_epic(&self, epic_id: &str) -> Result<Epic, DataSourceError> {
+    fn get_epic(&self, epic_id: &str) -> Result<Epic, DataSourceError> {
         let url = format!("{}/issue/{epic_id}", self.jira_project.base_url);
         let fields = format!(
             "summary,description,statusCategory,{},duedate",
@@ -249,14 +247,14 @@ impl DataSource for JiraApiClient {
         let mut params = HashMap::new();
         params.insert("fields", fields);
 
-        let payload = self.fetch_json(&url, &params).await?;
+        let payload = self.fetch_json(&url, &params)?;
         let fields = payload
             .get("fields")
             .and_then(|value| value.as_object())
             .ok_or(DataSourceError::Parse)?;
 
         let children_of_epic_jql = format!("\"Epic Link\"={epic_id}");
-        let issues_of_epic = self.get_issues_by_jql(&children_of_epic_jql).await?;
+        let issues_of_epic = self.get_issues_by_jql(&children_of_epic_jql)?;
 
         let mut epic = Epic::new();
         epic.issue_id = Some(IssueId { id: epic_id.to_string()} );
@@ -272,16 +270,16 @@ impl DataSource for JiraApiClient {
         Ok(epic)
     }
 
-    async fn get_issues(&self, query: DataQuery) -> Result<Vec<Issue>, DataSourceError> {
+    fn get_issues(&self, query: DataQuery) -> Result<Vec<Issue>, DataSourceError> {
         match query {
-            DataQuery::StringQuery(jql) => self.get_issues_by_jql(&jql).await,
+            DataQuery::StringQuery(jql) => self.get_issues_by_jql(&jql),
         }
     }
 
-    async fn get_project(&self, query: DataQuery) -> Result<Project, DataSourceError> {
+    fn get_project(&self, query: DataQuery) -> Result<Project, DataSourceError> {
         match query {
             DataQuery::StringQuery(jql) => {
-                let issues = self.get_issues_by_jql(&jql).await?;
+                let issues = self.get_issues_by_jql(&jql)?;
                 Ok(crate::domain::project::Project {
                     name: self.jira_project.project_key.clone(),
                     work_packages: issues,
