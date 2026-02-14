@@ -62,13 +62,6 @@ mod tests {
     }
 
     impl DataSource for MockDataSource {
-        fn get_epic(
-            &self,
-            _epic_id: &str,
-        ) -> Result<crate::domain::epic::Epic, DataSourceError> {
-            Err(DataSourceError::Other("not used".to_string()))
-        }
-
         fn get_issues(&self, _query: DataQuery) -> Result<Vec<Issue>, DataSourceError> {
             Ok(self.issues.clone())
         }

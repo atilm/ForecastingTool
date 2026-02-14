@@ -8,7 +8,6 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::domain::epic::Epic;
 use crate::domain::estimate::{Estimate, StoryPointEstimate};
 use crate::domain::issue::IssueId;
 use crate::domain::project::Project;
@@ -238,38 +237,6 @@ impl JiraApiClient {
 }
 
 impl DataSource for JiraApiClient {
-    fn get_epic(&self, epic_id: &str) -> Result<Epic, DataSourceError> {
-        let url = format!("{}/issue/{epic_id}", self.jira_project.base_url);
-        let fields = format!(
-            "summary,description,statusCategory,{},duedate",
-            self.jira_project.start_date_field_id
-        );
-        let mut params = HashMap::new();
-        params.insert("fields", fields);
-
-        let payload = self.fetch_json(&url, &params)?;
-        let fields = payload
-            .get("fields")
-            .and_then(|value| value.as_object())
-            .ok_or(DataSourceError::Parse)?;
-
-        let children_of_epic_jql = format!("\"Epic Link\"={epic_id}");
-        let issues_of_epic = self.get_issues_by_jql(&children_of_epic_jql)?;
-
-        let mut epic = Epic::new();
-        epic.issue_id = Some(IssueId { id: epic_id.to_string()} );
-        epic.summary = get_field_string(fields, "summary");
-        epic.description = get_field_description(fields, "description");
-        epic.status = get_field_status_category(fields);
-        epic.start_date = parse_date_opt(
-            get_field_string(fields, &self.jira_project.start_date_field_id).as_deref(),
-        );
-        epic.due_date = parse_date_opt(get_field_string(fields, "duedate").as_deref());
-        epic.issues = issues_of_epic;
-
-        Ok(epic)
-    }
-
     fn get_issues(&self, query: DataQuery) -> Result<Vec<Issue>, DataSourceError> {
         match query {
             DataQuery::StringQuery(jql) => self.get_issues_by_jql(&jql),
