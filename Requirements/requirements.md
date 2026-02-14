@@ -32,19 +32,19 @@
       * [ ] **Simulate team capacity based on calendar for multiple team members**
     * [x] ~~Configure data sources from config file~~
     * [ ] **Simulate a project hierarchically**
-      * [ ] top level with dependencies based on three point estimate
-      * [ ] update the three point estimate from detailed sub-simulations
+      * [ ] ~~top level with dependencies based on three point estimate~~
+      * [ ] ~~update the three point estimate from detailed sub-simulations~~
         * [ ] specify the update command sequence in the project file for automatic execution
-  * [ ] Output simulation inputs and results
-    * [ ] report in yaml format
-      * [x] used input source
-      * [x] velocity
+  * [x] ~~Output simulation inputs and results~~
+    * [x] ~~report in yaml format~~
+      * [x] ~~used input source~~
+      * [x] ~~velocity~~
       * [x] ~~different percentiles: 0, 50, 85, 100~~
       * [x] ~~durations in days~~
       * [x] ~~end dates~~
-    * [ ] `stdout`
-      * [x] info from yaml report, plus
-      * [x] start and completion dates
+    * [x]~ `stdout`~
+      * [x] ~~info from yaml report, plus~~
+      * [x] ~~start and completion dates~~
     * [x] ~~Dependency diagram (mermaid)~~
     * [x] ~~Gantt diagram (mermaid)~~
       * [ ] **Show completed items in gantt chart**

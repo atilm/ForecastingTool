@@ -285,7 +285,6 @@ mod tests {
     use super::*;
     use crate::domain::estimate::Estimate;
     use crate::domain::issue::IssueId;
-    use assert_fs::prelude::*;
     use std::fs;
 
     #[test]
