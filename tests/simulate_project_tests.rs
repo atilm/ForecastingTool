@@ -60,7 +60,12 @@ work_packages:
 
         cmd.assert()
             .success()
-            .stdout(predicate::str::contains("Simulation result written to"));
+          .stdout(
+            predicate::str::contains("Simulation result written to")
+              .and(predicate::str::contains("Simulation Report"))
+              .and(predicate::str::contains("Percentile | Days | Date"))
+              .and(predicate::str::contains("P85")),
+          );
     })
     .await
     .unwrap();

@@ -1,8 +1,6 @@
 # ToDos
 
-* [ ] use today as default for start_date
 * [ ] implement hierarchical projects
-* [ ] Output more result data on stdout
 * [ ] Take weekends and holidays into account
 * [ ] Simulate in parallel
 
@@ -22,6 +20,7 @@
     * [ ] **markdown**
 * [ ] Generate Forecasts
   * [ ] By Monte Carlo Simulation
+    * [x] ~~start_date: configurable, but default is current date~~
     * [x] ~~Based on empirical throughput data~~
       * [x] ~~choose daily throughput randomly~~
     * [ ] Based on empirical velocity as story / points per day

@@ -1,4 +1,5 @@
 use crate::commands::base_commands::Commands;
+use crate::commands::report_format::format_simulation_report;
 use crate::services::simulation::simulate_from_throughput_file;
 
 pub fn simulate_n_command(cmd: Commands) {
@@ -36,6 +37,7 @@ pub fn simulate_n_command(cmd: Commands) {
         if let Err(e) = std::fs::write(&output, yaml) {
             eprintln!("Failed to write simulation output: {e:?}");
         } else {
+            println!("{}", format_simulation_report(&simulation));
             println!("Simulation result for {number_of_issues} items written to {output}");
             println!("Simulation histogram written to {histogram_path}");
         }

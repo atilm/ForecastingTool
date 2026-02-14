@@ -1,4 +1,5 @@
 use crate::commands::base_commands::Commands;
+use crate::commands::report_format::format_simulation_report;
 use crate::services::gantt_diagram::generate_gantt_diagram;
 use crate::services::histogram::write_histogram_png;
 use crate::services::project_yaml::load_project_from_yaml_file;
@@ -53,6 +54,7 @@ pub fn simulate_command(cmd: Commands) {
         if let Err(e) = std::fs::write(&output, yaml) {
             eprintln!("Failed to write simulation output: {e:?}");
         } else {
+            println!("{}", format_simulation_report(&simulation.report));
             println!("Simulation result written to {output}");
             println!("Simulation histogram written to {histogram_path}");
             println!("Gantt diagram written to {gantt_path}");

@@ -33,7 +33,14 @@ async fn simulate_by_throughput() {
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains(format!("Simulation result for {number_of_issues_arg} items written to {output_arg}")));
+      .stdout(
+        predicate::str::contains(format!(
+          "Simulation result for {number_of_issues_arg} items written to {output_arg}"
+        ))
+        .and(predicate::str::contains("Simulation Report"))
+        .and(predicate::str::contains("Percentile | Days | Date"))
+        .and(predicate::str::contains("P50")),
+      );
 
     let output = std::fs::read_to_string(output_arg).unwrap();
 
