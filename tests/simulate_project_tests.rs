@@ -5,7 +5,31 @@ use tokio::task;
 
 #[tokio::test]
 async fn simulate_project_writes_output_and_histogram() {
-    let project_yaml = r#"
+    let report_yaml = r#"
+data_source: "unit"
+start_date: "2026-01-01"
+velocity: 10.0
+iterations: 25
+simulated_items: 100
+p0:
+  days: 5.0
+  date: "2026-01-06"
+p50:
+  days: 10.0
+  date: "2026-01-11"
+p85:
+  days: 15.0
+  date: "2026-01-16"
+p100:
+  days: 20.0
+  date: "2026-01-21" 
+"#;
+
+    let report_file = assert_fs::NamedTempFile::new("report.yaml").unwrap();
+    report_file.write_str(report_yaml).unwrap();
+
+    let project_yaml = format!(
+        r#"
 name: Demo
 work_packages:
   - id: DONE-1
@@ -23,8 +47,8 @@ work_packages:
       pessimistic: 1
   - id: WP1
     estimate:
-      type: story_points
-      value: 3
+      type: reference
+      report_file_path: "{}"
     dependencies: []
   - id: FIN
     estimate:
@@ -33,10 +57,12 @@ work_packages:
       most_likely: 0
       pessimistic: 0
     dependencies: [WP0, WP1]
-"#;
+"#,
+        report_file.path().to_str().unwrap()
+    );
 
     let input_file = assert_fs::NamedTempFile::new("project.yaml").unwrap();
-    input_file.write_str(project_yaml).unwrap();
+    input_file.write_str(&project_yaml).unwrap();
     let output_file = assert_fs::NamedTempFile::new("simulation.yaml").unwrap();
 
     let input_arg = input_file.path().to_str().unwrap().to_string();
@@ -58,14 +84,12 @@ work_packages:
             "25",
         ]);
 
-        cmd.assert()
-            .success()
-          .stdout(
+        cmd.assert().success().stdout(
             predicate::str::contains("Simulation result written to")
-              .and(predicate::str::contains("Simulation Report"))
-              .and(predicate::str::contains("Percentile | Days | Date"))
-              .and(predicate::str::contains("P85")),
-          );
+                .and(predicate::str::contains("Simulation Report"))
+                .and(predicate::str::contains("Percentile | Days | Date"))
+                .and(predicate::str::contains("P85")),
+        );
     })
     .await
     .unwrap();

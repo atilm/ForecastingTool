@@ -9,6 +9,7 @@ use crate::domain::estimate::{
 };
 use crate::domain::issue::{Issue, IssueId, IssueStatus};
 use crate::domain::project::Project;
+use crate::services::simulation_types::SimulationReport;
 
 #[derive(Error, Debug)]
 pub enum ProjectYamlError {
@@ -24,6 +25,16 @@ pub enum ProjectYamlError {
     InvalidStatus(String),
     #[error("missing previous issue for implicit dependency")]
     MissingPreviousDependency,
+}
+
+#[derive(Error, Debug)]
+pub enum ReportParseError {
+    #[error("failed to read report file: {0}")]
+    Io(#[from] io::Error),
+    #[error("failed to parse report yaml: {0}")]
+    Parse(#[from] serde_yaml::Error),
+    #[error("invalid date format in report: {0}")]
+    InvalidDate(String),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -170,12 +181,43 @@ fn estimate_from_record(record: EstimateRecord) -> Estimate {
 }
 
 fn get_three_point_estimate_from_report_file(path: &str) -> Option<ThreePointEstimate> {
-    // Placeholder for actual implementation that reads the report file and extracts the percentiles
-    Some(ThreePointEstimate {
-        optimistic: Some(1.0),
-        most_likely: Some(2.0),
-        pessimistic: Some(3.0),
+    three_point_estimate_from_report_file(path).ok()
+}
+
+fn three_point_estimate_from_report_file(
+    path: &str,
+) -> Result<ThreePointEstimate, ReportParseError> {
+    let report = load_simulation_report_from_file(path)?;
+    Ok(ThreePointEstimate {
+        optimistic: Some(report.p0.days),
+        most_likely: Some(report.p50.days),
+        pessimistic: Some(report.p100.days),
     })
+}
+
+fn load_simulation_report_from_file(path: &str) -> Result<SimulationReport, ReportParseError> {
+    let contents = std::fs::read_to_string(path)?;
+    parse_simulation_report_str(&contents)
+}
+
+fn parse_simulation_report_str(input: &str) -> Result<SimulationReport, ReportParseError> {
+    let report: SimulationReport = serde_yaml::from_str(input)?;
+    validate_report_dates(&report)?;
+    Ok(report)
+}
+
+fn validate_report_dates(report: &SimulationReport) -> Result<(), ReportParseError> {
+    parse_report_date(&report.start_date)?;
+    parse_report_date(&report.p0.date)?;
+    parse_report_date(&report.p50.date)?;
+    parse_report_date(&report.p85.date)?;
+    parse_report_date(&report.p100.date)?;
+    Ok(())
+}
+
+fn parse_report_date(value: &str) -> Result<NaiveDate, ReportParseError> {
+    NaiveDate::parse_from_str(value, "%Y-%m-%d")
+        .map_err(|_| ReportParseError::InvalidDate(value.to_string()))
 }
 
 fn estimate_to_record(estimate: Option<&Estimate>) -> Option<EstimateRecord> {
@@ -243,6 +285,8 @@ mod tests {
     use super::*;
     use crate::domain::estimate::Estimate;
     use crate::domain::issue::IssueId;
+    use assert_fs::prelude::*;
+    use std::fs;
 
     #[test]
     fn serialize_project_to_yaml_includes_estimate_format() {
@@ -439,5 +483,85 @@ work_packages:
         assert!(output.contains("dependencies: []"));
         assert!(output.contains("dependencies:"));
         assert!(output.contains("- ABC-1"));
+    }
+
+    #[test]
+    fn parse_report_file_to_three_point_estimate() {
+        let report_yaml = r#"
+data_source: "unit"
+start_date: "2026-01-01"
+velocity: 1
+iterations: 10
+simulated_items: 3
+p0:
+  days: 1
+  date: "2026-01-02"
+p50:
+  days: 2
+  date: "2026-01-03"
+p85:
+  days: 3
+  date: "2026-01-04"
+p100:
+  days: 4
+  date: "2026-01-05"
+"#;
+
+        let report_file = assert_fs::NamedTempFile::new("report.yaml").unwrap();
+        fs::write(report_file.path(), report_yaml).unwrap();
+
+        let estimate =
+            three_point_estimate_from_report_file(report_file.path().to_str().unwrap()).unwrap();
+
+        assert_eq!(estimate.optimistic, Some(1.0));
+        assert_eq!(estimate.most_likely, Some(2.0));
+        assert_eq!(estimate.pessimistic, Some(4.0));
+    }
+
+    #[test]
+    fn parse_report_file_rejects_invalid_date() {
+        let report_yaml = r#"
+data_source: "unit"
+start_date: "2026-13-01"
+velocity: 1
+iterations: 10
+simulated_items: 3
+p0:
+  days: 1
+  date: "2026-01-02"
+p50:
+  days: 2
+  date: "2026-01-03"
+p85:
+  days: 3
+  date: "2026-01-04"
+p100:
+  days: 4
+  date: "2026-01-05"
+"#;
+
+        let report_file = assert_fs::NamedTempFile::new("report.yaml").unwrap();
+        fs::write(report_file.path(), report_yaml).unwrap();
+
+        let error = three_point_estimate_from_report_file(report_file.path().to_str().unwrap())
+            .unwrap_err();
+
+        assert!(matches!(error, ReportParseError::InvalidDate(_)));
+    }
+
+    #[test]
+    fn parse_report_file_rejects_invalid_yaml() {
+        let report_yaml = r#"
+data_source: "unit"
+start_date: "2026-01-01"
+"#;
+
+        let report_file = assert_fs::NamedTempFile::new("report.yaml").unwrap();
+        fs::write(report_file.path(), report_yaml).unwrap();
+
+        let error = three_point_estimate_from_report_file(report_file.path().to_str().unwrap())
+            .unwrap_err();
+
+        assert!(matches!(error, ReportParseError::Parse(_)));
     }
 }

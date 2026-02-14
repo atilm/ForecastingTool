@@ -1,12 +1,13 @@
+use serde::Deserialize;
 use serde::Serialize;
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct SimulationPercentile {
     pub days: f32,
     pub date: String,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct SimulationReport {
     pub data_source: String,
     pub start_date: String,
