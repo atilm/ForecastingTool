@@ -27,7 +27,11 @@ fn render_histogram_png(output_path: &str, results: &[f32]) -> Result<(), Histog
 
     let range = max_value - min_value;
     let square_root_of_n = (results.len() as f32).sqrt();
-    let bin_width: f32 = range / square_root_of_n;
+    let bin_width: f32 = if range.abs() < f32::EPSILON {
+        1.0
+    } else {
+        range / square_root_of_n
+    };
 
     let mut counts: std::collections::BTreeMap<i32, usize> = std::collections::BTreeMap::new();
     for value in results {

@@ -1,6 +1,7 @@
 # ToDos
 
-
+* [ ] use today as default for start_date
+* [ ] implement hierarchical projects
 * [ ] Output more result data on stdout
 * [ ] Take weekends and holidays into account
 * [ ] Simulate in parallel

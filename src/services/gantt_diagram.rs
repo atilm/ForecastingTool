@@ -123,7 +123,10 @@ mod tests {
     fn build_simulation_output() -> SimulationOutput {
         SimulationOutput {
             report: SimulationReport {
+                data_source: "unit-test".to_string(),
                 start_date: "2026-01-01".to_string(),
+                velocity: None,
+                iterations: 1,
                 simulated_items: 2,
                 p0: SimulationPercentile {
                     days: 0.0,

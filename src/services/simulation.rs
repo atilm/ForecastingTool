@@ -39,7 +39,8 @@ pub(crate) fn simulate_from_throughput_file(
     let start_date = NaiveDate::parse_from_str(start_date, "%Y-%m-%d")
         .map_err(|_| SimulationError::InvalidStartDate(start_date.to_string()))?;
 
-    let simulation = run_simulation(&throughput, iterations, number_of_issues, start_date)?;
+    let mut simulation = run_simulation(&throughput, iterations, number_of_issues, start_date)?;
+    simulation.report.data_source = data_source_name(throughput_path);
     write_histogram_png(histogram_path, &simulation.results)?;
     Ok(simulation.report)
 }
@@ -89,7 +90,10 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
     let p100_days = percentile_value(&results, 100.0);
 
     let report = SimulationReport {
+        data_source: String::new(),
         start_date: start_date.format("%Y-%m-%d").to_string(),
+        velocity: None,
+        iterations,
         simulated_items: number_of_issues,
         p0: SimulationPercentile {
             days: p0_days,
@@ -114,6 +118,14 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
         results,
         work_packages: None,
     })
+}
+
+fn data_source_name(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(path)
+        .to_string()
 }
 
 fn simulate_single_run<R: Rng + ?Sized>(
@@ -187,6 +199,7 @@ mod tests {
     use chrono::NaiveDate;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn run_simulation_with_rng_uses_workdays_for_dates() {
@@ -205,5 +218,34 @@ mod tests {
         assert_eq!(simulation.report.p85.days, 2.0);
         assert_eq!(simulation.report.p0.date, "2026-02-02");
         assert_eq!(simulation.report.p100.date, "2026-02-02");
+        assert_eq!(simulation.report.iterations, 3);
+        assert_eq!(simulation.report.velocity, None);
+        assert_eq!(simulation.report.data_source, "");
+    }
+
+    #[test]
+    fn simulate_from_throughput_file_sets_report_fields() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir();
+        let input_path = dir.join(format!("throughput-{nanos}.yaml"));
+        let histogram_path = dir.join(format!("throughput-{nanos}.png"));
+        let yaml = "- date: 2026-01-01\n  completed_issues: 2\n";
+        std::fs::write(&input_path, yaml).unwrap();
+
+        let report = simulate_from_throughput_file(
+            input_path.to_str().unwrap(),
+            7,
+            4,
+            "2026-01-01",
+            histogram_path.to_str().unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(report.data_source, input_path.file_name().unwrap().to_str().unwrap());
+        assert_eq!(report.iterations, 7);
+        assert_eq!(report.velocity, None);
     }
 }

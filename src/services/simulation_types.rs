@@ -8,7 +8,10 @@ pub struct SimulationPercentile {
 
 #[derive(Serialize, Debug, Clone)]
 pub struct SimulationReport {
+    pub data_source: String,
     pub start_date: String,
+    pub velocity: Option<f32>,
+    pub iterations: usize,
     pub simulated_items: usize,
     pub p0: SimulationPercentile,
     pub p50: SimulationPercentile,

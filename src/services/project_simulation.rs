@@ -62,7 +62,9 @@ pub fn simulate_project_from_yaml_file(
     start_date: &str,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
     let project = load_project_from_yaml_file(path)?;
-    simulate_project(&project, iterations, start_date)
+    let mut output = simulate_project(&project, iterations, start_date)?;
+    output.report.data_source = data_source_name(path);
+    Ok(output)
 }
 
 pub fn simulate_project(
@@ -172,7 +174,10 @@ fn run_simulation_with_rng<R: Rng + ?Sized>(
 
     total_durations.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let report = SimulationReport {
+        data_source: String::new(),
         start_date: start_date.format("%Y-%m-%d").to_string(),
+        velocity,
+        iterations,
         simulated_items: project.work_packages.len(),
         p0: SimulationPercentile {
             days: percentile_value(&total_durations, 0.0),
@@ -214,6 +219,14 @@ fn run_simulation_with_rng<R: Rng + ?Sized>(
         work_packages: Some(work_packages),
     };
     Ok(output)
+}
+
+fn data_source_name(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(path)
+        .to_string()
 }
 
 fn build_simulation_nodes(
@@ -461,6 +474,7 @@ mod tests {
     use chrono::NaiveDate;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn build_done_issue(id: &str, points: f32, start: NaiveDate, done: NaiveDate) -> Issue {
         let mut issue = Issue::new();
@@ -635,6 +649,31 @@ mod tests {
                 p50 >= expected && p50 <= expected + 0.25,
                 "expected ~{expected} days, got {p50}"
             );
+            assert_eq!(output.report.iterations, 25);
+            assert!(output.report.velocity.is_some());
         }
+    }
+
+    #[test]
+    fn simulate_project_from_yaml_file_sets_report_fields() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir();
+        let input_path = dir.join(format!("project-{nanos}.yaml"));
+        let yaml = "name: Demo\nwork_packages:\n  - id: WP-1\n    estimate:\n      type: three_point\n      optimistic: 1\n      most_likely: 2\n      pessimistic: 3\n";
+        std::fs::write(&input_path, yaml).unwrap();
+
+        let output = simulate_project_from_yaml_file(
+            input_path.to_str().unwrap(),
+            5,
+            "2026-01-01",
+        )
+        .unwrap();
+
+        assert_eq!(output.report.data_source, input_path.file_name().unwrap().to_str().unwrap());
+        assert_eq!(output.report.iterations, 5);
+        assert_eq!(output.report.velocity, None);
     }
 }
