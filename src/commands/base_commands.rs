@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use chrono::Local;
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -54,7 +55,7 @@ pub enum Commands {
         #[arg(short, long)]
         output: String,
         /// Simulation start date (YYYY-MM-DD)
-        #[arg(short, long)]
+        #[arg(short, long, default_value_t = default_start_date())]
         start_date: String,
         /// Number of simulation iterations
         #[arg(short = 'n', long, default_value_t = 10000)]
@@ -75,7 +76,54 @@ pub enum Commands {
         #[arg(short, long)]
         number_of_issues: usize,
         /// Simulation start date (YYYY-MM-DD)
-        #[arg(short, long)]
+        #[arg(short, long, default_value_t = default_start_date())]
         start_date: String,
     },
+}
+
+fn default_start_date() -> String {
+    Local::now().date_naive().format("%Y-%m-%d").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simulate_defaults_start_date_to_today() {
+        let args = CliArgs::parse_from([
+            "forecasts",
+            "simulate",
+            "-i",
+            "input.yaml",
+            "-o",
+            "output.yaml",
+        ]);
+
+        if let Commands::Simulate { start_date, .. } = args.command {
+            assert_eq!(start_date, default_start_date());
+        } else {
+            panic!("expected simulate command");
+        }
+    }
+
+    #[test]
+    fn simulate_n_defaults_start_date_to_today() {
+        let args = CliArgs::parse_from([
+            "forecasts",
+            "simulate-n",
+            "-f",
+            "throughput.yaml",
+            "-o",
+            "output.yaml",
+            "-n",
+            "5",
+        ]);
+
+        if let Commands::SimulateN { start_date, .. } = args.command {
+            assert_eq!(start_date, default_start_date());
+        } else {
+            panic!("expected simulate-n command");
+        }
+    }
 }
