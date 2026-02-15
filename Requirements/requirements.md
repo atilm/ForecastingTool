@@ -1,8 +1,11 @@
 # ToDos
 
-* [ ] implement hierarchical projects
+* [ ] Write a readme
+* [ ] CI/CD
 * [ ] Take weekends and holidays into account
 * [ ] Simulate in parallel
+* [ ] Use the anyhow crate
+* [ ] Add command completion
 
 # Requirements Specification
 
