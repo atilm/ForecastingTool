@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use clap_complete::Shell;
 use chrono::Local;
 
 #[derive(Parser)]
@@ -78,6 +79,12 @@ pub enum Commands {
         /// Simulation start date (YYYY-MM-DD)
         #[arg(short, long, default_value_t = default_start_date())]
         start_date: String,
+    },
+    /// Generate shell completion scripts
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
     },
 }
 

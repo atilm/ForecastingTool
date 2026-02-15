@@ -5,7 +5,6 @@
 * [ ] Take weekends and holidays into account
 * [ ] Simulate in parallel
 * [ ] Use the anyhow crate
-* [ ] Add command completion
 
 # Requirements Specification
 
