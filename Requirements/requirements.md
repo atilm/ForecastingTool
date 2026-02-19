@@ -2,7 +2,9 @@
 
 * [ ] Write a readme
 * [ ] CI/CD
-* [ ] Take weekends and holidays into account
+* [ ] Add milestones to gantt diagram
+* [ ] Compare current and legacy beta parameter calculation
+* [.] Take weekends and holidays into account
 * [ ] Simulate in parallel
 * [ ] Use the anyhow crate
 
