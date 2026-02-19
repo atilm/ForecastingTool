@@ -10,3 +10,4 @@ pub mod simulation_types;
 pub mod histogram;
 pub mod simulation;
 pub mod throughput_plot;
+pub mod team_calendar_yaml;

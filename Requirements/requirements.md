@@ -1,5 +1,6 @@
 # ToDos
 
+* [ ] Modify the CLI to use subcommands
 * [ ] Write a readme
 * [ ] CI/CD
 * [ ] Add milestones to gantt diagram
