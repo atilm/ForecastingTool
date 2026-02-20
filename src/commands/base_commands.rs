@@ -61,6 +61,9 @@ pub enum Commands {
         /// Number of simulation iterations
         #[arg(short = 'n', long, default_value_t = 10000)]
         iterations: usize,
+        /// Optional path to a calendar directory
+        #[arg(short, long)]
+        calendar_dir: Option<String>,
     },
     /// Simulate completion dates from throughput data
     SimulateN {

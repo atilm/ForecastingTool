@@ -4,18 +4,20 @@ use rand::Rng;
 use rand_distr::{Beta, Distribution};
 use thiserror::Error;
 
-use crate::domain::estimate::{Estimate, StoryPointEstimate, ThreePointEstimate, ReferenceEstimate};
+use crate::domain::calendar::TeamCalendar;
+use crate::domain::estimate::{
+    Estimate, ReferenceEstimate, StoryPointEstimate, ThreePointEstimate,
+};
 use crate::domain::issue::{Issue, IssueStatus};
 use crate::domain::project::Project;
 use crate::services::histogram::HistogramError;
-use crate::services::project_yaml::{load_project_from_yaml_file, ProjectYamlError};
+use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
 use crate::services::simulation_types::{
-    SimulationOutput,
-    SimulationPercentile,
-    SimulationReport,
-    WorkPackagePercentiles,
+    SimulationOutput, SimulationPercentile, SimulationReport, WorkPackagePercentiles,
     WorkPackageSimulation,
 };
+use crate::services::team_calendar_yaml::load_team_calendar_from_yaml_dir;
+use crate::services::team_calendar_yaml::TeamCalendarYamlError;
 use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
@@ -26,6 +28,8 @@ pub enum ProjectSimulationError {
     ReadProject(#[from] std::io::Error),
     #[error("failed to parse project yaml: {0}")]
     ParseProject(#[from] ProjectYamlError),
+    #[error("failed to read team calendar yaml: {0}")]
+    ReadCalendar(#[from] TeamCalendarYamlError),
     #[error("iterations must be greater than zero")]
     InvalidIterations,
     #[error("project has no work packages")]
@@ -60,11 +64,24 @@ pub fn simulate_project_from_yaml_file(
     path: &str,
     iterations: usize,
     start_date: &str,
+    calendar_path: Option<&str>,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
     let project = load_project_from_yaml_file(path)?;
+    let calendar = load_team_calendar_if_provided(calendar_path)?;
     let mut output = simulate_project(&project, iterations, start_date)?;
     output.report.data_source = data_source_name(path);
     Ok(output)
+}
+
+fn load_team_calendar_if_provided(
+    calendar_path: Option<&str>,
+) -> Result<Option<TeamCalendar>, ProjectSimulationError> {
+    if let Some(path) = calendar_path {
+        let calendar = load_team_calendar_from_yaml_dir(path)?;
+        Ok(Some(calendar))
+    } else {
+        Ok(Some(TeamCalendar::new()))
+    }
 }
 
 pub fn simulate_project(
@@ -88,7 +105,8 @@ pub fn simulate_project(
     let start_date = chrono::NaiveDate::parse_from_str(start_date, "%Y-%m-%d")
         .map_err(|_| ProjectSimulationError::InvalidStartDate(start_date.to_string()))?;
     let mut rng = rand::thread_rng();
-    let output = run_simulation_with_rng(project, &order, velocity, iterations, start_date, &mut rng)?;
+    let output =
+        run_simulation_with_rng(project, &order, velocity, iterations, start_date, &mut rng)?;
     Ok(output)
 }
 
@@ -112,8 +130,12 @@ pub fn calculate_project_velocity(project: &Project) -> Result<f32, ProjectSimul
         completed.as_slice()
     };
 
-    let first = selected.first().ok_or(ProjectSimulationError::MissingVelocityData)?;
-    let last = selected.last().ok_or(ProjectSimulationError::MissingVelocityData)?;
+    let first = selected
+        .first()
+        .ok_or(ProjectSimulationError::MissingVelocityData)?;
+    let last = selected
+        .last()
+        .ok_or(ProjectSimulationError::MissingVelocityData)?;
     let start_date = first
         .start_date
         .ok_or(ProjectSimulationError::MissingVelocityDates)?;
@@ -273,7 +295,9 @@ fn topological_sort(project: &Project) -> Result<Vec<String>, ProjectSimulationE
             .as_ref()
             .map(|issue_id| issue_id.id.clone())
             .ok_or(ProjectSimulationError::MissingIssueId)?;
-        indices.entry(id.clone()).or_insert_with(|| graph.add_node(id));
+        indices
+            .entry(id.clone())
+            .or_insert_with(|| graph.add_node(id));
     }
 
     for issue in &project.work_packages {
@@ -282,7 +306,9 @@ fn topological_sort(project: &Project) -> Result<Vec<String>, ProjectSimulationE
             .as_ref()
             .map(|issue_id| issue_id.id.clone())
             .ok_or(ProjectSimulationError::MissingIssueId)?;
-        let issue_idx = *indices.get(&id).ok_or(ProjectSimulationError::MissingIssueId)?;
+        let issue_idx = *indices
+            .get(&id)
+            .ok_or(ProjectSimulationError::MissingIssueId)?;
         if let Some(deps) = issue.dependencies.as_ref() {
             for dep in deps {
                 let dep_idx = match indices.get(&dep.id) {
@@ -330,9 +356,8 @@ fn sample_duration<R: Rng + ?Sized>(
 ) -> Result<f32, ProjectSimulationError> {
     let (optimistic, most_likely, pessimistic, apply_velocity) = match estimate {
         Estimate::StoryPoint(StoryPointEstimate { estimate }) => {
-            let value = estimate.ok_or_else(|| {
-                ProjectSimulationError::InvalidEstimate(issue_id.to_string())
-            })?;
+            let value = estimate
+                .ok_or_else(|| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
             let (lower, upper) = fibonacci_bounds(value);
             (lower, value, upper, true)
         }
@@ -341,9 +366,9 @@ fn sample_duration<R: Rng + ?Sized>(
             report_file_path: _,
             cached_estimate,
         }) => {
-            let estimate = cached_estimate.as_ref().ok_or_else(|| {
-                ProjectSimulationError::InvalidEstimate(issue_id.to_string())
-            })?;
+            let estimate = cached_estimate
+                .as_ref()
+                .ok_or_else(|| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
             to_three_point_triplet(estimate)?
         }
     };
@@ -362,7 +387,9 @@ fn sample_duration<R: Rng + ?Sized>(
     }
 }
 
-fn to_three_point_triplet(estimate: &ThreePointEstimate) -> Result<(f32, f32, f32, bool), ProjectSimulationError> {
+fn to_three_point_triplet(
+    estimate: &ThreePointEstimate,
+) -> Result<(f32, f32, f32, bool), ProjectSimulationError> {
     let optimistic = estimate.optimistic.ok_or_else(|| {
         ProjectSimulationError::InvalidEstimate("missing optimistic value".to_string())
     })?;
@@ -402,8 +429,8 @@ fn beta_pert_sample<R: Rng + ?Sized>(
 
 fn fibonacci_bounds(value: f32) -> (f32, f32) {
     let series = [
-        0.0, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0, 55.0, 89.0, 144.0, 233.0, 377.0,
-        610.0, 987.0,
+        0.0, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0, 55.0, 89.0, 144.0, 233.0, 377.0, 610.0,
+        987.0,
     ];
 
     if value <= series[0] {
@@ -465,10 +492,14 @@ struct SimulationNode {
 }
 
 fn project_has_story_points(project: &Project) -> bool {
-    project.work_packages.iter().any(|issue| matches!(
-        issue.estimate,
-        Some(Estimate::StoryPoint(StoryPointEstimate { estimate: Some(_) }))
-    ))
+    project.work_packages.iter().any(|issue| {
+        matches!(
+            issue.estimate,
+            Some(Estimate::StoryPoint(StoryPointEstimate {
+                estimate: Some(_)
+            }))
+        )
+    })
 }
 
 fn end_date_from_days(start_date: chrono::NaiveDate, days: f32) -> chrono::NaiveDate {
@@ -481,8 +512,8 @@ mod tests {
     use super::*;
     use crate::domain::issue::{IssueId, IssueStatus};
     use chrono::NaiveDate;
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use rand::rngs::StdRng;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn build_done_issue(id: &str, points: f32, start: NaiveDate, done: NaiveDate) -> Issue {
@@ -510,7 +541,9 @@ mod tests {
         } else {
             Some(
                 deps.iter()
-                    .map(|dep| IssueId { id: (*dep).to_string() })
+                    .map(|dep| IssueId {
+                        id: (*dep).to_string(),
+                    })
                     .collect(),
             )
         };
@@ -529,7 +562,9 @@ mod tests {
         } else {
             Some(
                 deps.iter()
-                    .map(|dep| IssueId { id: (*dep).to_string() })
+                    .map(|dep| IssueId {
+                        id: (*dep).to_string(),
+                    })
                     .collect(),
             )
         };
@@ -581,11 +616,15 @@ mod tests {
         issue_a
             .dependencies
             .get_or_insert_with(Vec::new)
-            .push(IssueId { id: "B".to_string() });
+            .push(IssueId {
+                id: "B".to_string(),
+            });
         issue_b
             .dependencies
             .get_or_insert_with(Vec::new)
-            .push(IssueId { id: "A".to_string() });
+            .push(IssueId {
+                id: "A".to_string(),
+            });
 
         let project = Project {
             name: "Demo".to_string(),
@@ -599,17 +638,12 @@ mod tests {
     #[test]
     fn simulate_project_with_dependencies_matches_critical_path() {
         let base = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
-        let done_issue = build_done_issue(
-            "DONE-1",
-            100.0,
-            base,
-            base + chrono::Duration::days(1),
-        );
+        let done_issue = build_done_issue("DONE-1", 100.0, base, base + chrono::Duration::days(1));
 
         // WP0, WP1, WP2, WP3, expected duration
         let test_cases = vec![
             (1.0, 1.0, 1.0, 1.0, 2.0), // Crit path: WP0 -> WP2 -> FIN
-            (6.0, 1.0, 0.0, 1.0, 6.0), // Crit path: WP0 -> FIN       
+            (6.0, 1.0, 0.0, 1.0, 6.0), // Crit path: WP0 -> FIN
             (2.0, 1.0, 4.0, 1.0, 6.0), // Crit path: WP0 -> WP2 -> FIN
             (1.0, 5.0, 2.0, 1.0, 7.0), // Crit path: WP1 -> WP2 -> FIN
             (1.0, 5.0, 1.0, 4.0, 9.0), // Crit path: WP1 -> WP3 -> FIN
@@ -674,14 +708,13 @@ mod tests {
         let yaml = "name: Demo\nwork_packages:\n  - id: WP-1\n    estimate:\n      type: three_point\n      optimistic: 1\n      most_likely: 2\n      pessimistic: 3\n";
         std::fs::write(&input_path, yaml).unwrap();
 
-        let output = simulate_project_from_yaml_file(
-            input_path.to_str().unwrap(),
-            5,
-            "2026-01-01",
-        )
-        .unwrap();
+        let output =
+            simulate_project_from_yaml_file(input_path.to_str().unwrap(), 5, "2026-01-01", None).unwrap();
 
-        assert_eq!(output.report.data_source, input_path.file_name().unwrap().to_str().unwrap());
+        assert_eq!(
+            output.report.data_source,
+            input_path.file_name().unwrap().to_str().unwrap()
+        );
         assert_eq!(output.report.iterations, 5);
         assert_eq!(output.report.velocity, None);
     }

@@ -11,9 +11,10 @@ pub fn simulate_command(cmd: Commands) {
         output,
         iterations,
         start_date,
+        calendar_dir,
     } = cmd
     {
-        let simulation = match simulate_project_from_yaml_file(&input, iterations, &start_date) {
+        let simulation = match simulate_project_from_yaml_file(&input, iterations, &start_date, calendar_dir.as_deref()) {
             Ok(report) => report,
             Err(e) => {
                 eprintln!("Failed to simulate project: {e:?}");

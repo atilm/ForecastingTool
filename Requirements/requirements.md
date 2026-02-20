@@ -1,15 +1,17 @@
 # ToDos
 
+* [.] Take weekends and holidays into account
 * [ ] Modify the CLI to use subcommands
 * [ ] Write a readme
 * [ ] CI/CD
-* [ ] Add milestones to gantt diagram
 * [ ] Compare current and legacy beta parameter calculation
-* [.] Take weekends and holidays into account
 * [ ] Simulate in parallel
 * [ ] Use the anyhow crate
 
 # Requirements Specification
+
+* New Estimate Type: fixed time box
+* Start-Date for Tasks, so that they can be plotted correctly
 
 * [ ] Download data from web APIs
   * [ ] Supported APIs
@@ -51,11 +53,15 @@
       * [x] ~~info from yaml report, plus~~
       * [x] ~~start and completion dates~~
     * [x] ~~Dependency diagram (mermaid)~~
+      * [ ] **Mark completed items in dependency chart**
     * [x] ~~Gantt diagram (mermaid)~~
-      * [ ] **Show completed items in gantt chart**
+      * [ ] **Show completed items in Gantt chart**
+      * [ ] Write to Gantt diagram in topological order?
+      * [ ] Add milestones to Gantt diagram
+        * [ ] Display duration 0 entries as milestones in Gantt diagram
     * [x] ~~Histogram (`png`)~~
     * [ ] Burn down chart (`png`)
   * [ ] Extra tool to update the project Readme
     * [ ] List of risks
-    * [ ] Essential gantt chart
+    * [ ] Essential Gantt chart
     * [ ] ...
