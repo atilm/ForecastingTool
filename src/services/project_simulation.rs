@@ -10,6 +10,8 @@ use crate::domain::estimate::{
 };
 use crate::domain::issue::{Issue, IssueStatus};
 use crate::domain::project::Project;
+use crate::services::beta_pert_sampler::BetaPertSampler;
+use crate::services::beta_pert_sampler::ThreePointSampler;
 use crate::services::histogram::HistogramError;
 use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
 use crate::services::simulation_types::{
@@ -106,8 +108,15 @@ pub fn simulate_project(
     let start_date = chrono::NaiveDate::parse_from_str(start_date, "%Y-%m-%d")
         .map_err(|_| ProjectSimulationError::InvalidStartDate(start_date.to_string()))?;
     let mut rng = rand::thread_rng();
-    let output = run_simulation_with_rng(
-        project, &order, velocity, iterations, start_date, &mut rng, &calendar,
+    let mut sampler = BetaPertSampler::new(&mut rng);
+    let output = run_simulation(
+        project,
+        &order,
+        velocity,
+        iterations,
+        start_date,
+        &mut sampler,
+        &calendar,
     )?;
     Ok(output)
 }
@@ -148,7 +157,8 @@ pub fn calculate_project_velocity(
         .done_date
         .ok_or(ProjectSimulationError::MissingVelocityDates)?;
 
-    let summed_capacity = summed_capacity_in_period(calendar, first_velocity_done_date, last_velocity_done_date);
+    let summed_capacity =
+        summed_capacity_in_period(calendar, first_velocity_done_date, last_velocity_done_date);
     if summed_capacity <= 0.0 {
         return Err(ProjectSimulationError::InvalidVelocityDuration);
     }
@@ -166,7 +176,11 @@ pub fn calculate_project_velocity(
     Ok(velocity)
 }
 
-fn summed_capacity_in_period(calendar: &TeamCalendar, start: chrono::NaiveDate, end: chrono::NaiveDate) -> f32 {
+fn summed_capacity_in_period(
+    calendar: &TeamCalendar,
+    start: chrono::NaiveDate,
+    end: chrono::NaiveDate,
+) -> f32 {
     let mut total_capacity = 0.0;
     let mut current_date = start;
     while current_date <= end {
@@ -176,13 +190,13 @@ fn summed_capacity_in_period(calendar: &TeamCalendar, start: chrono::NaiveDate, 
     total_capacity
 }
 
-fn run_simulation_with_rng<R: Rng + ?Sized>(
+fn run_simulation<R: ThreePointSampler + ?Sized>(
     project: &Project,
     order: &[String],
     velocity: Option<f32>,
     iterations: usize,
     start_date: chrono::NaiveDate,
-    rng: &mut R,
+    sampler: &mut R,
     calendar: &TeamCalendar,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
     let mut nodes = build_simulation_nodes(project)?;
@@ -199,7 +213,7 @@ fn run_simulation_with_rng<R: Rng + ?Sized>(
                 .iter()
                 .filter_map(|dep| earliest_finish.get(dep))
                 .fold(0.0_f32, |acc, value| acc.max(*value));
-            let duration = sample_duration(&node.estimate, velocity, rng, &node.id)?;
+            let duration = sample_duration(&node.estimate, velocity, sampler, &node.id)?;
             let end_time = start + duration;
             node.samples.push(end_time);
             earliest_finish.insert(node.id.clone(), end_time);
@@ -365,10 +379,10 @@ fn story_point_value(issue: &Issue) -> Option<f32> {
     }
 }
 
-fn sample_duration<R: Rng + ?Sized>(
+fn sample_duration<R: ThreePointSampler + ?Sized>(
     estimate: &Estimate,
     velocity: Option<f32>,
-    rng: &mut R,
+    sampler: &mut R,
     issue_id: &str,
 ) -> Result<f32, ProjectSimulationError> {
     let (optimistic, most_likely, pessimistic, apply_velocity) = match estimate {
@@ -390,7 +404,8 @@ fn sample_duration<R: Rng + ?Sized>(
         }
     };
 
-    let sampled = beta_pert_sample(optimistic, most_likely, pessimistic, rng)
+    let sampled = sampler
+        .sample(optimistic, most_likely, pessimistic)
         .map_err(|_| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
 
     if apply_velocity {
@@ -418,30 +433,6 @@ fn to_three_point_triplet(
     })?;
     let apply_velocity = false;
     Ok((optimistic, most_likely, pessimistic, apply_velocity))
-}
-
-fn beta_pert_sample<R: Rng + ?Sized>(
-    optimistic: f32,
-    most_likely: f32,
-    pessimistic: f32,
-    rng: &mut R,
-) -> Result<f32, ()> {
-    if pessimistic < optimistic {
-        return Err(());
-    }
-    if (pessimistic - optimistic).abs() < f32::EPSILON {
-        return Ok(optimistic);
-    }
-    if most_likely < optimistic || most_likely > pessimistic {
-        return Err(());
-    }
-
-    let range = (pessimistic - optimistic) as f64;
-    let alpha = 1.0 + 4.0 * ((most_likely - optimistic) as f64 / range);
-    let beta = 1.0 + 4.0 * ((pessimistic - most_likely) as f64 / range);
-    let beta_dist = Beta::new(alpha, beta).map_err(|_| ())?;
-    let sample = beta_dist.sample(rng) as f32;
-    Ok(optimistic + sample * (pessimistic - optimistic))
 }
 
 fn fibonacci_bounds(value: f32) -> (f32, f32) {
@@ -602,12 +593,10 @@ mod tests {
             work_packages: issues,
         };
         let no_free_days_calendar = TeamCalendar {
-            calendars: vec![
-                Calendar {
-                    free_weekdays: vec![],
-                    free_date_ranges: vec![],
-                },
-            ],
+            calendars: vec![Calendar {
+                free_weekdays: vec![],
+                free_date_ranges: vec![],
+            }],
         };
 
         let velocity = calculate_project_velocity(&project, &no_free_days_calendar).unwrap();
@@ -628,12 +617,10 @@ mod tests {
             work_packages: issues,
         };
         let no_free_days_calendar = TeamCalendar {
-            calendars: vec![
-                Calendar {
-                    free_weekdays: vec![],
-                    free_date_ranges: vec![],
-                },
-            ],
+            calendars: vec![Calendar {
+                free_weekdays: vec![],
+                free_date_ranges: vec![],
+            }],
         };
 
         let velocity = calculate_project_velocity(&project, &no_free_days_calendar).unwrap();
@@ -667,12 +654,10 @@ mod tests {
                 },
                 Calendar {
                     free_weekdays: vec![Weekday::Sat, Weekday::Sun],
-                    free_date_ranges: vec![
-                        calendar::FreeDateRange {
-                            start_date: on_date(2026, 2, 16),
-                            end_date: on_date(2026, 2, 23),
-                        },
-                    ],
+                    free_date_ranges: vec![calendar::FreeDateRange {
+                        start_date: on_date(2026, 2, 16),
+                        end_date: on_date(2026, 2, 23),
+                    }],
                 },
             ],
         };
@@ -743,6 +728,7 @@ mod tests {
         //           FIN
         for (idx, (wp0, wp1, wp2, wp3, expected)) in test_cases.into_iter().enumerate() {
             let mut rng = StdRng::seed_from_u64(42 + idx as u64);
+            let mut sampler = BetaPertSampler::new(&mut rng);
             let project = Project {
                 name: "Dependent Project".to_string(),
                 work_packages: vec![
@@ -758,13 +744,13 @@ mod tests {
             };
             let calendar = TeamCalendar::new();
 
-            let output = run_simulation_with_rng(
+            let output = run_simulation(
                 &project,
                 &topological_sort(&project).unwrap(),
                 Some(calculate_project_velocity(&project, &calendar).unwrap()),
                 25,
                 base,
-                &mut rng,
+                &mut sampler,
                 &calendar,
             )
             .unwrap();
@@ -777,6 +763,24 @@ mod tests {
             assert_eq!(output.report.iterations, 25);
             assert!(output.report.velocity.is_some());
         }
+    }
+
+    #[test]
+    fn project_simulation_takes_calendar_into_account() {
+        // Creat a mock ThreePointSampler that always returns the most likely value
+        struct MockSampler;
+        impl ThreePointSampler for MockSampler {
+            fn sample(
+                &mut self,
+                _optimistic: f32,
+                most_likely: f32,
+                _pessimistic: f32,
+            ) -> Result<f32, ()> {
+                Ok(most_likely)
+            }
+        }
+
+        assert!(false);
     }
 
     #[test]
