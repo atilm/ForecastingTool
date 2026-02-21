@@ -1,7 +1,6 @@
 # ToDos
 
-* [.] Take weekends and holidays into account
-* [ ] Stop unit tests being run 2 times (1 for main and  1 for lib)
+* [ ] Write test for milestones in Gantt diagram
 * [ ] Modify the CLI to use subcommands
 * [ ] Write a readme
 * [ ] CI/CD
@@ -11,7 +10,7 @@
 
 # Requirements Specification
 
-* New Estimate Type: fixed time box
+* ~~New Estimate Type: fixed time box~~ -> workaround: three-point-estimate with three equal values
 * Start-Date for Tasks, so that they can be plotted correctly
 
 * [ ] Download data from web APIs
@@ -23,7 +22,7 @@
   * [x] ~~Export list of issues with estimates~~
   * [x] ~~Plot data~~
     * [x] ~~Plot throughput data~~
-  * [ ] different output formats
+  * [ ] different output / input formats
     * [x] ~~`yaml`~~
     * [ ] **markdown**
 * [ ] Generate Forecasts
@@ -31,13 +30,15 @@
     * [x] ~~start_date: configurable, but default is current date~~
     * [x] ~~Based on empirical throughput data~~
       * [x] ~~choose daily throughput randomly~~
-    * [ ] Based on empirical velocity as story / points per day
+      * [x] ~~Simulate team capacity based on calendar for multiple team members~~ 
+    * [x] ~~Based on three-point estimations in absolute days (weekends and holidays included in these days and not handled)~~
+    * [x] ~~Based on empirical velocity as story / points per day~~
       * [x] ~~calculate velocity from done tasks~~
       * [x] ~~choose size of work package randomly from beta distribution~~
         * [x] ~~by story point estimation e.g. in interval (3-5-8) for estimate 5~~
         * [x] ~~by three point estimation in days~~
       * [x] ~~Simulate dependencies between work packages~~
-      * [ ] **Simulate team capacity based on calendar for multiple team members**
+      * [x] ~~Simulate team capacity based on calendar for multiple team members~~
     * [x] ~~Configure data sources from config file~~
     * [ ] **Simulate a project hierarchically**
       * [ ] ~~top level with dependencies based on three point estimate~~
@@ -58,8 +59,8 @@
     * [x] ~~Gantt diagram (mermaid)~~
       * [ ] **Show completed items in Gantt chart**
       * [ ] Write to Gantt diagram in topological order?
-      * [ ] Add milestones to Gantt diagram
-        * [ ] Display duration 0 entries as milestones in Gantt diagram
+      * [x] ~~Add milestones to Gantt diagram~~
+        * [x] ~~Display duration 0 entries as milestones in Gantt diagram~~
     * [x] ~~Histogram (`png`)~~
     * [ ] Burn down chart (`png`)
   * [ ] Extra tool to update the project Readme

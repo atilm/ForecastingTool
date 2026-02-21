@@ -36,7 +36,11 @@ pub fn generate_gantt_diagram(
     lines.push("    dateFormat  DD-MM-YYYY".to_string());
 
     for issue in &project.work_packages {
-        let id = issue.issue_id.as_ref().map(|id| id.id.clone()).unwrap_or_default();
+        let id = issue
+            .issue_id
+            .as_ref()
+            .map(|id| id.id.clone())
+            .unwrap_or_default();
         let name = issue.summary.as_deref().unwrap_or(&id).to_string();
         let wp = map
             .get(&id)
@@ -63,15 +67,41 @@ pub fn generate_gantt_diagram(
 
         let start_date_wp = add_days(start_date, start_time);
         let end_date_wp = add_days(start_date, end_time);
-        lines.push(format!(
-            "    {id} {name} :{id}, {}, {}",
-            start_date_wp.format("%d-%m-%Y"),
-            end_date_wp.format("%d-%m-%Y")
-        ));
+        
+        if issue.has_zero_duration().unwrap_or(false) {
+            lines.push(make_milestone_line(&id, &name, end_date_wp));
+        } else {
+            lines.push(make_work_package_line(
+                &id,
+                &name,
+                start_date_wp,
+                end_date_wp,
+            ));
+        }
     }
     lines.push("```".to_string());
 
     Ok(lines.join("\n"))
+}
+
+fn make_work_package_line(
+    issue: &str,
+    name: &str,
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+) -> String {
+    format!(
+        "    {issue} {name} :{issue}, {}, {}",
+        start_date.format("%d-%m-%Y"),
+        end_date.format("%d-%m-%Y")
+    )
+}
+
+fn make_milestone_line(issue: &str, name: &str, date: NaiveDate) -> String {
+    format!(
+        "    {issue} {name} :milestone, {}, 0",
+        date.format("%d-%m-%Y"),
+    )
 }
 
 fn percentile_value(work_package: &WorkPackageSimulation, percentile: f32) -> f32 {
@@ -97,10 +127,7 @@ mod tests {
     use super::*;
     use crate::domain::issue::{Issue, IssueId};
     use crate::services::simulation_types::{
-        SimulationOutput,
-        SimulationPercentile,
-        SimulationReport,
-        WorkPackagePercentiles,
+        SimulationOutput, SimulationPercentile, SimulationReport, WorkPackagePercentiles,
         WorkPackageSimulation,
     };
 
@@ -113,7 +140,9 @@ mod tests {
         } else {
             Some(
                 deps.iter()
-                    .map(|dep| IssueId { id: (*dep).to_string() })
+                    .map(|dep| IssueId {
+                        id: (*dep).to_string(),
+                    })
                     .collect(),
             )
         };
