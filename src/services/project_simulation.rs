@@ -587,14 +587,17 @@ mod tests {
     fn the_calendar_is_only_applied_to_issues_estimated_in_story_points() {
         // Story Points of SP-1, Duration in days of WP1, expected end-date
         let test_cases: Vec<(f32, f32, NaiveDate)> = vec![
-            (20.0, 10.0, on_date(2026, 3, 2)), // Story point duration should dominate
-            (2.0, 12.0, on_date(2026, 2, 28)), // Duration of 12 days should dominate, because calendar is not applied, end on weekend is fine
+            // Story point duration should dominate, ending on a saturday is fine because the item has been finished on friday
+            // The user is responsible for advancing the result to the next business day.
+            (20.0, 10.0, on_date(2026, 2, 28)),
+            // Duration of 12 days should dominate. Because calendar is not applied end_date = start_date + duration.
+            (2.0, 12.0, on_date(2026, 2, 28)), 
         ];
 
         let mut sampler = MockSampler;
         let calendar = TeamCalendar::new(); // default calendar which assumes weekends to be free
 
-        for (sp1, wp1, expected_end_date) in test_cases {
+        for (idx, (sp1, wp1, expected_end_date)) in test_cases.into_iter().enumerate() {
             let project = Project {
                 name: "Dependent Project".to_string(),
                 work_packages: vec![
@@ -615,7 +618,7 @@ mod tests {
                 &calendar,
             ).unwrap();
             
-            assert_eq!(output.report.p85.date, expected_end_date.format("%Y-%m-%d").to_string());
+            assert_eq!(output.report.p85.date, expected_end_date.format("%Y-%m-%d").to_string(), "Test case {}: Expected end date to match the expected value", idx);
         }
     }
 
