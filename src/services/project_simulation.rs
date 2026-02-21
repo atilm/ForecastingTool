@@ -1,14 +1,12 @@
 use std::collections::HashMap;
 
-use rand::Rng;
-use rand_distr::{Beta, Distribution};
 use thiserror::Error;
 
-use crate::domain::calendar::{self, Calendar, TeamCalendar};
+use crate::domain::calendar::TeamCalendar;
 use crate::domain::estimate::{
     Estimate, ReferenceEstimate, StoryPointEstimate, ThreePointEstimate,
 };
-use crate::domain::issue::{Issue, IssueStatus};
+
 use crate::domain::project::Project;
 use crate::services::beta_pert_sampler::BetaPertSampler;
 use crate::services::beta_pert_sampler::ThreePointSampler;
@@ -20,6 +18,8 @@ use crate::services::simulation_types::{
 };
 use crate::services::team_calendar_yaml::TeamCalendarYamlError;
 use crate::services::team_calendar_yaml::load_team_calendar_from_yaml_dir;
+use crate::services::velocity_calculation::VelocityCalculationError;
+use crate::services::velocity_calculation::calculate_project_velocity;
 use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
@@ -32,6 +32,8 @@ pub enum ProjectSimulationError {
     ParseProject(#[from] ProjectYamlError),
     #[error("failed to read team calendar yaml: {0}")]
     ReadCalendar(#[from] TeamCalendarYamlError),
+    #[error("failed to calculate velocity: {0}")]
+    VelocityCalculation(#[from] VelocityCalculationError),
     #[error("iterations must be greater than zero")]
     InvalidIterations,
     #[error("project has no work packages")]
@@ -40,12 +42,6 @@ pub enum ProjectSimulationError {
     MissingIssueId,
     #[error("missing estimate for issue {0}")]
     MissingEstimate(String),
-    #[error("missing dates for velocity calculation")]
-    MissingVelocityDates,
-    #[error("no completed issues with story point estimates")]
-    MissingVelocityData,
-    #[error("invalid velocity duration")]
-    InvalidVelocityDuration,
     #[error("invalid velocity value")]
     InvalidVelocityValue,
     #[error("invalid start date: {0}")]
@@ -119,75 +115,6 @@ pub fn simulate_project(
         &calendar,
     )?;
     Ok(output)
-}
-
-pub fn calculate_project_velocity(
-    project: &Project,
-    calendar: &TeamCalendar,
-) -> Result<f32, ProjectSimulationError> {
-    let mut completed: Vec<&Issue> = project
-        .work_packages
-        .iter()
-        .filter(|issue| issue.status == Some(IssueStatus::Done))
-        .filter(|issue| story_point_value(issue).is_some())
-        .filter(|issue| issue.start_date.is_some() && issue.done_date.is_some())
-        .collect();
-
-    if completed.is_empty() {
-        return Err(ProjectSimulationError::MissingVelocityData);
-    }
-
-    completed.sort_by_key(|issue| issue.done_date);
-    let selected = if completed.len() > 30 {
-        &completed[completed.len() - 30..]
-    } else {
-        completed.as_slice()
-    };
-
-    let first = selected
-        .first()
-        .ok_or(ProjectSimulationError::MissingVelocityData)?;
-    let last = selected
-        .last()
-        .ok_or(ProjectSimulationError::MissingVelocityData)?;
-    let start_date = first
-        .start_date
-        .ok_or(ProjectSimulationError::MissingVelocityDates)?;
-    let end_date = last
-        .done_date
-        .ok_or(ProjectSimulationError::MissingVelocityDates)?;
-
-    let summed_capacity =
-        summed_capacity_in_period(calendar, start_date, end_date);
-    if summed_capacity <= 0.0 {
-        return Err(ProjectSimulationError::InvalidVelocityDuration);
-    }
-
-    let total_points: f32 = selected
-        .iter()
-        .filter_map(|issue| story_point_value(issue))
-        .sum();
-
-    let velocity = total_points / summed_capacity as f32;
-    if velocity <= 0.0 {
-        return Err(ProjectSimulationError::InvalidVelocityValue);
-    }
-
-    Ok(velocity)
-}
-
-fn summed_capacity_in_period(
-    calendar: &TeamCalendar,
-    start: chrono::NaiveDate,
-    end: chrono::NaiveDate,
-) -> f32 {
-    let mut total_capacity = 0.0;
-    let mut current_date = start;
-    while current_date <= end {
-        total_capacity += calendar.get_capacity(current_date);
-        current_date += chrono::Duration::days(1);
-    }
-    total_capacity
 }
 
 fn run_simulation<R: ThreePointSampler + ?Sized>(
@@ -371,14 +298,6 @@ fn topological_sort(project: &Project) -> Result<Vec<String>, ProjectSimulationE
     Ok(ordered)
 }
 
-fn story_point_value(issue: &Issue) -> Option<f32> {
-    match issue.estimate.as_ref()? {
-        Estimate::StoryPoint(StoryPointEstimate { estimate }) => *estimate,
-        Estimate::ThreePoint(_) => None,
-        Estimate::Reference(_) => None,
-    }
-}
-
 fn sample_duration<R: ThreePointSampler + ?Sized>(
     estimate: &Estimate,
     velocity: Option<f32>,
@@ -518,161 +437,12 @@ fn end_date_from_days(start_date: chrono::NaiveDate, days: f32) -> chrono::Naive
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::issue::{IssueId, IssueStatus};
+    use crate::domain::issue::IssueId;
+    use crate::test_support::{build_done_issue, build_story_point_issue, build_three_point_issue};
     use chrono::NaiveDate;
     use rand::SeedableRng;
     use rand::rngs::StdRng;
     use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn build_done_issue(id: &str, points: f32, start: NaiveDate, done: NaiveDate) -> Issue {
-        let mut issue = Issue::new();
-        issue.issue_id = Some(IssueId { id: id.to_string() });
-        issue.status = Some(IssueStatus::Done);
-        issue.start_date = Some(start);
-        issue.done_date = Some(done);
-        issue.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
-            estimate: Some(points),
-        }));
-        issue
-    }
-
-    fn build_three_point_issue(id: &str, days: f32, deps: &[&str]) -> Issue {
-        let mut issue = Issue::new();
-        issue.issue_id = Some(IssueId { id: id.to_string() });
-        issue.estimate = Some(Estimate::ThreePoint(ThreePointEstimate {
-            optimistic: Some(days),
-            most_likely: Some(days),
-            pessimistic: Some(days),
-        }));
-        issue.dependencies = if deps.is_empty() {
-            None
-        } else {
-            Some(
-                deps.iter()
-                    .map(|dep| IssueId {
-                        id: (*dep).to_string(),
-                    })
-                    .collect(),
-            )
-        };
-        issue
-    }
-
-    fn build_story_point_issue(id: &str, points: f32, deps: &[&str]) -> Issue {
-        let mut issue = Issue::new();
-        issue.issue_id = Some(IssueId { id: id.to_string() });
-        issue.status = Some(IssueStatus::ToDo);
-        issue.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
-            estimate: Some(points),
-        }));
-        issue.dependencies = if deps.is_empty() {
-            None
-        } else {
-            Some(
-                deps.iter()
-                    .map(|dep| IssueId {
-                        id: (*dep).to_string(),
-                    })
-                    .collect(),
-            )
-        };
-        issue
-    }
-
-    #[test]
-    fn calculate_velocity_from_done_story_points() {
-        let base = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
-        let mut issues = Vec::new();
-        for idx in 0..30 {
-            let start = base + chrono::Duration::days(idx);
-            let done = start + chrono::Duration::days(1);
-            issues.push(build_done_issue(&format!("ABC-{idx}"), 2.0, start, done));
-        }
-        let project = Project {
-            name: "Demo".to_string(),
-            work_packages: issues,
-        };
-        let no_free_days_calendar = TeamCalendar {
-            calendars: vec![Calendar {
-                free_weekdays: vec![],
-                free_date_ranges: vec![],
-            }],
-        };
-
-        let velocity = calculate_project_velocity(&project, &no_free_days_calendar).unwrap();
-        // The 30 issues are done over 31 days, because every issue takes 2 days to complete
-        assert!((velocity - 2.0 * 30.0 / 31.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn calculate_velocity_uses_last_thirty_issues() {
-        let base = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
-        let mut issues = Vec::new();
-        for idx in 0..31 {
-            let start = base + chrono::Duration::days(idx);
-            let done = start + chrono::Duration::days(1);
-            issues.push(build_done_issue(&format!("ABC-{idx}"), 1.0, start, done));
-        }
-        let project = Project {
-            name: "Demo".to_string(),
-            work_packages: issues,
-        };
-        let no_free_days_calendar = TeamCalendar {
-            calendars: vec![Calendar {
-                free_weekdays: vec![],
-                free_date_ranges: vec![],
-            }],
-        };
-
-        let velocity = calculate_project_velocity(&project, &no_free_days_calendar).unwrap();
-        // The 30 issues are done over 31 days, because every issue takes 2 days to complete
-        let expected = 30.0 / 31.0;
-        assert!((velocity - expected).abs() < f32::EPSILON);
-    }
-
-    fn on_date(year: i32, month: u32, day: u32) -> chrono::NaiveDate {
-        chrono::NaiveDate::from_ymd_opt(year, month, day).unwrap()
-    }
-
-    #[test]
-    fn calculate_velocity_takes_fee_days_into_account() {
-        use chrono::Weekday;
-
-        let issues = vec![
-            // The period used for velocity calculation is from 2026-02-13 to 2026-02-23, which contains 2 weekends and 7 working days
-            build_done_issue("ABC-0", 2.0, on_date(2026, 2, 13), on_date(2026, 2, 16)), // Mon
-            build_done_issue("ABC-1", 2.0, on_date(2026, 2, 13), on_date(2026, 2, 17)), // Tue
-            build_done_issue("ABC-2", 2.0, on_date(2026, 2, 13), on_date(2026, 2, 18)), // Wed
-            build_done_issue("ABC-3", 2.0, on_date(2026, 2, 13), on_date(2026, 2, 19)), // Thu
-            build_done_issue("ABC-4", 2.0, on_date(2026, 2, 13), on_date(2026, 2, 20)), // Fri
-            build_done_issue("ABC-5", 2.0, on_date(2026, 2, 13), on_date(2026, 2, 23)), // Next Mon
-        ];
-
-        let half_capacity_calendar = TeamCalendar {
-            calendars: vec![
-                Calendar {
-                    free_weekdays: vec![Weekday::Sat, Weekday::Sun],
-                    free_date_ranges: vec![],
-                },
-                Calendar {
-                    free_weekdays: vec![Weekday::Sat, Weekday::Sun],
-                    free_date_ranges: vec![calendar::FreeDateRange {
-                        start_date: on_date(2026, 2, 13),
-                        end_date: on_date(2026, 2, 23),
-                    }],
-                },
-            ],
-        };
-
-        let project = Project {
-            name: "Demo".to_string(),
-            work_packages: issues,
-        };
-
-        let velocity = calculate_project_velocity(&project, &half_capacity_calendar).unwrap();
-        let expected = 12.0 / 7.0 * 2.0; // 12 points over 7 working days with half capacity is double the velocity compared to full capacity
-        assert!((velocity - expected).abs() < f32::EPSILON);
-    }
 
     #[test]
     fn simulate_rejects_cyclic_dependencies() {

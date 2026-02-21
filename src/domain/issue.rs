@@ -1,6 +1,7 @@
 use chrono::NaiveDate;
 
 use crate::domain::estimate::Estimate;
+use crate::domain::estimate::StoryPointEstimate;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IssueStatus {
@@ -33,6 +34,14 @@ impl Issue {
         Self {
             dependencies: Some(Vec::new()),
             ..Self::default()
+        }
+    }
+
+    pub fn story_point_value(&self) -> Option<f32> {
+        match self.estimate.as_ref()? {
+            Estimate::StoryPoint(StoryPointEstimate { estimate }) => *estimate,
+            Estimate::ThreePoint(_) => None,
+            Estimate::Reference(_) => None,
         }
     }
 }

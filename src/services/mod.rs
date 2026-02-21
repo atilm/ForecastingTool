@@ -12,3 +12,4 @@ pub mod simulation_types;
 pub mod team_calendar_yaml;
 pub mod throughput_plot;
 pub mod throughput_yaml;
+pub mod velocity_calculation;

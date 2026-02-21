@@ -1,6 +1,7 @@
 # ToDos
 
 * [.] Take weekends and holidays into account
+* [ ] Stop unit tests being run 2 times (1 for main and  1 for lib)
 * [ ] Modify the CLI to use subcommands
 * [ ] Write a readme
 * [ ] CI/CD

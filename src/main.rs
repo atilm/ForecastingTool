@@ -2,6 +2,9 @@ mod commands;
 mod domain;
 mod services;
 
+#[cfg(test)]
+mod test_support;
+
 use crate::commands::base_commands::{CliArgs, Commands};
 use crate::commands::get_throughput_cmd::get_throughput_command;
 use crate::commands::get_project_cmd::get_project_command;
