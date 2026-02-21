@@ -199,16 +199,11 @@ fn to_simulation_percentile(
     let days = calculate_days(start_date, end_date);
     SimulationPercentile {
         days,
-        date: end_date
-            .format("%Y-%m-%d")
-            .to_string(),
+        date: end_date.format("%Y-%m-%d").to_string(),
     }
 }
 
-fn calculate_days(
-    start_date: chrono::NaiveDate,
-    end_date: chrono::NaiveDate,
-) -> f32 {
+fn calculate_days(start_date: chrono::NaiveDate, end_date: chrono::NaiveDate) -> f32 {
     (end_date - start_date).num_days().max(0) as f32
 }
 
@@ -343,7 +338,7 @@ fn sample_duration<R: ThreePointSampler + ?Sized>(
     issue_id: &str,
 ) -> Result<f32, ProjectSimulationError> {
     let (optimistic, most_likely, pessimistic, is_story_point_estimate) = match estimate {
-        Estimate::StoryPoint(estimate ) => to_story_point_triplet(estimate, issue_id)?,
+        Estimate::StoryPoint(estimate) => to_story_point_triplet(estimate, issue_id)?,
         Estimate::ThreePoint(estimate) => to_three_point_triplet(estimate)?,
         Estimate::Reference(estimate) => to_reference_triplet(estimate, issue_id)?,
     };
@@ -363,11 +358,9 @@ fn sample_duration<R: ThreePointSampler + ?Sized>(
     }
 }
 
-
-
 fn to_reference_triplet(
     reference: &ReferenceEstimate,
-    issue_id: &str
+    issue_id: &str,
 ) -> Result<(f32, f32, f32, bool), ProjectSimulationError> {
     let cached = reference
         .cached_estimate
@@ -401,7 +394,12 @@ fn to_three_point_triplet(
         ProjectSimulationError::InvalidEstimate("missing pessimistic value".to_string())
     })?;
     let is_story_point_estimate = false;
-    Ok((optimistic, most_likely, pessimistic, is_story_point_estimate))
+    Ok((
+        optimistic,
+        most_likely,
+        pessimistic,
+        is_story_point_estimate,
+    ))
 }
 
 fn fibonacci_bounds(value: f32) -> (f32, f32) {
@@ -489,13 +487,13 @@ fn project_has_story_points(project: &Project) -> bool {
 mod tests {
     use super::*;
     use crate::domain::issue::IssueId;
+    use crate::test_support::MockSampler;
     use crate::test_support::{
         build_done_issue, build_story_point_issue, build_three_point_issue,
         create_calendar_without_any_free_days, on_date,
     };
     use chrono::NaiveDate;
     use std::time::{SystemTime, UNIX_EPOCH};
-    use crate::test_support::MockSampler;
 
     #[test]
     fn simulate_rejects_cyclic_dependencies() {
@@ -541,7 +539,7 @@ mod tests {
 
         // The dependency graph for the test is:
         //
-        //    WP0      WP1        SP-1 
+        //    WP0      WP1        SP-1
         //     |        |           |
         //     |        |           |
         //     |    +---+----+    SP-2
@@ -582,6 +580,42 @@ mod tests {
             assert_eq!(output.report.p85.days, expected);
             assert_eq!(output.report.iterations, 25);
             assert!(output.report.velocity.is_some());
+        }
+    }
+
+    #[test]
+    fn the_calendar_is_only_applied_to_issues_estimated_in_story_points() {
+        // Story Points of SP-1, Duration in days of WP1, expected end-date
+        let test_cases: Vec<(f32, f32, NaiveDate)> = vec![
+            (20.0, 10.0, on_date(2026, 3, 2)), // Story point duration should dominate
+            (2.0, 12.0, on_date(2026, 2, 28)), // Duration of 12 days should dominate, because calendar is not applied, end on weekend is fine
+        ];
+
+        let mut sampler = MockSampler;
+        let calendar = TeamCalendar::new(); // default calendar which assumes weekends to be free
+
+        for (sp1, wp1, expected_end_date) in test_cases {
+            let project = Project {
+                name: "Dependent Project".to_string(),
+                work_packages: vec![
+                    build_done_issue("SP-0", 2.0, on_date(2026, 2, 13), on_date(2026, 2, 13)), // velocity of 2 points/day on Friday
+                    build_story_point_issue("SP-1", sp1, &[]),
+                    build_three_point_issue("WP-1", wp1, &[]),
+                    build_three_point_issue("FIN", 0.0, &["SP-1", "WP-1"]),
+                ],
+            };
+            
+            let output = run_simulation(
+                &project,
+                &topological_sort(&project).unwrap(),
+                Some(calculate_project_velocity(&project, &calendar).unwrap()),
+                25,
+                on_date(2026, 2, 16), // Start on a Monday
+                &mut sampler,
+                &calendar,
+            ).unwrap();
+            
+            assert_eq!(output.report.p85.date, expected_end_date.format("%Y-%m-%d").to_string());
         }
     }
 
