@@ -91,6 +91,8 @@ mod tests {
     use super::*;
     use crate::domain::calendar::{self, Calendar, TeamCalendar};
     use crate::test_support::build_done_issue;
+    use crate::test_support::create_calendar_without_any_free_days;
+    use crate::test_support::on_date;
     use chrono::NaiveDate;
 
     #[test]
@@ -106,12 +108,7 @@ mod tests {
             name: "Demo".to_string(),
             work_packages: issues,
         };
-        let no_free_days_calendar = TeamCalendar {
-            calendars: vec![Calendar {
-                free_weekdays: vec![],
-                free_date_ranges: vec![],
-            }],
-        };
+        let no_free_days_calendar = create_calendar_without_any_free_days();
 
         let velocity = calculate_project_velocity(&project, &no_free_days_calendar).unwrap();
         // The 30 issues span an inclusive period of 31 days (from first start_date to last done_date).
@@ -131,21 +128,13 @@ mod tests {
             name: "Demo".to_string(),
             work_packages: issues,
         };
-        let no_free_days_calendar = TeamCalendar {
-            calendars: vec![Calendar {
-                free_weekdays: vec![],
-                free_date_ranges: vec![],
-            }],
-        };
+
+        let no_free_days_calendar = create_calendar_without_any_free_days();
 
         let velocity = calculate_project_velocity(&project, &no_free_days_calendar).unwrap();
         // The 30 selected issues span an inclusive period of 31 days.
         let expected = 30.0 / 31.0;
         assert!((velocity - expected).abs() < f32::EPSILON);
-    }
-
-    fn on_date(year: i32, month: u32, day: u32) -> chrono::NaiveDate {
-        chrono::NaiveDate::from_ymd_opt(year, month, day).unwrap()
     }
 
     #[test]

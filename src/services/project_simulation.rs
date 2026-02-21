@@ -304,30 +304,17 @@ fn sample_duration<R: ThreePointSampler + ?Sized>(
     sampler: &mut R,
     issue_id: &str,
 ) -> Result<f32, ProjectSimulationError> {
-    let (optimistic, most_likely, pessimistic, apply_velocity) = match estimate {
-        Estimate::StoryPoint(StoryPointEstimate { estimate }) => {
-            let value = estimate
-                .ok_or_else(|| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
-            let (lower, upper) = fibonacci_bounds(value);
-            (lower, value, upper, true)
-        }
+    let (optimistic, most_likely, pessimistic, is_story_point_estimate) = match estimate {
+        Estimate::StoryPoint(estimate ) => to_story_point_triplet(estimate, issue_id)?,
         Estimate::ThreePoint(estimate) => to_three_point_triplet(estimate)?,
-        Estimate::Reference(ReferenceEstimate {
-            report_file_path: _,
-            cached_estimate,
-        }) => {
-            let estimate = cached_estimate
-                .as_ref()
-                .ok_or_else(|| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
-            to_three_point_triplet(estimate)?
-        }
+        Estimate::Reference(estimate) => to_reference_triplet(estimate, issue_id)?,
     };
 
     let sampled = sampler
         .sample(optimistic, most_likely, pessimistic)
         .map_err(|_| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
 
-    if apply_velocity {
+    if is_story_point_estimate {
         let velocity = velocity.ok_or(ProjectSimulationError::MissingVelocity)?;
         if velocity <= 0.0 {
             return Err(ProjectSimulationError::InvalidVelocityValue);
@@ -336,6 +323,31 @@ fn sample_duration<R: ThreePointSampler + ?Sized>(
     } else {
         Ok(sampled)
     }
+}
+
+
+
+fn to_reference_triplet(
+    reference: &ReferenceEstimate,
+    issue_id: &str
+) -> Result<(f32, f32, f32, bool), ProjectSimulationError> {
+    let cached = reference
+        .cached_estimate
+        .as_ref()
+        .ok_or_else(|| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
+    to_three_point_triplet(cached)
+}
+
+fn to_story_point_triplet(
+    story_points: &StoryPointEstimate,
+    issue_id: &str,
+) -> Result<(f32, f32, f32, bool), ProjectSimulationError> {
+    let value = story_points
+        .estimate
+        .ok_or_else(|| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
+    let (lower, upper) = fibonacci_bounds(value);
+    let is_story_point_estimate = true;
+    Ok((lower, value, upper, is_story_point_estimate))
 }
 
 fn to_three_point_triplet(
@@ -350,8 +362,8 @@ fn to_three_point_triplet(
     let pessimistic = estimate.pessimistic.ok_or_else(|| {
         ProjectSimulationError::InvalidEstimate("missing pessimistic value".to_string())
     })?;
-    let apply_velocity = false;
-    Ok((optimistic, most_likely, pessimistic, apply_velocity))
+    let is_story_point_estimate = false;
+    Ok((optimistic, most_likely, pessimistic, is_story_point_estimate))
 }
 
 fn fibonacci_bounds(value: f32) -> (f32, f32) {
@@ -438,7 +450,10 @@ fn end_date_from_days(start_date: chrono::NaiveDate, days: f32) -> chrono::Naive
 mod tests {
     use super::*;
     use crate::domain::issue::IssueId;
-    use crate::test_support::{build_done_issue, build_story_point_issue, build_three_point_issue};
+    use crate::test_support::{
+        build_done_issue, build_story_point_issue, build_three_point_issue,
+        create_calendar_without_any_free_days, on_date,
+    };
     use chrono::NaiveDate;
     use rand::SeedableRng;
     use rand::rngs::StdRng;
@@ -466,7 +481,7 @@ mod tests {
             name: "Demo".to_string(),
             work_packages: vec![issue_a, issue_b],
         };
-        let calendar = TeamCalendar::new();
+        let calendar = create_calendar_without_any_free_days();
 
         let error = simulate_project(&project, 10, "2026-01-01", calendar).unwrap_err();
         assert!(matches!(error, ProjectSimulationError::CyclicDependencies));
@@ -514,7 +529,7 @@ mod tests {
                     build_three_point_issue("FIN", 0.0, &["WP0", "WP2", "WP3"]),
                 ],
             };
-            let calendar = TeamCalendar::new();
+            let calendar = create_calendar_without_any_free_days();
 
             let output = run_simulation(
                 &project,
@@ -537,23 +552,53 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn project_simulation_takes_calendar_into_account() {
-    //     // Creat a mock ThreePointSampler that always returns the most likely value
-    //     struct MockSampler;
-    //     impl ThreePointSampler for MockSampler {
-    //         fn sample(
-    //             &mut self,
-    //             _optimistic: f32,
-    //             most_likely: f32,
-    //             _pessimistic: f32,
-    //         ) -> Result<f32, ()> {
-    //             Ok(most_likely)
-    //         }
-    //     }
+    #[test]
+    fn project_simulation_takes_calendar_into_account() {
+        use crate::test_support::MockSampler;
 
-    //     assert!(false);
-    // }
+        let mut sampler = MockSampler;
+        let project = Project {
+            name: "Dependent Project".to_string(),
+            work_packages: vec![
+                build_done_issue("SP-0", 2.0, on_date(2026, 2, 13), on_date(2026, 2, 13)), // velocity of 2 points/day
+                build_story_point_issue("SP-1", 2.0, &[]),
+                build_story_point_issue("SP-2", 2.0, &["SP-1"]),
+                build_story_point_issue("SP-3", 2.0, &["SP-2"]),
+                build_story_point_issue("SP-4", 2.0, &["SP-3"]),
+                build_story_point_issue("SP-5", 2.0, &["SP-4"]),
+                build_story_point_issue("SP-6", 2.0, &["SP-5"]),
+            ],
+        };
+        let calendar = TeamCalendar::new(); // default calendar which assumes weekends to be free
+
+        let output = run_simulation(
+            &project,
+            &topological_sort(&project).unwrap(),
+            Some(calculate_project_velocity(&project, &calendar).unwrap()),
+            1,
+            on_date(2026, 2, 16), // Start on a Monday
+            &mut sampler,
+            &calendar,
+        )
+        .unwrap();
+
+        let velocity = output.report.velocity.unwrap();
+        let p50_days = output.report.p50.days;
+
+        assert_eq!(
+            output.report.p0.days, output.report.p100.days,
+            "With deterministic sampling, p0 and p100 should be the same"
+        );
+
+        assert_eq!(
+            velocity, 2.0,
+            "Expected velocity of 2 points/day based on the completed issue"
+        );
+        assert_eq!(
+            p50_days, 8.0,
+            "Expected 8 days to complete 12 story points with a velocity of 2 points/day, taking into account the weekend"
+        );
+    }
 
     #[test]
     fn simulate_project_from_yaml_file_sets_report_fields() {
