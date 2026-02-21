@@ -494,9 +494,8 @@ mod tests {
         create_calendar_without_any_free_days, on_date,
     };
     use chrono::NaiveDate;
-    use rand::SeedableRng;
-    use rand::rngs::StdRng;
     use std::time::{SystemTime, UNIX_EPOCH};
+    use crate::test_support::MockSampler;
 
     #[test]
     fn simulate_rejects_cyclic_dependencies() {
@@ -542,25 +541,24 @@ mod tests {
 
         // The dependency graph for the test is:
         //
-        //    WP0      WP1        SP-1   SP-2
-        //     |        |
-        //     |        |
-        //     |    +---+----+
+        //    WP0      WP1        SP-1 
+        //     |        |           |
+        //     |        |           |
+        //     |    +---+----+    SP-2
         //     |    |        |
         //     +---WP2      WP3
         //     |    |        |
         //     +----+--+-----+
         //            |
         //           FIN
-        for (idx, (wp0, wp1, wp2, wp3, expected)) in test_cases.into_iter().enumerate() {
-            let mut rng = StdRng::seed_from_u64(42 + idx as u64);
-            let mut sampler = BetaPertSampler::new(&mut rng);
+        for (_idx, (wp0, wp1, wp2, wp3, expected)) in test_cases.into_iter().enumerate() {
+            let mut sampler = MockSampler;
             let project = Project {
                 name: "Dependent Project".to_string(),
                 work_packages: vec![
                     done_issue.clone(),
                     build_story_point_issue("SP-1", 1.0, &[]),
-                    build_story_point_issue("SP-2", 1.0, &[]),
+                    build_story_point_issue("SP-2", 1.0, &["SP-1"]),
                     build_three_point_issue("WP0", wp0, &[]),
                     build_three_point_issue("WP1", wp1, &[]),
                     build_three_point_issue("WP2", wp2, &["WP0", "WP1"]),
@@ -581,13 +579,7 @@ mod tests {
             )
             .unwrap();
 
-            let p50 = output.report.p50.days;
-            let expected_min = expected.ceil();
-            let expected_max = (expected + 0.25).ceil();
-            assert!(
-                p50 >= expected_min && p50 <= expected_max,
-                "expected ~{expected} days (as end-date-based whole days {expected_min}..={expected_max}), got {p50}"
-            );
+            assert_eq!(output.report.p85.days, expected);
             assert_eq!(output.report.iterations, 25);
             assert!(output.report.velocity.is_some());
         }
@@ -595,8 +587,6 @@ mod tests {
 
     #[test]
     fn project_simulation_takes_calendar_into_account() {
-        use crate::test_support::MockSampler;
-
         let mut sampler = MockSampler;
         let project = Project {
             name: "Dependent Project".to_string(),
