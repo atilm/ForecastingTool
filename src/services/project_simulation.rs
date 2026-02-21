@@ -54,6 +54,8 @@ pub enum ProjectSimulationError {
     CyclicDependencies,
     #[error("invalid estimate values for issue {0}")]
     InvalidEstimate(String),
+    #[error("calendar capacity is insufficient to schedule work")]
+    InsufficientCalendarCapacity,
     #[error("failed to render histogram: {0}")]
     Histogram(#[from] HistogramError),
 }
@@ -127,7 +129,7 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     calendar: &TeamCalendar,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
     let mut nodes = build_simulation_nodes(project)?;
-    let mut total_durations = Vec::with_capacity(iterations);
+    let mut project_end_dates = Vec::with_capacity(iterations);
 
     for _ in 0..iterations {
         let mut earliest_finish: HashMap<String, f32> = HashMap::new();
@@ -149,20 +151,22 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         let project_duration = earliest_finish
             .values()
             .fold(0.0_f32, |acc, value| acc.max(*value));
-        total_durations.push(project_duration);
+
+        let end_date = end_date_from_capacity_days(start_date, project_duration, calendar)?;
+        project_end_dates.push(end_date);
     }
 
-    total_durations.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    project_end_dates.sort();
     let report = SimulationReport {
         data_source: String::new(),
         start_date: start_date.format("%Y-%m-%d").to_string(),
         velocity,
         iterations,
         simulated_items: project.work_packages.len(),
-        p0: to_simulation_percentile(&total_durations, 0.0, start_date),
-        p50: to_simulation_percentile(&total_durations, 50.0, start_date),
-        p85: to_simulation_percentile(&total_durations, 85.0, start_date),
-        p100: to_simulation_percentile(&total_durations, 100.0, start_date),
+        p0: to_simulation_percentile(&project_end_dates, 0.0, start_date),
+        p50: to_simulation_percentile(&project_end_dates, 50.0, start_date),
+        p85: to_simulation_percentile(&project_end_dates, 85.0, start_date),
+        p100: to_simulation_percentile(&project_end_dates, 100.0, start_date),
     };
 
     let work_packages = nodes
@@ -173,27 +177,66 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         })
         .collect();
 
+    let results = project_end_dates
+        .iter()
+        .map(|date| calculate_days(start_date, *date))
+        .collect();
+
     let output = SimulationOutput {
         report,
-        results: total_durations,
+        results,
         work_packages: Some(work_packages),
     };
     Ok(output)
 }
 
-fn to_simulation_percentile(sorted_durations: &[f32], percentile: f64, start_date: chrono::NaiveDate) -> SimulationPercentile {
-    let days = percentile_value(sorted_durations, percentile);
+fn to_simulation_percentile(
+    sorted_end_dates: &[chrono::NaiveDate],
+    percentile: f64,
+    start_date: chrono::NaiveDate,
+) -> SimulationPercentile {
+    let end_date = percentile_value(sorted_end_dates, percentile).unwrap_or(start_date);
+    let days = calculate_days(start_date, end_date);
     SimulationPercentile {
         days,
-        date: end_date_from_days(start_date, days)
+        date: end_date
             .format("%Y-%m-%d")
             .to_string(),
     }
 }
 
-fn end_date_from_days(start_date: chrono::NaiveDate, days: f32) -> chrono::NaiveDate {
-    let days = days.ceil().max(0.0) as i64;
-    start_date + chrono::Duration::days(days)
+fn calculate_days(
+    start_date: chrono::NaiveDate,
+    end_date: chrono::NaiveDate,
+) -> f32 {
+    (end_date - start_date).num_days().max(0) as f32
+}
+
+fn end_date_from_capacity_days(
+    start_date: chrono::NaiveDate,
+    days_at_full_capacity: f32,
+    calendar: &TeamCalendar,
+) -> Result<chrono::NaiveDate, ProjectSimulationError> {
+    if days_at_full_capacity <= 0.0 {
+        return Ok(start_date);
+    }
+
+    let mut remaining_capacity = days_at_full_capacity;
+    let mut date = start_date;
+    for _ in 0..(365 * 200) {
+        let todays_capacity_fraction = calendar.get_capacity(date);
+        if todays_capacity_fraction > 0.0 {
+            remaining_capacity -= todays_capacity_fraction;
+        }
+
+        date += chrono::Duration::days(1);
+
+        if remaining_capacity <= 0.0 {
+            return Ok(date);
+        }
+    }
+
+    Err(ProjectSimulationError::InsufficientCalendarCapacity)
 }
 
 fn data_source_name(path: &str) -> String {
@@ -383,19 +426,25 @@ fn fibonacci_bounds(value: f32) -> (f32, f32) {
     (last, last)
 }
 
-fn percentile_value(sorted_values: &[f32], percentile: f64) -> f32 {
+fn percentile_value<T: Copy>(sorted_values: &[T], percentile: f64) -> Option<T> {
     if sorted_values.is_empty() {
-        return 0.0;
+        return None;
     }
-    if percentile <= 0.0 {
-        return sorted_values[0];
-    }
-    if percentile >= 100.0 {
-        return sorted_values[sorted_values.len() - 1];
-    }
-    let position = (percentile / 100.0) * (sorted_values.len() as f64 - 1.0);
-    let index = position.round() as usize;
-    sorted_values[index]
+
+    let index = if percentile <= 0.0 {
+        0
+    } else if percentile >= 100.0 {
+        sorted_values.len() - 1
+    } else {
+        let position = (percentile / 100.0) * (sorted_values.len() as f64 - 1.0);
+        position.round() as usize
+    };
+
+    sorted_values.get(index).copied()
+}
+
+fn percentile_f32_value(sorted_values: &[f32], percentile: f64) -> f32 {
+    percentile_value(sorted_values, percentile).unwrap_or(0.0)
 }
 
 fn percentiles_from_values(values: &[f32]) -> WorkPackagePercentiles {
@@ -410,10 +459,10 @@ fn percentiles_from_values(values: &[f32]) -> WorkPackagePercentiles {
     let mut sorted = values.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     WorkPackagePercentiles {
-        p0: percentile_value(&sorted, 0.0),
-        p50: percentile_value(&sorted, 50.0),
-        p85: percentile_value(&sorted, 85.0),
-        p100: percentile_value(&sorted, 100.0),
+        p0: percentile_f32_value(&sorted, 0.0),
+        p50: percentile_f32_value(&sorted, 50.0),
+        p85: percentile_f32_value(&sorted, 85.0),
+        p100: percentile_f32_value(&sorted, 100.0),
     }
 }
 
@@ -483,7 +532,7 @@ mod tests {
         let done_issue = build_done_issue("DONE-1", 100.0, base, base + chrono::Duration::days(1));
 
         // WP0, WP1, WP2, WP3, expected duration
-        let test_cases = vec![
+        let test_cases: Vec<(f32, f32, f32, f32, f32)> = vec![
             (1.0, 1.0, 1.0, 1.0, 2.0), // Crit path: WP0 -> WP2 -> FIN
             (6.0, 1.0, 0.0, 1.0, 6.0), // Crit path: WP0 -> FIN
             (2.0, 1.0, 4.0, 1.0, 6.0), // Crit path: WP0 -> WP2 -> FIN
@@ -533,9 +582,11 @@ mod tests {
             .unwrap();
 
             let p50 = output.report.p50.days;
+            let expected_min = expected.ceil();
+            let expected_max = (expected + 0.25).ceil();
             assert!(
-                p50 >= expected && p50 <= expected + 0.25,
-                "expected ~{expected} days, got {p50}"
+                p50 >= expected_min && p50 <= expected_max,
+                "expected ~{expected} days (as end-date-based whole days {expected_min}..={expected_max}), got {p50}"
             );
             assert_eq!(output.report.iterations, 25);
             assert!(output.report.velocity.is_some());
