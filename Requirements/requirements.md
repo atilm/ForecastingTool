@@ -58,7 +58,6 @@
       * [ ] **Mark completed items in dependency chart**
     * [x] ~~Gantt diagram (mermaid)~~
       * [ ] **Show completed items in Gantt chart**
-      * [ ] Write to Gantt diagram in topological order?
       * [x] ~~Add milestones to Gantt diagram~~
         * [x] ~~Display duration 0 entries as milestones in Gantt diagram~~
     * [x] ~~Histogram (`png`)~~
