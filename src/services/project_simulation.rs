@@ -132,28 +132,36 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     let mut project_end_dates = Vec::with_capacity(iterations);
 
     for _ in 0..iterations {
-        let mut earliest_finish: HashMap<String, f32> = HashMap::new();
+        let mut earliest_finish: HashMap<String, chrono::NaiveDate> = HashMap::new();
         for id in order {
             let node = nodes
                 .get_mut(id)
                 .ok_or(ProjectSimulationError::MissingIssueId)?;
-            let start = node
+
+            let issue_start_date = node
                 .dependencies
                 .iter()
                 .filter_map(|dep| earliest_finish.get(dep))
-                .fold(0.0_f32, |acc, value| acc.max(*value));
-            let duration = sample_duration(&node.estimate, velocity, sampler, &node.id)?;
-            let end_time = start + duration;
-            node.samples.push(end_time);
-            earliest_finish.insert(node.id.clone(), end_time);
+                .max()
+                .copied()
+                .unwrap_or(start_date);
+
+            let (duration_days, apply_calendar) =
+                sample_duration(&node.estimate, velocity, sampler, &node.id)?;
+            let issue_end_date =
+                calculate_end_date(issue_start_date, duration_days, apply_calendar, calendar)?;
+
+            node.samples
+                .push(calculate_days(start_date, issue_end_date));
+            earliest_finish.insert(node.id.clone(), issue_end_date);
         }
 
-        let project_duration = earliest_finish
+        let project_end_date = earliest_finish
             .values()
-            .fold(0.0_f32, |acc, value| acc.max(*value));
-
-        let end_date = end_date_from_capacity_days(start_date, project_duration, calendar)?;
-        project_end_dates.push(end_date);
+            .copied()
+            .max()
+            .unwrap_or(start_date);
+        project_end_dates.push(project_end_date);
     }
 
     project_end_dates.sort();
@@ -190,6 +198,25 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     Ok(output)
 }
 
+fn percentiles_from_values(values: &[f32]) -> WorkPackagePercentiles {
+    if values.is_empty() {
+        return WorkPackagePercentiles {
+            p0: 0.0,
+            p50: 0.0,
+            p85: 0.0,
+            p100: 0.0,
+        };
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    WorkPackagePercentiles {
+        p0: percentile_f32_value(&sorted, 0.0),
+        p50: percentile_f32_value(&sorted, 50.0),
+        p85: percentile_f32_value(&sorted, 85.0),
+        p100: percentile_f32_value(&sorted, 100.0),
+    }
+}
+
 fn to_simulation_percentile(
     sorted_end_dates: &[chrono::NaiveDate],
     percentile: f64,
@@ -201,6 +228,27 @@ fn to_simulation_percentile(
         days,
         date: end_date.format("%Y-%m-%d").to_string(),
     }
+}
+
+fn percentile_f32_value(sorted_values: &[f32], percentile: f64) -> f32 {
+    percentile_value(sorted_values, percentile).unwrap_or(0.0)
+}
+
+fn percentile_value<T: Copy>(sorted_values: &[T], percentile: f64) -> Option<T> {
+    if sorted_values.is_empty() {
+        return None;
+    }
+
+    let index = if percentile <= 0.0 {
+        0
+    } else if percentile >= 100.0 {
+        sorted_values.len() - 1
+    } else {
+        let position = (percentile / 100.0) * (sorted_values.len() as f64 - 1.0);
+        position.round() as usize
+    };
+
+    sorted_values.get(index).copied()
 }
 
 fn calculate_days(start_date: chrono::NaiveDate, end_date: chrono::NaiveDate) -> f32 {
@@ -336,7 +384,7 @@ fn sample_duration<R: ThreePointSampler + ?Sized>(
     velocity: Option<f32>,
     sampler: &mut R,
     issue_id: &str,
-) -> Result<f32, ProjectSimulationError> {
+) -> Result<(f32, bool), ProjectSimulationError> {
     let (optimistic, most_likely, pessimistic, is_story_point_estimate) = match estimate {
         Estimate::StoryPoint(estimate) => to_story_point_triplet(estimate, issue_id)?,
         Estimate::ThreePoint(estimate) => to_three_point_triplet(estimate)?,
@@ -347,14 +395,36 @@ fn sample_duration<R: ThreePointSampler + ?Sized>(
         .sample(optimistic, most_likely, pessimistic)
         .map_err(|_| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
 
+    if !sampled.is_finite() {
+        return Err(ProjectSimulationError::InvalidEstimate(issue_id.to_string()));
+    }
+
     if is_story_point_estimate {
         let velocity = velocity.ok_or(ProjectSimulationError::MissingVelocity)?;
         if velocity <= 0.0 {
             return Err(ProjectSimulationError::InvalidVelocityValue);
         }
-        Ok(sampled / velocity)
+        Ok((sampled / velocity, true))
     } else {
-        Ok(sampled)
+        Ok((sampled, false))
+    }
+}
+
+fn calculate_end_date(
+    start_date: chrono::NaiveDate,
+    duration_days: f32,
+    apply_calendar: bool,
+    calendar: &TeamCalendar,
+) -> Result<chrono::NaiveDate, ProjectSimulationError> {
+    if duration_days <= 0.0 {
+        return Ok(start_date);
+    }
+
+    if apply_calendar {
+        end_date_from_capacity_days(start_date, duration_days, calendar)
+    } else {
+        let whole_days = duration_days.ceil() as i64;
+        Ok(start_date + chrono::Duration::days(whole_days))
     }
 }
 
@@ -422,46 +492,6 @@ fn fibonacci_bounds(value: f32) -> (f32, f32) {
 
     let last = *series.last().unwrap();
     (last, last)
-}
-
-fn percentile_value<T: Copy>(sorted_values: &[T], percentile: f64) -> Option<T> {
-    if sorted_values.is_empty() {
-        return None;
-    }
-
-    let index = if percentile <= 0.0 {
-        0
-    } else if percentile >= 100.0 {
-        sorted_values.len() - 1
-    } else {
-        let position = (percentile / 100.0) * (sorted_values.len() as f64 - 1.0);
-        position.round() as usize
-    };
-
-    sorted_values.get(index).copied()
-}
-
-fn percentile_f32_value(sorted_values: &[f32], percentile: f64) -> f32 {
-    percentile_value(sorted_values, percentile).unwrap_or(0.0)
-}
-
-fn percentiles_from_values(values: &[f32]) -> WorkPackagePercentiles {
-    if values.is_empty() {
-        return WorkPackagePercentiles {
-            p0: 0.0,
-            p50: 0.0,
-            p85: 0.0,
-            p100: 0.0,
-        };
-    }
-    let mut sorted = values.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    WorkPackagePercentiles {
-        p0: percentile_f32_value(&sorted, 0.0),
-        p50: percentile_f32_value(&sorted, 50.0),
-        p85: percentile_f32_value(&sorted, 85.0),
-        p100: percentile_f32_value(&sorted, 100.0),
-    }
 }
 
 #[derive(Debug, Clone)]
