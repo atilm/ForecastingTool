@@ -235,6 +235,7 @@ mod tests {
     use super::*;
     use crate::domain::calendar::Calendar;
     use chrono::NaiveDate;
+    use chrono::Weekday;
     use rand::SeedableRng;
     use rand::rngs::StdRng;
     use std::time::{SystemTime, UNIX_EPOCH};

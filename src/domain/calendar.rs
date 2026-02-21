@@ -15,13 +15,6 @@ pub struct Calendar {
 }
 
 impl Calendar {
-    pub fn new() -> Self {
-        Self {
-            free_weekdays: Vec::new(),
-            free_date_ranges: Vec::new(),
-        }
-    }
-
     pub fn get_capacity(&self, date: NaiveDate) -> f32 {
         if self.free_weekdays.contains(&date.weekday()) {
             return 0.0;
