@@ -159,30 +159,10 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         velocity,
         iterations,
         simulated_items: project.work_packages.len(),
-        p0: SimulationPercentile {
-            days: percentile_value(&total_durations, 0.0),
-            date: end_date_from_days(start_date, percentile_value(&total_durations, 0.0))
-                .format("%Y-%m-%d")
-                .to_string(),
-        },
-        p50: SimulationPercentile {
-            days: percentile_value(&total_durations, 50.0),
-            date: end_date_from_days(start_date, percentile_value(&total_durations, 50.0))
-                .format("%Y-%m-%d")
-                .to_string(),
-        },
-        p85: SimulationPercentile {
-            days: percentile_value(&total_durations, 85.0),
-            date: end_date_from_days(start_date, percentile_value(&total_durations, 85.0))
-                .format("%Y-%m-%d")
-                .to_string(),
-        },
-        p100: SimulationPercentile {
-            days: percentile_value(&total_durations, 100.0),
-            date: end_date_from_days(start_date, percentile_value(&total_durations, 100.0))
-                .format("%Y-%m-%d")
-                .to_string(),
-        },
+        p0: to_simulation_percentile(&total_durations, 0.0, start_date),
+        p50: to_simulation_percentile(&total_durations, 50.0, start_date),
+        p85: to_simulation_percentile(&total_durations, 85.0, start_date),
+        p100: to_simulation_percentile(&total_durations, 100.0, start_date),
     };
 
     let work_packages = nodes
@@ -199,6 +179,21 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         work_packages: Some(work_packages),
     };
     Ok(output)
+}
+
+fn to_simulation_percentile(sorted_durations: &[f32], percentile: f64, start_date: chrono::NaiveDate) -> SimulationPercentile {
+    let days = percentile_value(sorted_durations, percentile);
+    SimulationPercentile {
+        days,
+        date: end_date_from_days(start_date, days)
+            .format("%Y-%m-%d")
+            .to_string(),
+    }
+}
+
+fn end_date_from_days(start_date: chrono::NaiveDate, days: f32) -> chrono::NaiveDate {
+    let days = days.ceil().max(0.0) as i64;
+    start_date + chrono::Duration::days(days)
 }
 
 fn data_source_name(path: &str) -> String {
@@ -439,11 +434,6 @@ fn project_has_story_points(project: &Project) -> bool {
             }))
         )
     })
-}
-
-fn end_date_from_days(start_date: chrono::NaiveDate, days: f32) -> chrono::NaiveDate {
-    let days = days.ceil().max(0.0) as i64;
-    start_date + chrono::Duration::days(days)
 }
 
 #[cfg(test)]
