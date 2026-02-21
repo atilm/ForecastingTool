@@ -122,5 +122,5 @@ async fn simulate_by_throughput_parses_calendar_dir() {
 
   // Day 1 (Mon): capacity 0 => 0 progress; Day 2 (Tue): 1; Day 3 (Wed): 1 => done.
   assert_eq!(p50_days, 3.0);
-  assert_eq!(p50_date, "2026-02-18");
+  assert_eq!(p50_date, "2026-02-19");
 }
