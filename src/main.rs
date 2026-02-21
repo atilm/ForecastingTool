@@ -1,17 +1,11 @@
-mod commands;
-mod domain;
-mod services;
 
-#[cfg(test)]
-mod test_support;
-
-use crate::commands::base_commands::{CliArgs, Commands};
-use crate::commands::get_throughput_cmd::get_throughput_command;
-use crate::commands::get_project_cmd::get_project_command;
-use crate::commands::plot_throughput_cmd::plot_throughput_command;
-use crate::commands::plot_project_cmd::plot_project_command;
-use crate::commands::simulate_n_cmd::simulate_n_command;
-use crate::commands::simulate_cmd::simulate_command;
+use forecasts::commands::base_commands::{CliArgs, Commands};
+use forecasts::commands::get_throughput_cmd::get_throughput_command;
+use forecasts::commands::get_project_cmd::get_project_command;
+use forecasts::commands::plot_throughput_cmd::plot_throughput_command;
+use forecasts::commands::plot_project_cmd::plot_project_command;
+use forecasts::commands::simulate_n_cmd::simulate_n_command;
+use forecasts::commands::simulate_cmd::simulate_command;
 use clap::{CommandFactory, Parser};
 use clap_complete;
 use std::io;
