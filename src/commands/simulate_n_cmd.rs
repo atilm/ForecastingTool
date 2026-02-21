@@ -9,6 +9,7 @@ pub fn simulate_n_command(cmd: Commands) {
         iterations,
         number_of_issues,
         start_date,
+        calendar_dir,
     } = cmd
     {
         let histogram_path = format!("{output}.png");
@@ -18,6 +19,7 @@ pub fn simulate_n_command(cmd: Commands) {
             number_of_issues,
             &start_date,
             &histogram_path,
+            calendar_dir.as_deref(),
         ) {
             Ok(result) => result,
             Err(e) => {

@@ -82,6 +82,9 @@ pub enum Commands {
         /// Simulation start date (YYYY-MM-DD)
         #[arg(short, long, default_value_t = default_start_date())]
         start_date: String,
+        /// Optional path to a calendar directory
+        #[arg(short, long)]
+        calendar_dir: Option<String>,
     },
     /// Generate shell completion scripts
     Completions {

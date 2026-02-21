@@ -1,4 +1,5 @@
 use crate::domain::throughput::Throughput;
+use crate::domain::calendar::TeamCalendar;
 use crate::services::throughput_yaml::{deserialize_throughput_from_yaml_str, ThroughputYamlError};
 use chrono::{Datelike, NaiveDate, Weekday};
 use rand::seq::SliceRandom;
@@ -7,6 +8,7 @@ use thiserror::Error;
 
 use crate::services::histogram::{write_histogram_png, HistogramError};
 use crate::services::simulation_types::{SimulationOutput, SimulationPercentile, SimulationReport};
+use crate::services::team_calendar_yaml::{load_team_calendar_from_yaml_dir, TeamCalendarYamlError};
 #[derive(Error, Debug)]
 pub enum SimulationError {
     #[error("failed to read throughput file: {0}")]
@@ -23,6 +25,8 @@ pub enum SimulationError {
     EmptyThroughput,
     #[error("throughput data has no nonzero values")]
     ZeroThroughput,
+    #[error("failed to read team calendar yaml: {0}")]
+    ReadCalendar(#[from] TeamCalendarYamlError),
     #[error("failed to render histogram: {0}")]
     Histogram(#[from] HistogramError),
 }
@@ -33,16 +37,30 @@ pub(crate) fn simulate_from_throughput_file(
     number_of_issues: usize,
     start_date: &str,
     histogram_path: &str,
+    calendar_path: Option<&str>,
 ) -> Result<SimulationReport, SimulationError> {
     let throughput_yaml = std::fs::read_to_string(throughput_path)?;
     let throughput = deserialize_throughput_from_yaml_str(&throughput_yaml)?;
     let start_date = NaiveDate::parse_from_str(start_date, "%Y-%m-%d")
         .map_err(|_| SimulationError::InvalidStartDate(start_date.to_string()))?;
 
-    let mut simulation = run_simulation(&throughput, iterations, number_of_issues, start_date)?;
+    let calendar = load_team_calendar_if_provided(calendar_path)?;
+
+    let mut simulation =
+        run_simulation(&throughput, iterations, number_of_issues, start_date, &calendar)?;
     simulation.report.data_source = data_source_name(throughput_path);
     write_histogram_png(histogram_path, &simulation.results)?;
     Ok(simulation.report)
+}
+
+fn load_team_calendar_if_provided(
+    calendar_path: Option<&str>,
+) -> Result<TeamCalendar, SimulationError> {
+    if let Some(path) = calendar_path {
+        Ok(load_team_calendar_from_yaml_dir(path)?)
+    } else {
+        Ok(TeamCalendar::new())
+    }
 }
 
 pub(crate) fn run_simulation(
@@ -50,9 +68,17 @@ pub(crate) fn run_simulation(
     iterations: usize,
     number_of_issues: usize,
     start_date: NaiveDate,
+    calendar: &TeamCalendar,
 ) -> Result<SimulationOutput, SimulationError> {
     let mut rng = rand::thread_rng();
-    run_simulation_with_rng(throughput, iterations, number_of_issues, start_date, &mut rng)
+    run_simulation_with_rng(
+        throughput,
+        iterations,
+        number_of_issues,
+        start_date,
+        calendar,
+        &mut rng,
+    )
 }
 
 pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
@@ -60,6 +86,7 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
     iterations: usize,
     number_of_issues: usize,
     start_date: NaiveDate,
+    calendar: &TeamCalendar,
     rng: &mut R,
 ) -> Result<SimulationOutput, SimulationError> {
     if iterations == 0 {
@@ -79,7 +106,13 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
 
     let mut results = Vec::with_capacity(iterations);
     for _ in 0..iterations {
-        let days = simulate_single_run(&throughput_values, number_of_issues, start_date, rng);
+        let days = simulate_single_run(
+            &throughput_values,
+            number_of_issues,
+            start_date,
+            calendar,
+            rng,
+        );
         results.push(days as f32);
     }
     results.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
@@ -132,20 +165,24 @@ fn simulate_single_run<R: Rng + ?Sized>(
     throughput_values: &[usize],
     number_of_issues: usize,
     start_date: NaiveDate,
+    calendar: &TeamCalendar,
     rng: &mut R,
 ) -> usize {
-    let mut completed = 0;
+    let mut completed = 0.0_f32;
     let mut days = 0;
     let mut date = next_workday(start_date);
 
-    while completed < number_of_issues {
+    while completed < number_of_issues as f32 {
         days += 1;
-        let throughput = throughput_values
+        let sampled_throughput = throughput_values
             .choose(rng)
             .copied()
             .unwrap_or(0);
-        completed = completed.saturating_add(throughput);
-        if completed >= number_of_issues {
+        let capacity = calendar.get_capacity(date).max(0.0);
+        let effective_throughput = (sampled_throughput as f32) * capacity;
+
+        completed += effective_throughput;
+        if completed >= number_of_issues as f32 {
             break;
         }
         date = next_workday(date.succ_opt().unwrap());
@@ -196,6 +233,7 @@ fn is_weekend(date: NaiveDate) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::calendar::Calendar;
     use chrono::NaiveDate;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
@@ -209,7 +247,9 @@ mod tests {
         }];
         let start_date = NaiveDate::from_ymd_opt(2026, 1, 30).unwrap();
         let mut rng = StdRng::seed_from_u64(42);
-        let simulation = run_simulation_with_rng(&throughput, 3, 2, start_date, &mut rng).unwrap();
+        let calendar = TeamCalendar::new();
+        let simulation =
+            run_simulation_with_rng(&throughput, 3, 2, start_date, &calendar, &mut rng).unwrap();
 
         assert_eq!(simulation.results, vec![2.0, 2.0, 2.0]);
         assert_eq!(simulation.report.p0.days, 2.0);
@@ -221,6 +261,39 @@ mod tests {
         assert_eq!(simulation.report.iterations, 3);
         assert_eq!(simulation.report.velocity, None);
         assert_eq!(simulation.report.data_source, "");
+    }
+
+    #[test]
+    fn run_simulation_with_rng_applies_calendar_capacity_to_throughput() {
+        let throughput = vec![Throughput {
+            date: NaiveDate::from_ymd_opt(2026, 2, 16).unwrap(),
+            completed_issues: 2,
+        }];
+        let start_date = NaiveDate::from_ymd_opt(2026, 2, 16).unwrap(); // Monday
+
+        // Capacity on Monday = 0.5 by averaging 2 calendars.
+        let calendar = TeamCalendar {
+            calendars: vec![
+                Calendar {
+                    free_weekdays: vec![],
+                    free_date_ranges: vec![],
+                },
+                Calendar {
+                    free_weekdays: vec![Weekday::Mon],
+                    free_date_ranges: vec![],
+                },
+            ],
+        };
+
+        let mut rng = StdRng::seed_from_u64(123);
+        let simulation =
+            run_simulation_with_rng(&throughput, 1, 2, start_date, &calendar, &mut rng).unwrap();
+
+        // Day 1: sampled=2, capacity=0.5 => effective 1.0 (not done)
+        // Day 2: Tuesday capacity=1.0 => effective 2.0 (done)
+        assert_eq!(simulation.results, vec![2.0]);
+        assert_eq!(simulation.report.p50.days, 2.0);
+        assert_eq!(simulation.report.p50.date, "2026-02-17");
     }
 
     #[test]
@@ -241,6 +314,7 @@ mod tests {
             4,
             "2026-01-01",
             histogram_path.to_str().unwrap(),
+            None,
         )
         .unwrap();
 
