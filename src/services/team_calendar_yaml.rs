@@ -54,6 +54,18 @@ struct FreeDateRangeRecord {
     end_date: String,
 }
 
+/// Loads team calendar from YAML files in the specified directory, 
+/// or returns a default calendar with free weekends if no path is provided.
+pub fn load_team_calendar_if_provided(
+    calendar_path: Option<&str>,
+) -> Result<TeamCalendar, TeamCalendarYamlError> {
+    if let Some(path) = calendar_path {
+        Ok(load_team_calendar_from_yaml_dir(path)?)
+    } else {
+        Ok(TeamCalendar::new())
+    }
+}
+
 /// Loads all `*.yaml` / `*.yml` files in `dir_path`, parses each file into a [`Calendar`],
 /// and composes them into a [`TeamCalendar`].
 ///

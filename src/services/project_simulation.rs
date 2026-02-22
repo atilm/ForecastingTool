@@ -18,7 +18,7 @@ use crate::services::simulation_types::{
     WorkPackageSimulation,
 };
 use crate::services::team_calendar_yaml::TeamCalendarYamlError;
-use crate::services::team_calendar_yaml::load_team_calendar_from_yaml_dir;
+use crate::services::team_calendar_yaml::load_team_calendar_if_provided;
 use crate::services::util::dates::data_source_name;
 use crate::services::velocity_calculation::VelocityCalculationError;
 use crate::services::velocity_calculation::calculate_project_velocity;
@@ -73,17 +73,6 @@ pub fn simulate_project_from_yaml_file(
     let mut output = simulate_project(&project, iterations, start_date, calendar)?;
     output.report.data_source = data_source_name(path);
     Ok(output)
-}
-
-fn load_team_calendar_if_provided(
-    calendar_path: Option<&str>,
-) -> Result<TeamCalendar, ProjectSimulationError> {
-    if let Some(path) = calendar_path {
-        let calendar = load_team_calendar_from_yaml_dir(path)?;
-        Ok(calendar)
-    } else {
-        Ok(TeamCalendar::new())
-    }
 }
 
 pub fn simulate_project(

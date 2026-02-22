@@ -11,7 +11,7 @@ use crate::services::histogram::{HistogramError, write_histogram_png};
 use crate::services::percentiles;
 use crate::services::simulation_types::{SimulationOutput, SimulationPercentile, SimulationReport};
 use crate::services::team_calendar_yaml::{
-    TeamCalendarYamlError, load_team_calendar_from_yaml_dir,
+    TeamCalendarYamlError, load_team_calendar_if_provided,
 };
 #[derive(Error, Debug)]
 pub enum SimulationError {
@@ -60,16 +60,6 @@ pub(crate) fn simulate_from_throughput_file(
     simulation.report.data_source = data_source_name(throughput_path);
     write_histogram_png(histogram_path, &simulation.results)?;
     Ok(simulation.report)
-}
-
-fn load_team_calendar_if_provided(
-    calendar_path: Option<&str>,
-) -> Result<TeamCalendar, SimulationError> {
-    if let Some(path) = calendar_path {
-        Ok(load_team_calendar_from_yaml_dir(path)?)
-    } else {
-        Ok(TeamCalendar::new())
-    }
 }
 
 pub(crate) fn run_simulation(
