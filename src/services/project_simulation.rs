@@ -19,6 +19,7 @@ use crate::services::simulation_types::{
 };
 use crate::services::team_calendar_yaml::TeamCalendarYamlError;
 use crate::services::team_calendar_yaml::load_team_calendar_from_yaml_dir;
+use crate::services::util::dates::data_source_name;
 use crate::services::velocity_calculation::VelocityCalculationError;
 use crate::services::velocity_calculation::calculate_project_velocity;
 use petgraph::algo::toposort;
@@ -223,7 +224,8 @@ fn to_simulation_percentile(
     percentile: f64,
     start_date: chrono::NaiveDate,
 ) -> SimulationPercentile {
-    let end_date = percentiles::get_percentile_value(sorted_end_dates, percentile).unwrap_or(start_date);
+    let end_date =
+        percentiles::get_percentile_value(sorted_end_dates, percentile).unwrap_or(start_date);
     let days = calculate_days(start_date, end_date);
     SimulationPercentile {
         days,
@@ -260,14 +262,6 @@ fn end_date_from_capacity_days(
     }
 
     Err(ProjectSimulationError::InsufficientCalendarCapacity)
-}
-
-fn data_source_name(path: &str) -> String {
-    std::path::Path::new(path)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or(path)
-        .to_string()
 }
 
 fn build_simulation_nodes(
@@ -376,7 +370,9 @@ fn sample_duration<R: ThreePointSampler + ?Sized>(
         .map_err(|_| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
 
     if !sampled.is_finite() {
-        return Err(ProjectSimulationError::InvalidEstimate(issue_id.to_string()));
+        return Err(ProjectSimulationError::InvalidEstimate(
+            issue_id.to_string(),
+        ));
     }
 
     if is_story_point_estimate {
@@ -601,7 +597,7 @@ mod tests {
             // The user is responsible for advancing the result to the next business day.
             (20.0, 10.0, on_date(2026, 2, 28)),
             // Duration of 12 days should dominate. Because calendar is not applied end_date = start_date + duration.
-            (2.0, 12.0, on_date(2026, 2, 28)), 
+            (2.0, 12.0, on_date(2026, 2, 28)),
         ];
 
         let mut sampler = MockSampler;
@@ -617,7 +613,7 @@ mod tests {
                     build_three_point_issue("FIN", 0.0, &["SP-1", "WP-1"]),
                 ],
             };
-            
+
             let output = run_simulation(
                 &project,
                 &topological_sort(&project).unwrap(),
@@ -626,9 +622,15 @@ mod tests {
                 on_date(2026, 2, 16), // Start on a Monday
                 &mut sampler,
                 &calendar,
-            ).unwrap();
-            
-            assert_eq!(output.report.p85.date, expected_end_date.format("%Y-%m-%d").to_string(), "Test case {}: Expected end date to match the expected value", idx);
+            )
+            .unwrap();
+
+            assert_eq!(
+                output.report.p85.date,
+                expected_end_date.format("%Y-%m-%d").to_string(),
+                "Test case {}: Expected end date to match the expected value",
+                idx
+            );
         }
     }
 
