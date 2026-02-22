@@ -9,7 +9,10 @@ pub fn format_simulation_report(report: &SimulationReport) -> String {
     let mut lines = Vec::new();
     lines.push("Simulation Report".to_string());
     lines.push(format!("Data source: {}", report.data_source));
-    lines.push(format!("Start date: {}", report.start_date));
+    lines.push(format!(
+        "Start date: {}",
+        report.start_date.format("%Y-%m-%d")
+    ));
     lines.push(format!("Iterations: {}", report.iterations));
     lines.push(format!("Simulated items: {}", report.simulated_items));
     lines.push(format!("Velocity: {}", velocity));
@@ -25,12 +28,15 @@ pub fn format_simulation_report(report: &SimulationReport) -> String {
     lines.join("\n")
 }
 
-fn format_percentile_row(label: &str, percentile: &crate::services::simulation_types::SimulationPercentile) -> String {
+fn format_percentile_row(
+    label: &str,
+    percentile: &crate::services::simulation_types::SimulationPercentile,
+) -> String {
     format!(
         "{label} | {days} | {date}",
         label = label,
         days = format!("{:.2}", percentile.days),
-        date = percentile.date
+        date = percentile.date.format("%Y-%m-%d")
     )
 }
 
@@ -38,29 +44,30 @@ fn format_percentile_row(label: &str, percentile: &crate::services::simulation_t
 mod tests {
     use super::*;
     use crate::services::simulation_types::SimulationPercentile;
+    use chrono::NaiveDate;
 
     fn build_report() -> SimulationReport {
         SimulationReport {
             data_source: "input.yaml".to_string(),
-            start_date: "2026-02-01".to_string(),
+            start_date: NaiveDate::from_ymd_opt(2026, 2, 1).unwrap(),
             velocity: Some(2.5),
             iterations: 100,
             simulated_items: 12,
             p0: SimulationPercentile {
                 days: 1.0,
-                date: "2026-02-02".to_string(),
+                date: NaiveDate::from_ymd_opt(2026, 2, 2).unwrap(),
             },
             p50: SimulationPercentile {
                 days: 5.5,
-                date: "2026-02-06".to_string(),
+                date: NaiveDate::from_ymd_opt(2026, 2, 6).unwrap(),
             },
             p85: SimulationPercentile {
                 days: 10.0,
-                date: "2026-02-11".to_string(),
+                date: NaiveDate::from_ymd_opt(2026, 2, 11).unwrap(),
             },
             p100: SimulationPercentile {
                 days: 15.25,
-                date: "2026-02-16".to_string(),
+                date: NaiveDate::from_ymd_opt(2026, 2, 16).unwrap(),
             },
         }
     }

@@ -153,25 +153,25 @@ mod tests {
         SimulationOutput {
             report: SimulationReport {
                 data_source: "unit-test".to_string(),
-                start_date: "2026-01-01".to_string(),
+                start_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 velocity: None,
                 iterations: 1,
                 simulated_items: 2,
                 p0: SimulationPercentile {
                     days: 0.0,
-                    date: "2026-01-01".to_string(),
+                    date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 },
                 p50: SimulationPercentile {
                     days: 0.0,
-                    date: "2026-01-01".to_string(),
+                    date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 },
                 p85: SimulationPercentile {
                     days: 0.0,
-                    date: "2026-01-01".to_string(),
+                    date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 },
                 p100: SimulationPercentile {
                     days: 0.0,
-                    date: "2026-01-01".to_string(),
+                    date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 },
             },
             results: vec![1.0],

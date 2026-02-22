@@ -1,5 +1,17 @@
 # ToDos
 
+* Make dates NaiveDates in simulation_types
+
+* [ ] Complete Gantt diagrams
+  * [ ] Completed Issues must be included in input data
+  * [ ] Gantt diagram needs start_date and end_date per work package for predefined percentiles (-> enum)
+    * [ ] WorkPackageSimulation should store these -> set in project simulation
+  * [ ] ProjectSimulation: case of already known start-date
+    * [ ] The ProjectSimulation should handle in-progress tasks correctly
+      * [ ] already known start-date + sampled duration
+    * [ ] The ProjectSimulation should handle ToDo issues with fixed start_date correctly
+      * [ ] already known start-date + sampled duration
+
 * [ ] Write test for milestones in Gantt diagram
 * [ ] Modify the CLI to use subcommands
 * [ ] Write a readme

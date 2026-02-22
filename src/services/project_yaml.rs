@@ -33,8 +33,6 @@ pub enum ReportParseError {
     Io(#[from] io::Error),
     #[error("failed to parse report yaml: {0}")]
     Parse(#[from] serde_yaml::Error),
-    #[error("invalid date format in report: {0}")]
-    InvalidDate(String),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -202,22 +200,7 @@ fn load_simulation_report_from_file(path: &str) -> Result<SimulationReport, Repo
 
 fn parse_simulation_report_str(input: &str) -> Result<SimulationReport, ReportParseError> {
     let report: SimulationReport = serde_yaml::from_str(input)?;
-    validate_report_dates(&report)?;
     Ok(report)
-}
-
-fn validate_report_dates(report: &SimulationReport) -> Result<(), ReportParseError> {
-    parse_report_date(&report.start_date)?;
-    parse_report_date(&report.p0.date)?;
-    parse_report_date(&report.p50.date)?;
-    parse_report_date(&report.p85.date)?;
-    parse_report_date(&report.p100.date)?;
-    Ok(())
-}
-
-fn parse_report_date(value: &str) -> Result<NaiveDate, ReportParseError> {
-    NaiveDate::parse_from_str(value, "%Y-%m-%d")
-        .map_err(|_| ReportParseError::InvalidDate(value.to_string()))
 }
 
 fn estimate_to_record(estimate: Option<&Estimate>) -> Option<EstimateRecord> {
@@ -545,7 +528,8 @@ p100:
         let error = three_point_estimate_from_report_file(report_file.path().to_str().unwrap())
             .unwrap_err();
 
-        assert!(matches!(error, ReportParseError::InvalidDate(_)));
+        // Invalid dates are rejected during YAML deserialization of `NaiveDate`.
+        assert!(matches!(error, ReportParseError::Parse(_)));
     }
 
     #[test]

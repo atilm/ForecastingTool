@@ -119,33 +119,25 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
 
     let report = SimulationReport {
         data_source: String::new(),
-        start_date: start_date.format("%Y-%m-%d").to_string(),
+        start_date,
         velocity: None,
         iterations,
         simulated_items: number_of_issues,
         p0: SimulationPercentile {
             days: p0_days,
-            date: end_date_from_days(start_date, p0_days)
-                .format("%Y-%m-%d")
-                .to_string(),
+            date: end_date_from_days(start_date, p0_days),
         },
         p50: SimulationPercentile {
             days: p50_days,
-            date: end_date_from_days(start_date, p50_days)
-                .format("%Y-%m-%d")
-                .to_string(),
+            date: end_date_from_days(start_date, p50_days),
         },
         p85: SimulationPercentile {
             days: p85_days,
-            date: end_date_from_days(start_date, p85_days)
-                .format("%Y-%m-%d")
-                .to_string(),
+            date: end_date_from_days(start_date, p85_days),
         },
         p100: SimulationPercentile {
             days: p100_days,
-            date: end_date_from_days(start_date, p100_days)
-                .format("%Y-%m-%d")
-                .to_string(),
+            date: end_date_from_days(start_date, p100_days),
         },
     };
 
@@ -223,8 +215,8 @@ mod tests {
         assert_eq!(simulation.report.p100.days, 4.0);
         assert_eq!(simulation.report.p50.days, 4.0);
         assert_eq!(simulation.report.p85.days, 4.0);
-        assert_eq!(simulation.report.p0.date, "2026-02-03");
-        assert_eq!(simulation.report.p100.date, "2026-02-03");
+        assert_eq!(simulation.report.p0.date, on_date(2026, 2, 3));
+        assert_eq!(simulation.report.p100.date, on_date(2026, 2, 3));
         assert_eq!(simulation.report.iterations, 3);
         assert_eq!(simulation.report.velocity, None);
         assert_eq!(simulation.report.data_source, "");
@@ -260,7 +252,7 @@ mod tests {
         // Day 2: Tuesday capacity=1.0 => effective 2.0 (done)
         assert_eq!(simulation.results, vec![2.0]);
         assert_eq!(simulation.report.p50.days, 2.0);
-        assert_eq!(simulation.report.p50.date, "2026-02-18");
+        assert_eq!(simulation.report.p50.date, on_date(2026, 2, 18));
     }
 
     #[test]

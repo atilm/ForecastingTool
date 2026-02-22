@@ -1,16 +1,17 @@
 use serde::Deserialize;
 use serde::Serialize;
+use chrono::NaiveDate;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct SimulationPercentile {
     pub days: f32,
-    pub date: String,
+    pub date: NaiveDate,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct SimulationReport {
     pub data_source: String,
-    pub start_date: String,
+    pub start_date: NaiveDate,
     pub velocity: Option<f32>,
     pub iterations: usize,
     pub simulated_items: usize,
@@ -39,4 +40,24 @@ pub struct SimulationOutput {
     pub report: SimulationReport,
     pub results: Vec<f32>,
     pub work_packages: Option<Vec<WorkPackageSimulation>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn naive_date_serializes_and_deserializes_as_yyyy_mm_dd_in_yaml() {
+        let percentile = SimulationPercentile {
+            days: 12.5,
+            date: NaiveDate::from_ymd_opt(2026, 2, 22).unwrap(),
+        };
+
+        let yaml = serde_yaml::to_string(&percentile).unwrap();
+        assert!(yaml.contains("2026-02-22"));
+
+        let decoded: SimulationPercentile = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(decoded.date, percentile.date);
+        assert_eq!(decoded.days, percentile.days);
+    }
 }

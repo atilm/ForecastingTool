@@ -156,7 +156,7 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     project_end_dates.sort();
     let report = SimulationReport {
         data_source: String::new(),
-        start_date: start_date.format("%Y-%m-%d").to_string(),
+        start_date,
         velocity,
         iterations,
         simulated_items: project.work_packages.len(),
@@ -216,7 +216,7 @@ fn to_simulation_percentile(
     let days = calculate_days(start_date, end_date);
     SimulationPercentile {
         days,
-        date: end_date.format("%Y-%m-%d").to_string(),
+        date: end_date,
     }
 }
 
@@ -614,7 +614,7 @@ mod tests {
 
             assert_eq!(
                 output.report.p85.date,
-                expected_end_date.format("%Y-%m-%d").to_string(),
+                expected_end_date,
                 "Test case {}: Expected end date to match the expected value",
                 idx
             );
