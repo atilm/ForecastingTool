@@ -28,6 +28,13 @@ use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 
+#[derive(Debug, Clone, Copy)]
+struct WorkItemSample {
+    duration_days: f32,
+    start_date: chrono::NaiveDate,
+    end_date: chrono::NaiveDate,
+}
+
 #[derive(Error, Debug)]
 pub enum ProjectSimulationError {
     #[error("failed to read project yaml: {0}")]
@@ -117,15 +124,14 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     sampler: &mut R,
     calendar: &TeamCalendar,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
-    let mut nodes = build_simulation_nodes(project)?;
+    let nodes = build_simulation_nodes(project)?;
+    let mut samples_by_id: HashMap<String, Vec<WorkItemSample>> = HashMap::new();
     let mut project_end_dates = Vec::with_capacity(iterations);
 
     for _ in 0..iterations {
         let mut earliest_finish: HashMap<String, chrono::NaiveDate> = HashMap::new();
         for id in order {
-            let node = nodes
-                .get_mut(id)
-                .ok_or(ProjectSimulationError::MissingIssueId)?;
+            let node = nodes.get(id).ok_or(ProjectSimulationError::MissingIssueId)?;
 
             let issue_start_date = node
                 .dependencies
@@ -140,8 +146,15 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
             let issue_end_date =
                 calculate_end_date(issue_start_date, duration_days, apply_calendar, calendar)?;
 
-            node.samples
-                .push(calculate_days(start_date, issue_end_date));
+            let elapsed_days = calculate_days(issue_start_date, issue_end_date);
+            samples_by_id
+                .entry(node.id.clone())
+                .or_insert_with(|| Vec::with_capacity(iterations))
+                .push(WorkItemSample {
+                    duration_days: elapsed_days,
+                    start_date: issue_start_date,
+                    end_date: issue_end_date,
+                });
             earliest_finish.insert(node.id.clone(), issue_end_date);
         }
 
@@ -170,7 +183,10 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         .values()
         .map(|node| WorkPackageSimulation {
             id: node.id.clone(),
-            percentiles: percentiles_from_values(&node.samples),
+            percentiles: percentiles_from_samples(
+                samples_by_id.get(&node.id).map(Vec::as_slice).unwrap_or(&[]),
+                start_date,
+            ),
         })
         .collect();
 
@@ -186,40 +202,48 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     })
 }
 
-fn percentiles_from_values(values: &[f32]) -> WorkPackagePercentiles {
-    fn make_percentile(project_start_date: chrono::NaiveDate, days: f32) -> SimulationPercentile {
-        let end_date = end_date_from_days(project_start_date, days);
+fn percentiles_from_samples(
+    samples: &[WorkItemSample],
+    default_project_start: chrono::NaiveDate,
+) -> WorkPackagePercentiles {
+    fn to_percentile(sample: WorkItemSample) -> SimulationPercentile {
         SimulationPercentile {
-            days,
-            start_date: project_start_date,
-            end_date,
+            days: sample.duration_days,
+            start_date: sample.start_date,
+            end_date: sample.end_date,
         }
     }
 
-    let dummy_start_date = chrono::NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
-
-    if values.is_empty() {
+    if samples.is_empty() {
+        let default = SimulationPercentile {
+            days: 0.0,
+            start_date: default_project_start,
+            end_date: default_project_start,
+        };
         return WorkPackagePercentiles {
-            p0: make_percentile(dummy_start_date, 0.0),
-            p50: make_percentile(dummy_start_date, 0.0),
-            p85: make_percentile(dummy_start_date, 0.0),
-            p100: make_percentile(dummy_start_date, 0.0),
+            p0: default.clone(),
+            p50: default.clone(),
+            p85: default.clone(),
+            p100: default,
         };
     }
 
-    let mut sorted = values.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let mut sorted = samples.to_vec();
+    sorted.sort_by(|a, b| {
+        a.duration_days.partial_cmp(&b.duration_days)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
-    let p0_days = percentiles::get_percentile_value_f32(&sorted, 0.0);
-    let p50_days = percentiles::get_percentile_value_f32(&sorted, 50.0);
-    let p85_days = percentiles::get_percentile_value_f32(&sorted, 85.0);
-    let p100_days = percentiles::get_percentile_value_f32(&sorted, 100.0);
+    let pick = |p: f64| {
+        let idx = percentiles::get_percentile_index(sorted.len(), p).unwrap_or(0);
+        to_percentile(sorted[idx])
+    };
 
     WorkPackagePercentiles {
-        p0: make_percentile(dummy_start_date, p0_days),
-        p50: make_percentile(dummy_start_date, p50_days),
-        p85: make_percentile(dummy_start_date, p85_days),
-        p100: make_percentile(dummy_start_date, p100_days),
+        p0: pick(0.0),
+        p50: pick(50.0),
+        p85: pick(85.0),
+        p100: pick(100.0),
     }
 }
 
@@ -240,11 +264,6 @@ fn to_simulation_percentile(
 
 fn calculate_days(start_date: chrono::NaiveDate, end_date: chrono::NaiveDate) -> f32 {
     (end_date - start_date).num_days().max(0) as f32
-}
-
-fn end_date_from_days(start_date: chrono::NaiveDate, days: f32) -> chrono::NaiveDate {
-    let days = days.ceil().max(0.0) as i64;
-    start_date + chrono::Duration::days(days)
 }
 
 fn end_date_from_capacity_days(
@@ -300,7 +319,6 @@ fn build_simulation_nodes(
                 id,
                 estimate,
                 dependencies,
-                samples: Vec::new(),
             },
         );
     }
@@ -485,7 +503,6 @@ struct SimulationNode {
     id: String,
     estimate: Estimate,
     dependencies: Vec<String>,
-    samples: Vec<f32>,
 }
 
 fn project_has_story_points(project: &Project) -> bool {
@@ -508,7 +525,6 @@ mod tests {
         build_done_issue, build_story_point_issue, build_three_point_issue,
         create_calendar_without_any_free_days, on_date,
     };
-    use assert_cmd::assert;
     use chrono::NaiveDate;
     use std::time::{SystemTime, UNIX_EPOCH};
 

@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 use thiserror::Error;
 
 use crate::domain::project::Project;
-use crate::services::simulation_types::{SimulationOutput, WorkPackageSimulation};
+use crate::services::simulation_types::{SimulationOutput, SimulationPercentile, WorkPackageSimulation};
 
 #[derive(Error, Debug)]
 pub enum GanttDiagramError {
@@ -45,7 +45,7 @@ pub fn generate_gantt_diagram(
         let wp = map
             .get(&id)
             .ok_or_else(|| GanttDiagramError::MissingWorkPackage(id.clone()))?;
-        let end_time = percentile_value(wp, percentile);
+        let end_time = percentile_end_offset_days(wp, percentile, start_date);
 
         let mut start_time = 0.0_f32;
         if let Some(deps) = issue.dependencies.as_ref() {
@@ -53,7 +53,7 @@ pub fn generate_gantt_diagram(
                 let mut dep_end_times = Vec::new();
                 for dep in deps {
                     if let Some(dep_wp) = map.get(&dep.id) {
-                        dep_end_times.push(percentile_value(dep_wp, percentile));
+                        dep_end_times.push(percentile_end_offset_days(dep_wp, percentile, start_date));
                     }
                 }
                 if let Some(value) = dep_end_times
@@ -104,17 +104,31 @@ fn make_milestone_line(issue: &str, name: &str, date: NaiveDate) -> String {
     )
 }
 
-fn percentile_value(work_package: &WorkPackageSimulation, percentile: f32) -> f32 {
+fn percentile_end_offset_days(
+    work_package: &WorkPackageSimulation,
+    percentile: f32,
+    project_start_date: NaiveDate,
+) -> f32 {
+    let percentile_value = select_percentile(work_package, percentile);
+    (percentile_value.end_date - project_start_date)
+        .num_days()
+        .max(0) as f32
+}
+
+fn select_percentile<'a>(
+    work_package: &'a WorkPackageSimulation,
+    percentile: f32,
+) -> &'a SimulationPercentile {
     if percentile <= 0.0 {
-        return work_package.percentiles.p0.days;
+        return &work_package.percentiles.p0;
     }
     if percentile <= 50.0 {
-        return work_package.percentiles.p50.days;
+        return &work_package.percentiles.p50;
     }
     if percentile <= 85.0 {
-        return work_package.percentiles.p85.days;
+        return &work_package.percentiles.p85;
     }
-    work_package.percentiles.p100.days
+    &work_package.percentiles.p100
 }
 
 fn add_days(start_date: NaiveDate, days: f32) -> NaiveDate {
@@ -227,5 +241,14 @@ mod tests {
         assert!(diagram.contains("A Name A"));
         assert!(diagram.contains("B Name B"));
         assert!(diagram.contains("01-01-2026"));
+    }
+
+    #[test]
+    fn marker() {
+        // 1. Test that gantt diagrams are built correctly from start dates and end dates
+        // 2. Later add handling of work packages with set start_date to project simulation
+        // 3. Display done and in progress work packages in gannt chart and flow chart
+
+        assert!(false)
     }
 }
