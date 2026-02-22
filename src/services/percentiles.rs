@@ -8,7 +8,7 @@
 
 /// Returns the percentile value from a slice that is already sorted in
 /// ascending order.
-pub fn value_sorted<T: Copy>(sorted_values: &[T], percentile: f64) -> Option<T> {
+pub fn get_percentile_value<T: Copy>(sorted_values: &[T], percentile: f64) -> Option<T> {
     if sorted_values.is_empty() {
         return None;
     }
@@ -26,8 +26,8 @@ pub fn value_sorted<T: Copy>(sorted_values: &[T], percentile: f64) -> Option<T> 
 }
 
 /// Convenience wrapper for `f32` results.
-pub fn value_f32_sorted(sorted_values: &[f32], percentile: f64) -> f32 {
-    value_sorted(sorted_values, percentile).unwrap_or(0.0)
+pub fn get_percentile_value_f32(sorted_values: &[f32], percentile: f64) -> f32 {
+    get_percentile_value(sorted_values, percentile).unwrap_or(0.0)
 }
 
 #[cfg(test)]
@@ -37,16 +37,16 @@ mod tests {
     #[test]
     fn value_sorted_returns_none_for_empty_input() {
         let values: [i32; 0] = [];
-        assert_eq!(value_sorted(&values, 50.0), None);
+        assert_eq!(get_percentile_value(&values, 50.0), None);
     }
 
     #[test]
     fn value_sorted_clamps_to_first_and_last() {
         let values = [10, 20, 30];
-        assert_eq!(value_sorted(&values, -1.0), Some(10));
-        assert_eq!(value_sorted(&values, 0.0), Some(10));
-        assert_eq!(value_sorted(&values, 100.0), Some(30));
-        assert_eq!(value_sorted(&values, 1000.0), Some(30));
+        assert_eq!(get_percentile_value(&values, -1.0), Some(10));
+        assert_eq!(get_percentile_value(&values, 0.0), Some(10));
+        assert_eq!(get_percentile_value(&values, 100.0), Some(30));
+        assert_eq!(get_percentile_value(&values, 1000.0), Some(30));
     }
 
     #[test]
@@ -56,14 +56,14 @@ mod tests {
         // p50 => position=2.0 => idx=2
         // p75 => position=3.0 => idx=3
         let values = [0, 1, 2, 3, 4];
-        assert_eq!(value_sorted(&values, 25.0), Some(1));
-        assert_eq!(value_sorted(&values, 50.0), Some(2));
-        assert_eq!(value_sorted(&values, 75.0), Some(3));
+        assert_eq!(get_percentile_value(&values, 25.0), Some(1));
+        assert_eq!(get_percentile_value(&values, 50.0), Some(2));
+        assert_eq!(get_percentile_value(&values, 75.0), Some(3));
     }
 
     #[test]
     fn value_f32_sorted_returns_zero_for_empty_input() {
         let values: [f32; 0] = [];
-        assert_eq!(value_f32_sorted(&values, 50.0), 0.0);
+        assert_eq!(get_percentile_value_f32(&values, 50.0), 0.0);
     }
 }

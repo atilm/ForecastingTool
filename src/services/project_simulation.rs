@@ -211,10 +211,10 @@ fn percentiles_from_values(values: &[f32]) -> WorkPackagePercentiles {
     let mut sorted = values.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     WorkPackagePercentiles {
-        p0: percentiles::value_f32_sorted(&sorted, 0.0),
-        p50: percentiles::value_f32_sorted(&sorted, 50.0),
-        p85: percentiles::value_f32_sorted(&sorted, 85.0),
-        p100: percentiles::value_f32_sorted(&sorted, 100.0),
+        p0: percentiles::get_percentile_value_f32(&sorted, 0.0),
+        p50: percentiles::get_percentile_value_f32(&sorted, 50.0),
+        p85: percentiles::get_percentile_value_f32(&sorted, 85.0),
+        p100: percentiles::get_percentile_value_f32(&sorted, 100.0),
     }
 }
 
@@ -223,7 +223,7 @@ fn to_simulation_percentile(
     percentile: f64,
     start_date: chrono::NaiveDate,
 ) -> SimulationPercentile {
-    let end_date = percentiles::value_sorted(sorted_end_dates, percentile).unwrap_or(start_date);
+    let end_date = percentiles::get_percentile_value(sorted_end_dates, percentile).unwrap_or(start_date);
     let days = calculate_days(start_date, end_date);
     SimulationPercentile {
         days,
