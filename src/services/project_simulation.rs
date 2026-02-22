@@ -186,13 +186,8 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     })
 }
 
-fn percentiles_from_values(
-    values: &[f32],
-) -> WorkPackagePercentiles {
-    fn make_percentile(
-        project_start_date: chrono::NaiveDate,
-        days: f32,
-    ) -> SimulationPercentile {
+fn percentiles_from_values(values: &[f32]) -> WorkPackagePercentiles {
+    fn make_percentile(project_start_date: chrono::NaiveDate, days: f32) -> SimulationPercentile {
         let end_date = end_date_from_days(project_start_date, days);
         SimulationPercentile {
             days,
@@ -513,6 +508,7 @@ mod tests {
         build_done_issue, build_story_point_issue, build_three_point_issue,
         create_calendar_without_any_free_days, on_date,
     };
+    use assert_cmd::assert;
     use chrono::NaiveDate;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -605,6 +601,60 @@ mod tests {
     }
 
     #[test]
+    fn work_package_percentiles_contain_start_and_end_dates() {
+        let mut sampler = MockSampler;
+        let project = Project {
+            name: "Dependent Project".to_string(),
+            work_packages: vec![
+                build_three_point_issue("WP0", 2.0, &[]),
+                build_three_point_issue("WP1", 4.0, &[]),
+                build_three_point_issue("WP2", 3.0, &["WP0", "WP1"]),
+                build_three_point_issue("FIN", 0.0, &["WP2"]),
+            ],
+        };
+        let calendar = create_calendar_without_any_free_days();
+
+        let project_start_date = on_date(2026, 1, 1);
+
+        let output = run_simulation(
+            &project,
+            &topological_sort(&project).unwrap(),
+            None,
+            25,
+            project_start_date,
+            &mut sampler,
+            &calendar,
+        );
+
+        let work_packages = output.unwrap().work_packages.unwrap();
+
+        let wp0 = work_packages.iter().find(|wp| wp.id == "WP0").unwrap();
+        let wp1 = work_packages.iter().find(|wp| wp.id == "WP1").unwrap();
+        let wp2 = work_packages.iter().find(|wp| wp.id == "WP2").unwrap();
+        let fin = work_packages.iter().find(|wp| wp.id == "FIN").unwrap();
+
+        assert_eq!(wp0.percentiles.p0.days, 2.0);
+        assert_eq!(wp0.percentiles.p0.start_date, project_start_date);        
+        assert_eq!(wp0.percentiles.p0.end_date, project_start_date + chrono::Duration::days(2));
+
+        let wp1_end_date = project_start_date + chrono::Duration::days(4);
+
+        assert_eq!(wp1.percentiles.p0.days, 4.0);
+        assert_eq!(wp1.percentiles.p0.start_date, project_start_date);        
+        assert_eq!(wp1.percentiles.p0.end_date, wp1_end_date);
+
+        let wp2_end_date = wp1_end_date + chrono::Duration::days(3);
+
+        assert_eq!(wp2.percentiles.p0.days, 3.0);
+        assert_eq!(wp2.percentiles.p0.start_date, wp1_end_date);        
+        assert_eq!(wp2.percentiles.p0.end_date, wp2_end_date);
+
+        assert_eq!(fin.percentiles.p0.days, 0.0);
+        assert_eq!(fin.percentiles.p0.start_date, wp2_end_date);        
+        assert_eq!(fin.percentiles.p0.end_date, wp2_end_date);
+    }
+
+    #[test]
     fn the_calendar_is_only_applied_to_issues_estimated_in_story_points() {
         // Story Points of SP-1, Duration in days of WP1, expected end-date
         let test_cases: Vec<(f32, f32, NaiveDate)> = vec![
@@ -641,8 +691,7 @@ mod tests {
             .unwrap();
 
             assert_eq!(
-                output.report.p85.end_date,
-                expected_end_date,
+                output.report.p85.end_date, expected_end_date,
                 "Test case {}: Expected end date to match the expected value",
                 idx
             );
@@ -706,9 +755,13 @@ mod tests {
         let yaml = "name: Demo\nwork_packages:\n  - id: WP-1\n    estimate:\n      type: three_point\n      optimistic: 1\n      most_likely: 2\n      pessimistic: 3\n";
         std::fs::write(&input_path, yaml).unwrap();
 
-        let output =
-            simulate_project_from_yaml_file(input_path.to_str().unwrap(), 5, on_date(2026, 1, 1), None)
-                .unwrap();
+        let output = simulate_project_from_yaml_file(
+            input_path.to_str().unwrap(),
+            5,
+            on_date(2026, 1, 1),
+            None,
+        )
+        .unwrap();
 
         assert_eq!(
             output.report.data_source,
