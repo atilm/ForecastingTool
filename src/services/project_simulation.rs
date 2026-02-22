@@ -7,6 +7,8 @@ use crate::domain::estimate::{
     Estimate, ReferenceEstimate, StoryPointEstimate, ThreePointEstimate,
 };
 
+use chrono::NaiveDate;
+
 use crate::domain::project::Project;
 use crate::services::beta_pert_sampler::BetaPertSampler;
 use crate::services::beta_pert_sampler::ThreePointSampler;
@@ -46,8 +48,6 @@ pub enum ProjectSimulationError {
     MissingEstimate(String),
     #[error("invalid velocity value")]
     InvalidVelocityValue,
-    #[error("invalid start date: {0}")]
-    InvalidStartDate(String),
     #[error("missing velocity for story point estimates")]
     MissingVelocity,
     #[error("dependency {dependency} not found for issue {issue}")]
@@ -65,7 +65,7 @@ pub enum ProjectSimulationError {
 pub fn simulate_project_from_yaml_file(
     path: &str,
     iterations: usize,
-    start_date: &str,
+    start_date: NaiveDate,
     calendar_path: Option<&str>,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
     let project = load_project_from_yaml_file(path)?;
@@ -78,7 +78,7 @@ pub fn simulate_project_from_yaml_file(
 pub fn simulate_project(
     project: &Project,
     iterations: usize,
-    start_date: &str,
+    start_date: NaiveDate,
     calendar: TeamCalendar,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
     if iterations == 0 {
@@ -94,8 +94,6 @@ pub fn simulate_project(
         None
     };
     let order = topological_sort(project)?;
-    let start_date = chrono::NaiveDate::parse_from_str(start_date, "%Y-%m-%d")
-        .map_err(|_| ProjectSimulationError::InvalidStartDate(start_date.to_string()))?;
     let mut rng = rand::thread_rng();
     let mut sampler = BetaPertSampler::new(&mut rng);
     let output = run_simulation(
@@ -514,7 +512,7 @@ mod tests {
         };
         let calendar = create_calendar_without_any_free_days();
 
-        let error = simulate_project(&project, 10, "2026-01-01", calendar).unwrap_err();
+        let error = simulate_project(&project, 10, on_date(2026, 1, 1), calendar).unwrap_err();
         assert!(matches!(error, ProjectSimulationError::CyclicDependencies));
     }
 
@@ -681,7 +679,7 @@ mod tests {
         std::fs::write(&input_path, yaml).unwrap();
 
         let output =
-            simulate_project_from_yaml_file(input_path.to_str().unwrap(), 5, "2026-01-01", None)
+            simulate_project_from_yaml_file(input_path.to_str().unwrap(), 5, on_date(2026, 1, 1), None)
                 .unwrap();
 
         assert_eq!(
