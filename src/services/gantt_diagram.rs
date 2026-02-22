@@ -106,15 +106,15 @@ fn make_milestone_line(issue: &str, name: &str, date: NaiveDate) -> String {
 
 fn percentile_value(work_package: &WorkPackageSimulation, percentile: f32) -> f32 {
     if percentile <= 0.0 {
-        return work_package.percentiles.p0;
+        return work_package.percentiles.p0.days;
     }
     if percentile <= 50.0 {
-        return work_package.percentiles.p50;
+        return work_package.percentiles.p50.days;
     }
     if percentile <= 85.0 {
-        return work_package.percentiles.p85;
+        return work_package.percentiles.p85.days;
     }
-    work_package.percentiles.p100
+    work_package.percentiles.p100.days
 }
 
 fn add_days(start_date: NaiveDate, days: f32) -> NaiveDate {
@@ -130,6 +130,14 @@ mod tests {
         SimulationOutput, SimulationPercentile, SimulationReport, WorkPackagePercentiles,
         WorkPackageSimulation,
     };
+
+    fn wp_percentile(start_date: NaiveDate, days: f32) -> SimulationPercentile {
+        SimulationPercentile {
+            days,
+            start_date,
+            end_date: super::add_days(start_date, days),
+        }
+    }
 
     fn build_issue(id: &str, deps: &[&str]) -> Issue {
         let mut issue = Issue::new();
@@ -185,19 +193,19 @@ mod tests {
                 WorkPackageSimulation {
                     id: "A".to_string(),
                     percentiles: WorkPackagePercentiles {
-                        p0: 1.0,
-                        p50: 1.0,
-                        p85: 1.0,
-                        p100: 1.0,
+                        p0: wp_percentile(start_date, 1.0),
+                        p50: wp_percentile(start_date, 1.0),
+                        p85: wp_percentile(start_date, 1.0),
+                        p100: wp_percentile(start_date, 1.0),
                     },
                 },
                 WorkPackageSimulation {
                     id: "B".to_string(),
                     percentiles: WorkPackagePercentiles {
-                        p0: 3.0,
-                        p50: 3.0,
-                        p85: 3.0,
-                        p100: 3.0,
+                        p0: wp_percentile(start_date, 3.0),
+                        p50: wp_percentile(start_date, 3.0),
+                        p85: wp_percentile(start_date, 3.0),
+                        p100: wp_percentile(start_date, 3.0),
                     },
                 },
             ]),

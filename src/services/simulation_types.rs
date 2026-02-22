@@ -24,10 +24,10 @@ pub struct SimulationReport {
 
 #[derive(Serialize, Debug, Clone)]
 pub struct WorkPackagePercentiles {
-    pub p0: f32,
-    pub p50: f32,
-    pub p85: f32,
-    pub p100: f32,
+    pub p0: SimulationPercentile,
+    pub p50: SimulationPercentile,
+    pub p85: SimulationPercentile,
+    pub p100: SimulationPercentile,
 }
 
 #[derive(Serialize, Debug, Clone)]

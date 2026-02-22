@@ -179,30 +179,52 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         .map(|date| calculate_days(start_date, *date))
         .collect();
 
-    let output = SimulationOutput {
+    Ok(SimulationOutput {
         report,
         results,
         work_packages: Some(work_packages),
-    };
-    Ok(output)
+    })
 }
 
-fn percentiles_from_values(values: &[f32]) -> WorkPackagePercentiles {
+fn percentiles_from_values(
+    values: &[f32],
+) -> WorkPackagePercentiles {
+    fn make_percentile(
+        project_start_date: chrono::NaiveDate,
+        days: f32,
+    ) -> SimulationPercentile {
+        let end_date = end_date_from_days(project_start_date, days);
+        SimulationPercentile {
+            days,
+            start_date: project_start_date,
+            end_date,
+        }
+    }
+
+    let dummy_start_date = chrono::NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+
     if values.is_empty() {
         return WorkPackagePercentiles {
-            p0: 0.0,
-            p50: 0.0,
-            p85: 0.0,
-            p100: 0.0,
+            p0: make_percentile(dummy_start_date, 0.0),
+            p50: make_percentile(dummy_start_date, 0.0),
+            p85: make_percentile(dummy_start_date, 0.0),
+            p100: make_percentile(dummy_start_date, 0.0),
         };
     }
+
     let mut sorted = values.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let p0_days = percentiles::get_percentile_value_f32(&sorted, 0.0);
+    let p50_days = percentiles::get_percentile_value_f32(&sorted, 50.0);
+    let p85_days = percentiles::get_percentile_value_f32(&sorted, 85.0);
+    let p100_days = percentiles::get_percentile_value_f32(&sorted, 100.0);
+
     WorkPackagePercentiles {
-        p0: percentiles::get_percentile_value_f32(&sorted, 0.0),
-        p50: percentiles::get_percentile_value_f32(&sorted, 50.0),
-        p85: percentiles::get_percentile_value_f32(&sorted, 85.0),
-        p100: percentiles::get_percentile_value_f32(&sorted, 100.0),
+        p0: make_percentile(dummy_start_date, p0_days),
+        p50: make_percentile(dummy_start_date, p50_days),
+        p85: make_percentile(dummy_start_date, p85_days),
+        p100: make_percentile(dummy_start_date, p100_days),
     }
 }
 
@@ -223,6 +245,11 @@ fn to_simulation_percentile(
 
 fn calculate_days(start_date: chrono::NaiveDate, end_date: chrono::NaiveDate) -> f32 {
     (end_date - start_date).num_days().max(0) as f32
+}
+
+fn end_date_from_days(start_date: chrono::NaiveDate, days: f32) -> chrono::NaiveDate {
+    let days = days.ceil().max(0.0) as i64;
+    start_date + chrono::Duration::days(days)
 }
 
 fn end_date_from_capacity_days(
