@@ -7,6 +7,7 @@ use rand::seq::SliceRandom;
 use thiserror::Error;
 
 use crate::services::histogram::{HistogramError, write_histogram_png};
+use crate::services::percentiles;
 use crate::services::simulation_types::{SimulationOutput, SimulationPercentile, SimulationReport};
 use crate::services::team_calendar_yaml::{
     TeamCalendarYamlError, load_team_calendar_from_yaml_dir,
@@ -124,10 +125,10 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
     }
     results.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-    let p0_days = percentile_value(&results, 0.0);
-    let p50_days = percentile_value(&results, 50.0);
-    let p85_days = percentile_value(&results, 85.0);
-    let p100_days = percentile_value(&results, 100.0);
+    let p0_days = percentiles::value_f32_sorted(&results, 0.0);
+    let p50_days = percentiles::value_f32_sorted(&results, 50.0);
+    let p85_days = percentiles::value_f32_sorted(&results, 85.0);
+    let p100_days = percentiles::value_f32_sorted(&results, 100.0);
 
     let report = SimulationReport {
         data_source: String::new(),
@@ -204,21 +205,6 @@ fn simulate_single_run<R: Rng + ?Sized>(
     }
 
     days
-}
-
-fn percentile_value(sorted_values: &[f32], percentile: f64) -> f32 {
-    if sorted_values.is_empty() {
-        return 0.0;
-    }
-    if percentile <= 0.0 {
-        return sorted_values[0];
-    }
-    if percentile >= 100.0 {
-        return sorted_values[sorted_values.len() - 1];
-    }
-    let position = (percentile / 100.0) * (sorted_values.len() as f64 - 1.0);
-    let index = position.round() as usize;
-    sorted_values[index]
 }
 
 fn end_date_from_days(start_date: NaiveDate, days: f32) -> NaiveDate {

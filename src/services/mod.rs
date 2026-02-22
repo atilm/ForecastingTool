@@ -4,6 +4,7 @@ pub mod data_source;
 pub mod gantt_diagram;
 pub mod histogram;
 pub mod jira_api;
+pub mod percentiles;
 pub mod project_flow_diagram;
 pub mod project_simulation;
 pub mod project_yaml;

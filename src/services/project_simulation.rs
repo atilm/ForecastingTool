@@ -11,6 +11,7 @@ use crate::domain::project::Project;
 use crate::services::beta_pert_sampler::BetaPertSampler;
 use crate::services::beta_pert_sampler::ThreePointSampler;
 use crate::services::histogram::HistogramError;
+use crate::services::percentiles;
 use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
 use crate::services::simulation_types::{
     SimulationOutput, SimulationPercentile, SimulationReport, WorkPackagePercentiles,
@@ -210,10 +211,10 @@ fn percentiles_from_values(values: &[f32]) -> WorkPackagePercentiles {
     let mut sorted = values.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     WorkPackagePercentiles {
-        p0: percentile_f32_value(&sorted, 0.0),
-        p50: percentile_f32_value(&sorted, 50.0),
-        p85: percentile_f32_value(&sorted, 85.0),
-        p100: percentile_f32_value(&sorted, 100.0),
+        p0: percentiles::value_f32_sorted(&sorted, 0.0),
+        p50: percentiles::value_f32_sorted(&sorted, 50.0),
+        p85: percentiles::value_f32_sorted(&sorted, 85.0),
+        p100: percentiles::value_f32_sorted(&sorted, 100.0),
     }
 }
 
@@ -222,33 +223,12 @@ fn to_simulation_percentile(
     percentile: f64,
     start_date: chrono::NaiveDate,
 ) -> SimulationPercentile {
-    let end_date = percentile_value(sorted_end_dates, percentile).unwrap_or(start_date);
+    let end_date = percentiles::value_sorted(sorted_end_dates, percentile).unwrap_or(start_date);
     let days = calculate_days(start_date, end_date);
     SimulationPercentile {
         days,
         date: end_date.format("%Y-%m-%d").to_string(),
     }
-}
-
-fn percentile_f32_value(sorted_values: &[f32], percentile: f64) -> f32 {
-    percentile_value(sorted_values, percentile).unwrap_or(0.0)
-}
-
-fn percentile_value<T: Copy>(sorted_values: &[T], percentile: f64) -> Option<T> {
-    if sorted_values.is_empty() {
-        return None;
-    }
-
-    let index = if percentile <= 0.0 {
-        0
-    } else if percentile >= 100.0 {
-        sorted_values.len() - 1
-    } else {
-        let position = (percentile / 100.0) * (sorted_values.len() as f64 - 1.0);
-        position.round() as usize
-    };
-
-    sorted_values.get(index).copied()
 }
 
 fn calculate_days(start_date: chrono::NaiveDate, end_date: chrono::NaiveDate) -> f32 {
