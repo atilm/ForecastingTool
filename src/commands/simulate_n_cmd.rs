@@ -1,6 +1,6 @@
 use crate::commands::base_commands::Commands;
 use crate::commands::report_format::format_simulation_report;
-use crate::services::simulation::simulate_from_throughput_file;
+use crate::services::throughput_simulation::simulate_from_throughput_file;
 
 pub fn simulate_n_command(cmd: Commands) {
     if let Commands::SimulateN {

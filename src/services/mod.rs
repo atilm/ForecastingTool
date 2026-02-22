@@ -8,7 +8,7 @@ pub mod percentiles;
 pub mod project_flow_diagram;
 pub mod project_simulation;
 pub mod project_yaml;
-pub mod simulation;
+pub mod throughput_simulation;
 pub mod simulation_types;
 pub mod team_calendar_yaml;
 pub mod throughput_plot;
