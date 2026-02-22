@@ -14,15 +14,9 @@ pub enum TeamCalendarYamlError {
     #[error("calendar directory contains no yaml files: {0}")]
     DirectoryEmpty(PathBuf),
     #[error("failed to list calendar directory {path}: {source}")]
-    ReadDir {
-        path: PathBuf,
-        source: io::Error,
-    },
+    ReadDir { path: PathBuf, source: io::Error },
     #[error("failed to read calendar yaml file {path}: {source}")]
-    ReadFile {
-        path: PathBuf,
-        source: io::Error,
-    },
+    ReadFile { path: PathBuf, source: io::Error },
     #[error("failed to parse calendar yaml file {path}: {source}")]
     Parse {
         path: PathBuf,
@@ -32,9 +26,7 @@ pub enum TeamCalendarYamlError {
     InvalidWeekday { path: PathBuf, value: String },
     #[error("invalid date format in {path}: {value} (expected YYYY-MM-DD)")]
     InvalidDate { path: PathBuf, value: String },
-    #[error(
-        "invalid date range in {path}: start_date {start_date} is after end_date {end_date}"
-    )]
+    #[error("invalid date range in {path}: start_date {start_date} is after end_date {end_date}")]
     InvalidDateRange {
         path: PathBuf,
         start_date: NaiveDate,
@@ -54,7 +46,7 @@ struct FreeDateRangeRecord {
     end_date: String,
 }
 
-/// Loads team calendar from YAML files in the specified directory, 
+/// Loads team calendar from YAML files in the specified directory,
 /// or returns a default calendar with free weekends if no path is provided.
 pub fn load_team_calendar_if_provided(
     calendar_path: Option<&str>,
@@ -89,10 +81,11 @@ pub fn load_team_calendar_from_yaml_dir<P: AsRef<Path>>(
     }
 
     let mut yaml_files = Vec::new();
-    let read_dir = std::fs::read_dir(dir_path).map_err(|source| TeamCalendarYamlError::ReadDir {
-        path: dir_path.to_path_buf(),
-        source,
-    })?;
+    let read_dir =
+        std::fs::read_dir(dir_path).map_err(|source| TeamCalendarYamlError::ReadDir {
+            path: dir_path.to_path_buf(),
+            source,
+        })?;
     for entry in read_dir {
         let entry = entry.map_err(|source| TeamCalendarYamlError::ReadDir {
             path: dir_path.to_path_buf(),
@@ -105,7 +98,9 @@ pub fn load_team_calendar_from_yaml_dir<P: AsRef<Path>>(
     }
     yaml_files.sort();
     if yaml_files.is_empty() {
-        return Err(TeamCalendarYamlError::DirectoryEmpty(dir_path.to_path_buf()));
+        return Err(TeamCalendarYamlError::DirectoryEmpty(
+            dir_path.to_path_buf(),
+        ));
     }
 
     let mut team_calendar = TeamCalendar::new();
@@ -124,10 +119,11 @@ fn is_yaml_file(path: &Path) -> bool {
 }
 
 fn load_calendar_from_yaml_file(path: &Path) -> Result<Calendar, TeamCalendarYamlError> {
-    let contents = std::fs::read_to_string(path).map_err(|source| TeamCalendarYamlError::ReadFile {
-        path: path.to_path_buf(),
-        source,
-    })?;
+    let contents =
+        std::fs::read_to_string(path).map_err(|source| TeamCalendarYamlError::ReadFile {
+            path: path.to_path_buf(),
+            source,
+        })?;
     deserialize_calendar_from_yaml_str(&contents, path)
 }
 
@@ -135,12 +131,11 @@ fn deserialize_calendar_from_yaml_str(
     input: &str,
     origin_path: &Path,
 ) -> Result<Calendar, TeamCalendarYamlError> {
-    let record: CalendarRecord = serde_yaml::from_str(input).map_err(|source| {
-        TeamCalendarYamlError::Parse {
+    let record: CalendarRecord =
+        serde_yaml::from_str(input).map_err(|source| TeamCalendarYamlError::Parse {
             path: origin_path.to_path_buf(),
             source,
-        }
-    })?;
+        })?;
 
     let free_weekdays = record
         .free_weekdays
@@ -187,11 +182,10 @@ fn free_date_range_from_record(
 }
 
 fn parse_date(value: &str, origin_path: &Path) -> Result<NaiveDate, TeamCalendarYamlError> {
-    NaiveDate::parse_from_str(value, "%Y-%m-%d")
-        .map_err(|_| TeamCalendarYamlError::InvalidDate {
-            path: origin_path.to_path_buf(),
-            value: value.to_string(),
-        })
+    NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|_| TeamCalendarYamlError::InvalidDate {
+        path: origin_path.to_path_buf(),
+        value: value.to_string(),
+    })
 }
 
 fn parse_weekday(value: &str) -> Option<Weekday> {
@@ -255,10 +249,8 @@ mod tests {
     fn returns_error_on_invalid_date_format() {
         let temp = assert_fs::TempDir::new().unwrap();
         let file = temp.child("calendar.yaml");
-        file.write_str(
-            "free_date_ranges:\n  - start_date: 2026-02-xx\n    end_date: 2026-02-20\n",
-        )
-        .unwrap();
+        file.write_str("free_date_ranges:\n  - start_date: 2026-02-xx\n    end_date: 2026-02-20\n")
+            .unwrap();
 
         let err = load_team_calendar_from_yaml_dir(temp.path()).unwrap_err();
         assert!(matches!(err, TeamCalendarYamlError::InvalidDate { .. }));
@@ -268,13 +260,14 @@ mod tests {
     fn returns_error_on_invalid_date_range_when_start_after_end() {
         let temp = assert_fs::TempDir::new().unwrap();
         let file = temp.child("calendar.yaml");
-        file.write_str(
-            "free_date_ranges:\n  - start_date: 2026-02-21\n    end_date: 2026-02-20\n",
-        )
-        .unwrap();
+        file.write_str("free_date_ranges:\n  - start_date: 2026-02-21\n    end_date: 2026-02-20\n")
+            .unwrap();
 
         let err = load_team_calendar_from_yaml_dir(temp.path()).unwrap_err();
-        assert!(matches!(err, TeamCalendarYamlError::InvalidDateRange { .. }));
+        assert!(matches!(
+            err,
+            TeamCalendarYamlError::InvalidDateRange { .. }
+        ));
     }
 
     #[test]
@@ -284,9 +277,7 @@ mod tests {
             .write_str("free_weekdays: [Mon]\n")
             .unwrap();
         temp.child("b.yml")
-            .write_str(
-                "free_date_ranges:\n  - start_date: 2026-02-19\n    end_date: 2026-02-20\n",
-            )
+            .write_str("free_date_ranges:\n  - start_date: 2026-02-19\n    end_date: 2026-02-20\n")
             .unwrap();
 
         let team_calendar = load_team_calendar_from_yaml_dir(temp.path()).unwrap();
@@ -298,5 +289,47 @@ mod tests {
         assert_eq!(team_calendar.get_capacity(monday), 0.5);
         assert_eq!(team_calendar.get_capacity(wednesday), 1.0);
         assert_eq!(team_calendar.get_capacity(thursday), 0.5);
+    }
+
+    #[test]
+    fn loads_team_calendar_from_yaml_directory() {
+        let temp = assert_fs::TempDir::new().unwrap();
+
+        temp.child("calendar_1.yaml")
+            .write_str(
+                r#"free_weekdays: [Mon, Tue]
+free_date_ranges:
+  - start_date: 2026-02-27
+    end_date: 2026-02-27
+"#,
+            )
+            .unwrap();
+
+        temp.child("calendar_2.yaml")
+            .write_str(
+                r#"free_weekdays: [Wed]
+free_date_ranges:
+  - start_date: 2026-02-19
+    end_date: 2026-02-20
+"#,
+            )
+            .unwrap();
+
+        let team_calendar = load_team_calendar_from_yaml_dir(temp.path()).unwrap();
+        assert_eq!(team_calendar.calendars.len(), 2);
+
+        let mon = NaiveDate::from_ymd_opt(2026, 2, 16).unwrap();
+        let tue = NaiveDate::from_ymd_opt(2026, 2, 17).unwrap();
+        let wed = NaiveDate::from_ymd_opt(2026, 2, 18).unwrap();
+        let thu = NaiveDate::from_ymd_opt(2026, 2, 19).unwrap();
+        let fri = NaiveDate::from_ymd_opt(2026, 2, 20).unwrap();
+        let fri_27 = NaiveDate::from_ymd_opt(2026, 2, 27).unwrap();
+
+        assert_eq!(team_calendar.get_capacity(mon), 0.5);
+        assert_eq!(team_calendar.get_capacity(tue), 0.5);
+        assert_eq!(team_calendar.get_capacity(wed), 0.5);
+        assert_eq!(team_calendar.get_capacity(thu), 0.5);
+        assert_eq!(team_calendar.get_capacity(fri), 0.5);
+        assert_eq!(team_calendar.get_capacity(fri_27), 0.5);
     }
 }
