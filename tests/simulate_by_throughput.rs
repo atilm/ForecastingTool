@@ -116,7 +116,7 @@ async fn simulate_by_throughput_parses_calendar_dir() {
     .unwrap();
   let p50_date = value
     .get("p50")
-    .and_then(|v| v.get("date"))
+    .and_then(|v| v.get("end_date"))
     .and_then(|v| v.as_str())
     .unwrap();
 

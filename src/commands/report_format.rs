@@ -36,7 +36,7 @@ fn format_percentile_row(
         "{label} | {days} | {date}",
         label = label,
         days = format!("{:.2}", percentile.days),
-        date = percentile.date.format("%Y-%m-%d")
+        date = percentile.end_date.format("%Y-%m-%d")
     )
 }
 
@@ -47,27 +47,33 @@ mod tests {
     use chrono::NaiveDate;
 
     fn build_report() -> SimulationReport {
+        let start_date = NaiveDate::from_ymd_opt(2026, 2, 1).unwrap();
+        
         SimulationReport {
             data_source: "input.yaml".to_string(),
-            start_date: NaiveDate::from_ymd_opt(2026, 2, 1).unwrap(),
+            start_date,
             velocity: Some(2.5),
             iterations: 100,
             simulated_items: 12,
             p0: SimulationPercentile {
                 days: 1.0,
-                date: NaiveDate::from_ymd_opt(2026, 2, 2).unwrap(),
+                start_date,
+                end_date: NaiveDate::from_ymd_opt(2026, 2, 2).unwrap(),
             },
             p50: SimulationPercentile {
                 days: 5.5,
-                date: NaiveDate::from_ymd_opt(2026, 2, 6).unwrap(),
+                start_date,
+                end_date: NaiveDate::from_ymd_opt(2026, 2, 6).unwrap(),
             },
             p85: SimulationPercentile {
                 days: 10.0,
-                date: NaiveDate::from_ymd_opt(2026, 2, 11).unwrap(),
+                start_date,
+                end_date: NaiveDate::from_ymd_opt(2026, 2, 11).unwrap(),
             },
             p100: SimulationPercentile {
                 days: 15.25,
-                date: NaiveDate::from_ymd_opt(2026, 2, 16).unwrap(),
+                start_date,
+                end_date: NaiveDate::from_ymd_opt(2026, 2, 16).unwrap(),
             },
         }
     }

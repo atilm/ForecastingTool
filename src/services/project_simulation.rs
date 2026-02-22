@@ -216,7 +216,8 @@ fn to_simulation_percentile(
     let days = calculate_days(start_date, end_date);
     SimulationPercentile {
         days,
-        date: end_date,
+        start_date,
+        end_date,
     }
 }
 
@@ -613,7 +614,7 @@ mod tests {
             .unwrap();
 
             assert_eq!(
-                output.report.p85.date,
+                output.report.p85.end_date,
                 expected_end_date,
                 "Test case {}: Expected end date to match the expected value",
                 idx

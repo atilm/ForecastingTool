@@ -5,7 +5,8 @@ use chrono::NaiveDate;
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct SimulationPercentile {
     pub days: f32,
-    pub date: NaiveDate,
+    pub start_date: NaiveDate,
+    pub end_date: NaiveDate,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -50,14 +51,16 @@ mod tests {
     fn naive_date_serializes_and_deserializes_as_yyyy_mm_dd_in_yaml() {
         let percentile = SimulationPercentile {
             days: 12.5,
-            date: NaiveDate::from_ymd_opt(2026, 2, 22).unwrap(),
+            start_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+            end_date: NaiveDate::from_ymd_opt(2026, 2, 22).unwrap(),
         };
 
         let yaml = serde_yaml::to_string(&percentile).unwrap();
         assert!(yaml.contains("2026-02-22"));
 
         let decoded: SimulationPercentile = serde_yaml::from_str(&yaml).unwrap();
-        assert_eq!(decoded.date, percentile.date);
+        assert_eq!(decoded.start_date, percentile.start_date);
+        assert_eq!(decoded.end_date, percentile.end_date);
         assert_eq!(decoded.days, percentile.days);
     }
 }

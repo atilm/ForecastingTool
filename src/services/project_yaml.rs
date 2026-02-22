@@ -477,16 +477,20 @@ iterations: 10
 simulated_items: 3
 p0:
   days: 1
-  date: "2026-01-02"
+  start_date: "2026-01-01"
+  end_date: "2026-01-02"
 p50:
   days: 2
-  date: "2026-01-03"
+  start_date: "2026-01-01"
+  end_date: "2026-01-03"
 p85:
   days: 3
-  date: "2026-01-04"
+  start_date: "2026-01-01"
+  end_date: "2026-01-04"
 p100:
   days: 4
-  date: "2026-01-05"
+  start_date: "2026-01-01"
+  end_date: "2026-01-05"
 "#;
 
         let report_file = assert_fs::NamedTempFile::new("report.yaml").unwrap();
