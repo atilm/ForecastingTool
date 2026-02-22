@@ -19,8 +19,6 @@ pub enum SimulationError {
     ReadThroughput(#[from] std::io::Error),
     #[error("failed to parse throughput yaml: {0}")]
     ParseThroughput(#[from] ThroughputYamlError),
-    #[error("invalid start date: {0}")]
-    InvalidStartDate(String),
     #[error("iterations must be greater than zero")]
     InvalidIterations,
     #[error("number of issues must be greater than zero")]
@@ -39,14 +37,12 @@ pub(crate) fn simulate_from_throughput_file(
     throughput_path: &str,
     iterations: usize,
     number_of_issues: usize,
-    start_date: &str,
+    start_date: NaiveDate,
     histogram_path: &str,
     calendar_path: Option<&str>,
 ) -> Result<SimulationReport, SimulationError> {
     let throughput_yaml = std::fs::read_to_string(throughput_path)?;
     let throughput = deserialize_throughput_from_yaml_str(&throughput_yaml)?;
-    let start_date = NaiveDate::parse_from_str(start_date, "%Y-%m-%d")
-        .map_err(|_| SimulationError::InvalidStartDate(start_date.to_string()))?;
 
     let calendar = load_team_calendar_if_provided(calendar_path)?;
 
@@ -203,6 +199,7 @@ fn end_date_from_days(start_date: NaiveDate, days: f32) -> NaiveDate {
 mod tests {
     use super::*;
     use crate::domain::calendar::Calendar;
+    use crate::test_support::on_date;
     use chrono::NaiveDate;
     use chrono::Weekday;
     use rand::SeedableRng;
@@ -282,7 +279,7 @@ mod tests {
             input_path.to_str().unwrap(),
             7,
             4,
-            "2026-01-01",
+            on_date(2026,1,1),
             histogram_path.to_str().unwrap(),
             None,
         )

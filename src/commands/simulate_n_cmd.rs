@@ -1,6 +1,7 @@
 use crate::commands::base_commands::Commands;
 use crate::commands::report_format::format_simulation_report;
 use crate::services::throughput_simulation::simulate_from_throughput_file;
+use crate::commands::date_parsing;
 
 pub fn simulate_n_command(cmd: Commands) {
     if let Commands::SimulateN {
@@ -12,12 +13,17 @@ pub fn simulate_n_command(cmd: Commands) {
         calendar_dir,
     } = cmd
     {
+        let start_date = date_parsing::parse_date(&start_date).unwrap_or_else(|e| {
+            eprintln!("Failed to parse start date: {e}");
+            std::process::exit(1);
+        });
+
         let histogram_path = format!("{output}.png");
         let simulation = match simulate_from_throughput_file(
             &throughput,
             iterations,
             number_of_issues,
-            &start_date,
+            start_date,
             &histogram_path,
             calendar_dir.as_deref(),
         ) {
