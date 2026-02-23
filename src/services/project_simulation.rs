@@ -9,6 +9,7 @@ use crate::domain::estimate::{
 
 use chrono::NaiveDate;
 
+use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
 use crate::services::beta_pert_sampler::BetaPertSampler;
 use crate::services::beta_pert_sampler::ThreePointSampler;
@@ -131,20 +132,28 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     for _ in 0..iterations {
         let mut earliest_finish: HashMap<String, chrono::NaiveDate> = HashMap::new();
         for id in order {
-            let node = nodes.get(id).ok_or(ProjectSimulationError::MissingIssueId)?;
+            let node = nodes
+                .get(id)
+                .ok_or(ProjectSimulationError::MissingIssueId)?;
 
-            let issue_start_date = node
-                .dependencies
-                .iter()
-                .filter_map(|dep| earliest_finish.get(dep))
-                .max()
-                .copied()
-                .unwrap_or(start_date);
+            let issue_start_date = if let Some(start_date) = node.start_date {
+                start_date
+            } else {
+                node.dependencies
+                    .iter()
+                    .filter_map(|dep| earliest_finish.get(dep))
+                    .max()
+                    .copied()
+                    .unwrap_or(start_date)
+            };
 
-            let (duration_days, apply_calendar) =
-                sample_duration(&node.estimate, velocity, sampler, &node.id)?;
-            let issue_end_date =
-                calculate_end_date(issue_start_date, duration_days, apply_calendar, calendar)?;
+            let issue_end_date = if let Some(done_date) = node.done_date {
+                done_date
+            } else {
+                let (duration_days, apply_calendar) =
+                    sample_duration(&node.estimate, velocity, sampler, &node.id)?;
+                calculate_end_date(issue_start_date, duration_days, apply_calendar, calendar)?
+            };
 
             let elapsed_days = calculate_days(issue_start_date, issue_end_date);
             samples_by_id
@@ -183,8 +192,12 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         .values()
         .map(|node| WorkPackageSimulation {
             id: node.id.clone(),
+            status: node.status.clone(),
             percentiles: percentiles_from_samples(
-                samples_by_id.get(&node.id).map(Vec::as_slice).unwrap_or(&[]),
+                samples_by_id
+                    .get(&node.id)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]),
                 start_date,
             ),
         })
@@ -230,7 +243,8 @@ fn percentiles_from_samples(
 
     let mut sorted = samples.to_vec();
     sorted.sort_by(|a, b| {
-        a.duration_days.partial_cmp(&b.duration_days)
+        a.duration_days
+            .partial_cmp(&b.duration_days)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
@@ -303,6 +317,9 @@ fn build_simulation_nodes(
             .as_ref()
             .map(|issue_id| issue_id.id.clone())
             .ok_or(ProjectSimulationError::MissingIssueId)?;
+        let status = issue.status.clone().unwrap_or(IssueStatus::ToDo);
+        let start_date = issue.start_date;
+        let done_date = issue.done_date;
         let estimate = issue
             .estimate
             .clone()
@@ -317,6 +334,9 @@ fn build_simulation_nodes(
             id.clone(),
             SimulationNode {
                 id,
+                status,
+                start_date,
+                done_date,
                 estimate,
                 dependencies,
             },
@@ -501,6 +521,9 @@ fn fibonacci_bounds(value: f32) -> (f32, f32) {
 #[derive(Debug, Clone)]
 struct SimulationNode {
     id: String,
+    status: IssueStatus,
+    start_date: Option<chrono::NaiveDate>,
+    done_date: Option<chrono::NaiveDate>,
     estimate: Estimate,
     dependencies: Vec<String>,
 }
@@ -520,9 +543,10 @@ fn project_has_story_points(project: &Project) -> bool {
 mod tests {
     use super::*;
     use crate::domain::issue::IssueId;
-    use crate::test_support::MockSampler;
+    use crate::test_support::{MockSampler, build_in_progress_story_point_issue};
     use crate::test_support::{
-        build_done_issue, build_story_point_issue, build_three_point_issue,
+        build_done_issue, build_done_issue_with_deps, build_story_point_issue,
+        build_story_point_issue_with_start_date, build_three_point_issue,
         create_calendar_without_any_free_days, on_date,
     };
     use chrono::NaiveDate;
@@ -554,6 +578,139 @@ mod tests {
 
         let error = simulate_project(&project, 10, on_date(2026, 1, 1), calendar).unwrap_err();
         assert!(matches!(error, ProjectSimulationError::CyclicDependencies));
+    }
+
+    #[test]
+    fn simulation_handles_different_status_values_correctly() {
+        let simulation_start = on_date(2026, 2, 16); // Monday
+
+        let mut sampler = MockSampler;
+        let project = Project {
+            name: "Dependent Project".to_string(),
+            work_packages: vec![
+                build_done_issue_with_deps(
+                    "SP-0",
+                    None,
+                    8.0,
+                    on_date(2026, 1, 5),
+                    on_date(2026, 1, 8),
+                ), // velocity of 8 points/4 days
+                build_done_issue_with_deps(
+                    "SP-1",
+                    Some(&["SP-0"]),
+                    8.0,
+                    on_date(2026, 1, 9),
+                    on_date(2026, 1, 14),
+                ),
+                build_done_issue_with_deps(
+                    "SP-2",
+                    Some(&["SP-1"]),
+                    8.0,
+                    on_date(2026, 1, 15),
+                    on_date(2026, 1, 20),
+                ),
+                build_story_point_issue_with_start_date("SP-3", 8.0, simulation_start, &["SP-2"]),
+                build_story_point_issue("SP-4", 8.0, &["SP-3"]),
+                build_story_point_issue("SP-5", 8.0, &["SP-4"]),
+            ],
+        };
+        let calendar = TeamCalendar::new(); // default calendar which assumes weekends to be free
+
+        let ignored_simulation_start = on_date(2000, 1, 1);
+        let output = run_simulation(
+            &project,
+            &topological_sort(&project).unwrap(),
+            Some(calculate_project_velocity(&project, &calendar).unwrap()),
+            1,
+            ignored_simulation_start,
+            &mut sampler,
+            &calendar,
+        )
+        .unwrap();
+
+        let velocity = output.report.velocity.unwrap();
+        assert_eq!(velocity, 2.0); // 8 points / 4 days = 2 points/day
+
+        let work_packages = output.work_packages.unwrap();
+        let wp0 = work_packages.iter().find(|wp| wp.id == "SP-0").unwrap();
+        let wp1 = work_packages.iter().find(|wp| wp.id == "SP-1").unwrap();
+        let wp2 = work_packages.iter().find(|wp| wp.id == "SP-2").unwrap();
+        let wp3 = work_packages.iter().find(|wp| wp.id == "SP-3").unwrap();
+        let wp4 = work_packages.iter().find(|wp| wp.id == "SP-4").unwrap();
+        let wp5 = work_packages.iter().find(|wp| wp.id == "SP-5").unwrap();
+
+        assert!(wp0.status == IssueStatus::Done);
+        assert!(wp1.status == IssueStatus::Done);
+        assert!(wp2.status == IssueStatus::Done);
+        assert!(wp3.status == IssueStatus::ToDo);
+        assert!(wp4.status == IssueStatus::ToDo);
+        assert!(wp5.status == IssueStatus::ToDo);
+
+        assert_eq!(wp0.percentiles.p0.start_date, on_date(2026, 1, 5));
+        assert_eq!(wp0.percentiles.p0.end_date, on_date(2026, 1, 8));
+        assert_eq!(wp1.percentiles.p0.start_date, on_date(2026, 1, 9));
+        assert_eq!(wp1.percentiles.p0.end_date, on_date(2026, 1, 14));
+        assert_eq!(wp2.percentiles.p0.start_date, on_date(2026, 1, 15));
+        assert_eq!(wp2.percentiles.p0.end_date, on_date(2026, 1, 20));
+        assert_eq!(wp3.percentiles.p0.start_date, on_date(2026, 2, 16)); // starts on simulation start date
+        assert_eq!(wp3.percentiles.p0.end_date, on_date(2026, 2, 20));
+        assert_eq!(wp4.percentiles.p0.start_date, on_date(2026, 2, 20));
+        assert_eq!(wp4.percentiles.p0.end_date, on_date(2026, 2, 26));
+        assert_eq!(wp5.percentiles.p0.start_date, on_date(2026, 2, 26));
+        assert_eq!(wp5.percentiles.p0.end_date, on_date(2026, 3, 4));
+    }
+
+    #[test]
+    fn simulation_handles_in_progress_status_correctly() {
+        let feb_sixteen = on_date(2026, 2, 16); // Monday
+
+        let mut sampler = MockSampler;
+        let project = Project {
+            name: "Dependent Project".to_string(),
+            work_packages: vec![
+                build_done_issue_with_deps(
+                    "SP-0",
+                    None,
+                    8.0,
+                    on_date(2026, 1, 5),
+                    on_date(2026, 1, 8),
+                ),
+                build_in_progress_story_point_issue("SP-1", 8.0, feb_sixteen, &["SP-0"]),
+                build_story_point_issue("SP-2", 8.0, &["SP-1"]),
+            ],
+        };
+        let calendar = TeamCalendar::new(); // default calendar which assumes weekends to be free
+
+        let ignored_simulation_start = on_date(2000, 1, 1);
+        let output = run_simulation(
+            &project,
+            &topological_sort(&project).unwrap(),
+            Some(calculate_project_velocity(&project, &calendar).unwrap()),
+            1,
+            ignored_simulation_start,
+            &mut sampler,
+            &calendar,
+        )
+        .unwrap();
+
+        let velocity = output.report.velocity.unwrap();
+        assert_eq!(velocity, 2.0); // 8 points / 4 days = 2 points/day
+
+        let work_packages = output.work_packages.unwrap();
+        let wp0 = work_packages.iter().find(|wp| wp.id == "SP-0").unwrap();
+        let wp1 = work_packages.iter().find(|wp| wp.id == "SP-1").unwrap();
+        let wp2 = work_packages.iter().find(|wp| wp.id == "SP-2").unwrap();
+
+        assert!(wp0.status == IssueStatus::Done);
+        assert!(wp1.status == IssueStatus::InProgress);
+        assert!(wp2.status == IssueStatus::ToDo);
+
+        assert_eq!(wp0.percentiles.p0.start_date, on_date(2026, 1, 5));
+        assert_eq!(wp0.percentiles.p0.end_date, on_date(2026, 1, 8));
+        assert_eq!(wp1.percentiles.p0.start_date, feb_sixteen);
+        assert_eq!(wp1.percentiles.p0.end_date, on_date(2026, 2, 20));
+        assert_eq!(wp2.percentiles.p0.start_date, on_date(2026, 2, 20));
+        assert_eq!(wp2.percentiles.p0.end_date, on_date(2026, 2, 26));
     }
 
     #[test]
@@ -650,23 +807,26 @@ mod tests {
         let fin = work_packages.iter().find(|wp| wp.id == "FIN").unwrap();
 
         assert_eq!(wp0.percentiles.p0.days, 2.0);
-        assert_eq!(wp0.percentiles.p0.start_date, project_start_date);        
-        assert_eq!(wp0.percentiles.p0.end_date, project_start_date + chrono::Duration::days(2));
+        assert_eq!(wp0.percentiles.p0.start_date, project_start_date);
+        assert_eq!(
+            wp0.percentiles.p0.end_date,
+            project_start_date + chrono::Duration::days(2)
+        );
 
         let wp1_end_date = project_start_date + chrono::Duration::days(4);
 
         assert_eq!(wp1.percentiles.p0.days, 4.0);
-        assert_eq!(wp1.percentiles.p0.start_date, project_start_date);        
+        assert_eq!(wp1.percentiles.p0.start_date, project_start_date);
         assert_eq!(wp1.percentiles.p0.end_date, wp1_end_date);
 
         let wp2_end_date = wp1_end_date + chrono::Duration::days(3);
 
         assert_eq!(wp2.percentiles.p0.days, 3.0);
-        assert_eq!(wp2.percentiles.p0.start_date, wp1_end_date);        
+        assert_eq!(wp2.percentiles.p0.start_date, wp1_end_date);
         assert_eq!(wp2.percentiles.p0.end_date, wp2_end_date);
 
         assert_eq!(fin.percentiles.p0.days, 0.0);
-        assert_eq!(fin.percentiles.p0.start_date, wp2_end_date);        
+        assert_eq!(fin.percentiles.p0.start_date, wp2_end_date);
         assert_eq!(fin.percentiles.p0.end_date, wp2_end_date);
     }
 

@@ -3,13 +3,7 @@ use chrono::NaiveDate;
 use thiserror::Error;
 use crate::domain::estimate::Estimate;
 use crate::domain::estimate::StoryPointEstimate;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum IssueStatus {
-    ToDo,
-    InProgress,
-    Done,
-}
+use crate::domain::issue_status::IssueStatus;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IssueId {

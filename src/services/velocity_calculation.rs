@@ -1,9 +1,7 @@
 use thiserror::Error;
 
 use crate::domain::{
-    calendar::TeamCalendar,
-    issue::{Issue, IssueStatus},
-    project::Project,
+    calendar::TeamCalendar, issue::Issue, issue_status::IssueStatus, project::Project,
 };
 
 #[derive(Error, Debug)]

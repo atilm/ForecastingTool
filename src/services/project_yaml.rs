@@ -7,7 +7,8 @@ use thiserror::Error;
 use crate::domain::estimate::{
     Estimate, ReferenceEstimate, StoryPointEstimate, ThreePointEstimate,
 };
-use crate::domain::issue::{Issue, IssueId, IssueStatus};
+use crate::domain::issue::{Issue, IssueId};
+use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
 use crate::services::simulation_types::SimulationReport;
 

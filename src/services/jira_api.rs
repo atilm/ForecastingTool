@@ -3,16 +3,17 @@ use std::env;
 use std::fs;
 
 use chrono::NaiveDate;
-use reqwest::blocking::Client;
 use reqwest::StatusCode;
+use reqwest::blocking::Client;
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::domain::estimate::{Estimate, StoryPointEstimate};
+use crate::domain::issue::Issue;
 use crate::domain::issue::IssueId;
+use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
-use crate::domain::issue::{Issue, IssueStatus};
-use crate::services::data_source::{DataSource, DataQuery, DataSourceError};
+use crate::services::data_source::{DataQuery, DataSource, DataSourceError};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -128,9 +129,7 @@ impl JiraApiClient {
             return Err(DataSourceError::Connection);
         }
 
-        response
-            .json::<Value>()
-            .map_err(|_| DataSourceError::Parse)
+        response.json::<Value>().map_err(|_| DataSourceError::Parse)
     }
 
     fn get_issues_by_jql(&self, jql: &str) -> Result<Vec<Issue>, DataSourceError> {
@@ -163,7 +162,10 @@ impl JiraApiClient {
                 }
             }
 
-            if let Some(token) = payload.get("nextPageToken").and_then(|value| value.as_str()) {
+            if let Some(token) = payload
+                .get("nextPageToken")
+                .and_then(|value| value.as_str())
+            {
                 if last_page_token.as_deref() == Some(token) {
                     break;
                 }
@@ -185,8 +187,7 @@ impl JiraApiClient {
             let max_results = payload.get("maxResults").and_then(|value| value.as_u64());
             let total = payload.get("total").and_then(|value| value.as_u64());
 
-            if let (Some(start_at), Some(max_results), Some(total)) =
-                (start_at, max_results, total)
+            if let (Some(start_at), Some(max_results), Some(total)) = (start_at, max_results, total)
             {
                 let next_start_at = start_at.saturating_add(max_results);
                 if next_start_at >= total {
@@ -221,11 +222,12 @@ impl JiraApiClient {
         mapped.description = get_field_description(fields, "description");
         mapped.status = get_field_status_category(fields);
         mapped.created_date = parse_date_opt(get_field_string(fields, "created").as_deref());
-        mapped.estimate = get_field_f32(fields, &self.jira_project.estimation_field_id).map(
-            |value| Estimate::StoryPoint(StoryPointEstimate {
-                estimate: Some(value),
-            }),
-        );
+        mapped.estimate =
+            get_field_f32(fields, &self.jira_project.estimation_field_id).map(|value| {
+                Estimate::StoryPoint(StoryPointEstimate {
+                    estimate: Some(value),
+                })
+            });
         mapped.start_date = parse_date_opt(
             get_field_string(fields, &self.jira_project.actual_start_date_field_id).as_deref(),
         );
@@ -333,4 +335,3 @@ fn adf_to_text(value: &Value) -> String {
 
     output
 }
-
