@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 use thiserror::Error;
 
 use crate::domain::project::Project;
-use crate::services::simulation_types::{SimulationOutput, SimulationPercentile, WorkPackageSimulation};
+use crate::services::simulation_types::SimulationOutput;
 
 #[derive(Error, Debug)]
 pub enum GanttDiagramError {
@@ -45,29 +45,10 @@ pub fn generate_gantt_diagram(
         let wp = map
             .get(&id)
             .ok_or_else(|| GanttDiagramError::MissingWorkPackage(id.clone()))?;
-        let end_time = percentile_end_offset_days(wp, percentile, start_date);
 
-        let mut start_time = 0.0_f32;
-        if let Some(deps) = issue.dependencies.as_ref() {
-            if !deps.is_empty() {
-                let mut dep_end_times = Vec::new();
-                for dep in deps {
-                    if let Some(dep_wp) = map.get(&dep.id) {
-                        dep_end_times.push(percentile_end_offset_days(dep_wp, percentile, start_date));
-                    }
-                }
-                if let Some(value) = dep_end_times
-                    .into_iter()
-                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                {
-                    start_time = value;
-                }
-            }
-        }
+        let start_date_wp = wp.percentiles.p85.start_date;
+        let end_date_wp = wp.percentiles.p85.end_date;
 
-        let start_date_wp = add_days(start_date, start_time);
-        let end_date_wp = add_days(start_date, end_time);
-        
         if issue.has_zero_duration().unwrap_or(false) {
             lines.push(make_milestone_line(&id, &name, end_date_wp));
         } else {
@@ -104,52 +85,39 @@ fn make_milestone_line(issue: &str, name: &str, date: NaiveDate) -> String {
     )
 }
 
-fn percentile_end_offset_days(
-    work_package: &WorkPackageSimulation,
-    percentile: f32,
-    project_start_date: NaiveDate,
-) -> f32 {
-    let percentile_value = select_percentile(work_package, percentile);
-    (percentile_value.end_date - project_start_date)
-        .num_days()
-        .max(0) as f32
-}
-
-fn select_percentile<'a>(
-    work_package: &'a WorkPackageSimulation,
-    percentile: f32,
-) -> &'a SimulationPercentile {
-    if percentile <= 0.0 {
-        return &work_package.percentiles.p0;
-    }
-    if percentile <= 50.0 {
-        return &work_package.percentiles.p50;
-    }
-    if percentile <= 85.0 {
-        return &work_package.percentiles.p85;
-    }
-    &work_package.percentiles.p100
-}
-
-fn add_days(start_date: NaiveDate, days: f32) -> NaiveDate {
-    let days = days.ceil().max(0.0) as i64;
-    start_date + chrono::Duration::days(days)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::issue::{Issue, IssueId};
+    use crate::domain::issue_status::IssueStatus;
     use crate::services::simulation_types::{
         SimulationOutput, SimulationPercentile, SimulationReport, WorkPackagePercentiles,
         WorkPackageSimulation,
     };
+    use crate::test_support::on_date;
 
     fn wp_percentile(start_date: NaiveDate, days: f32) -> SimulationPercentile {
         SimulationPercentile {
             days,
             start_date,
-            end_date: super::add_days(start_date, days),
+            end_date: add_days(start_date, days),
+        }
+    }
+
+    fn add_days(start_date: NaiveDate, days: f32) -> NaiveDate {
+        let days = days.ceil().max(0.0) as i64;
+        start_date + chrono::Duration::days(days)
+    }
+
+    fn wp_percentile_from_dates(
+        start_date: NaiveDate,
+        end_date: NaiveDate,
+    ) -> SimulationPercentile {
+        let days = (end_date - start_date).num_days() as f32;
+        SimulationPercentile {
+            days,
+            start_date,
+            end_date,
         }
     }
 
@@ -169,6 +137,64 @@ mod tests {
             )
         };
         issue
+    }
+
+    fn build_basic_simulation_output() -> SimulationOutput {
+        let start_date = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+
+        SimulationOutput {
+            report: SimulationReport {
+                data_source: "unit-test".to_string(),
+                start_date,
+                velocity: None,
+                iterations: 1,
+                simulated_items: 2,
+                p0: SimulationPercentile {
+                    days: 0.0,
+                    start_date,
+                    end_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+                },
+                p50: SimulationPercentile {
+                    days: 0.0,
+                    start_date,
+                    end_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+                },
+                p85: SimulationPercentile {
+                    days: 0.0,
+                    start_date,
+                    end_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+                },
+                p100: SimulationPercentile {
+                    days: 0.0,
+                    start_date,
+                    end_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+                },
+            },
+            results: vec![1.0],
+            work_packages: Some(Vec::new()),
+        }
+    }
+
+    fn add_work_package(
+        simulation: &mut SimulationOutput,
+        id: &str,
+        status: IssueStatus,
+        start_date: NaiveDate,
+        end_date: NaiveDate,
+    ) {
+        let wp = WorkPackageSimulation {
+            id: id.to_string(),
+            status,
+            percentiles: WorkPackagePercentiles {
+                p0: wp_percentile_from_dates(start_date, end_date),
+                p50: wp_percentile_from_dates(start_date, end_date),
+                p85: wp_percentile_from_dates(start_date, end_date),
+                p100: wp_percentile_from_dates(start_date, end_date),
+            },
+        };
+        if let Some(wps) = simulation.work_packages.as_mut() {
+            wps.push(wp);
+        }
     }
 
     fn build_simulation_output() -> SimulationOutput {
@@ -206,6 +232,7 @@ mod tests {
             work_packages: Some(vec![
                 WorkPackageSimulation {
                     id: "A".to_string(),
+                    status: IssueStatus::ToDo,
                     percentiles: WorkPackagePercentiles {
                         p0: wp_percentile(start_date, 1.0),
                         p50: wp_percentile(start_date, 1.0),
@@ -215,6 +242,7 @@ mod tests {
                 },
                 WorkPackageSimulation {
                     id: "B".to_string(),
+                    status: IssueStatus::ToDo,
                     percentiles: WorkPackagePercentiles {
                         p0: wp_percentile(start_date, 3.0),
                         p50: wp_percentile(start_date, 3.0),
@@ -244,11 +272,58 @@ mod tests {
     }
 
     #[test]
-    fn marker() {
-        // 1. Test that gantt diagrams are built correctly from start dates and end dates
-        // 2. Later add handling of work packages with set start_date to project simulation
-        // 3. Display done and in progress work packages in gannt chart and flow chart
+    fn generate_gantt_diagram_shows_status_and_milestones_correctly() {
+        let project = Project {
+            name: "Demo Project".to_string(),
+            work_packages: vec![
+                build_issue("WP-1", &[]),
+                build_issue("WP-2", &["WP-1"]),
+                build_issue("WP-3", &["WP-2"]),
+            ],
+        };
 
-        assert!(false)
+        // ToDo:
+        // - Add a milestone
+        // - Assert that status is given
+
+        let mut simulation_output = build_basic_simulation_output();
+        add_work_package(
+            &mut simulation_output,
+            "WP-1",
+            IssueStatus::Done,
+            on_date(2026, 1, 1),
+            on_date(2026, 1, 5),
+        );
+        add_work_package(
+            &mut simulation_output,
+            "WP-2",
+            IssueStatus::InProgress,
+            on_date(2026, 1, 6),
+            on_date(2026, 1, 9),
+        );
+        add_work_package(
+            &mut simulation_output,
+            "WP-3",
+            IssueStatus::ToDo,
+            on_date(2026, 1, 19),
+            on_date(2026, 1, 21),
+        );
+
+        let dummy_start_date = on_date(2026, 1, 1);
+        let diagram =
+            generate_gantt_diagram(&project, &simulation_output, dummy_start_date, 85.0).unwrap();
+
+        assert_eq!(
+            diagram,
+            r#"
+# Demo Project Timeline
+```mermaid
+gantt
+    dateFormat  DD-MM-YYYY
+    WP-1 Name WP-1 :WP-1, 01-01-2026, 05-01-2026
+    WP-2 Name WP-2 :WP-2, 06-01-2026, 09-01-2026
+    WP-3 Name WP-3 :WP-3, 19-01-2026, 21-01-2026
+```"#
+        )
     }
 }
