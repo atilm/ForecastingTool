@@ -1,8 +1,7 @@
-use chrono::NaiveDate;
 use thiserror::Error;
 
 use crate::domain::project::Project;
-use crate::services::simulation_types::SimulationOutput;
+use crate::services::simulation_types::{SimulationOutput, WorkPackageSimulation};
 
 #[derive(Error, Debug)]
 pub enum GanttDiagramError {
@@ -15,8 +14,6 @@ pub enum GanttDiagramError {
 pub fn generate_gantt_diagram(
     project: &Project,
     simulation: &SimulationOutput,
-    start_date: NaiveDate,
-    percentile: f32,
 ) -> Result<String, GanttDiagramError> {
     let work_packages = simulation
         .work_packages
@@ -46,18 +43,10 @@ pub fn generate_gantt_diagram(
             .get(&id)
             .ok_or_else(|| GanttDiagramError::MissingWorkPackage(id.clone()))?;
 
-        let start_date_wp = wp.percentiles.p85.start_date;
-        let end_date_wp = wp.percentiles.p85.end_date;
-
         if issue.has_zero_duration().unwrap_or(false) {
-            lines.push(make_milestone_line(&id, &name, end_date_wp));
+            lines.push(make_milestone_line(&name, &wp));
         } else {
-            lines.push(make_work_package_line(
-                &id,
-                &name,
-                start_date_wp,
-                end_date_wp,
-            ));
+            lines.push(make_work_package_line(&name, &wp));
         }
     }
     lines.push("```".to_string());
@@ -65,20 +54,28 @@ pub fn generate_gantt_diagram(
     Ok(lines.join("\n"))
 }
 
-fn make_work_package_line(
-    issue: &str,
-    name: &str,
-    start_date: NaiveDate,
-    end_date: NaiveDate,
-) -> String {
+fn make_work_package_line(name: &str, wp: &WorkPackageSimulation) -> String {
+    let issue = &wp.id;
+    let start_date = wp.percentiles.p85.start_date;
+    let end_date = wp.percentiles.p85.end_date;
+
+    let status_str = match wp.status {
+        crate::domain::issue_status::IssueStatus::ToDo => "",
+        crate::domain::issue_status::IssueStatus::InProgress => "active, ",
+        crate::domain::issue_status::IssueStatus::Done => "done, ",
+    };
+
     format!(
-        "    {issue} {name} :{issue}, {}, {}",
+        "    {issue} {name} :{status_str}{issue}, {}, {}",
         start_date.format("%d-%m-%Y"),
         end_date.format("%d-%m-%Y")
     )
 }
 
-fn make_milestone_line(issue: &str, name: &str, date: NaiveDate) -> String {
+fn make_milestone_line(name: &str, wp: &WorkPackageSimulation) -> String {
+    let issue = &wp.id;
+    let date = wp.percentiles.p85.end_date;
+
     format!(
         "    {issue} {name} :milestone, {}, 0",
         date.format("%d-%m-%Y"),
@@ -95,6 +92,7 @@ mod tests {
         WorkPackageSimulation,
     };
     use crate::test_support::on_date;
+    use chrono::NaiveDate;
 
     fn wp_percentile(start_date: NaiveDate, days: f32) -> SimulationPercentile {
         SimulationPercentile {
@@ -261,9 +259,8 @@ mod tests {
             work_packages: vec![build_issue("A", &[]), build_issue("B", &["A"])],
         };
         let simulation = build_simulation_output();
-        let start_date = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
 
-        let diagram = generate_gantt_diagram(&project, &simulation, start_date, 85.0).unwrap();
+        let diagram = generate_gantt_diagram(&project, &simulation).unwrap();
         assert!(diagram.contains("# Demo Timeline"));
         assert!(diagram.contains("gantt"));
         assert!(diagram.contains("A Name A"));
@@ -281,10 +278,6 @@ mod tests {
                 build_issue("WP-3", &["WP-2"]),
             ],
         };
-
-        // ToDo:
-        // - Add a milestone
-        // - Assert that status is given
 
         let mut simulation_output = build_basic_simulation_output();
         add_work_package(
@@ -309,9 +302,7 @@ mod tests {
             on_date(2026, 1, 21),
         );
 
-        let dummy_start_date = on_date(2026, 1, 1);
-        let diagram =
-            generate_gantt_diagram(&project, &simulation_output, dummy_start_date, 85.0).unwrap();
+        let diagram = generate_gantt_diagram(&project, &simulation_output).unwrap();
 
         assert_eq!(
             diagram,
@@ -320,8 +311,8 @@ mod tests {
 ```mermaid
 gantt
     dateFormat  DD-MM-YYYY
-    WP-1 Name WP-1 :WP-1, 01-01-2026, 05-01-2026
-    WP-2 Name WP-2 :WP-2, 06-01-2026, 09-01-2026
+    WP-1 Name WP-1 :done, WP-1, 01-01-2026, 05-01-2026
+    WP-2 Name WP-2 :active, WP-2, 06-01-2026, 09-01-2026
     WP-3 Name WP-3 :WP-3, 19-01-2026, 21-01-2026
 ```"#
         )

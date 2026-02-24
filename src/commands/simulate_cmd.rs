@@ -40,7 +40,7 @@ pub fn simulate_command(cmd: Commands) {
 
         let gantt_path = format!("{output}.gantt.md");
         match load_project_from_yaml_file(&input) {
-            Ok(project) => match generate_gantt_diagram(&project, &simulation, start_date, 85.0) {
+            Ok(project) => match generate_gantt_diagram(&project, &simulation) {
                 Ok(diagram) => {
                     if let Err(e) = std::fs::write(&gantt_path, diagram) {
                         eprintln!("Failed to write gantt diagram: {e:?}");
