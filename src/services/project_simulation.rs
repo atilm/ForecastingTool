@@ -415,11 +415,11 @@ fn sample_duration<R: ThreePointSampler + ?Sized>(
 
     let sampled = sampler
         .sample(optimistic, most_likely, pessimistic)
-        .map_err(|_| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
+        .map_err(|_| ProjectSimulationError::InvalidEstimate(format!("Sampling failed: {}",issue_id.to_string())))?;
 
     if !sampled.is_finite() {
         return Err(ProjectSimulationError::InvalidEstimate(
-            issue_id.to_string(),
+            format!("sample is infinite: {}", issue_id.to_string()),
         ));
     }
 
@@ -459,7 +459,7 @@ fn to_reference_triplet(
     let cached = reference
         .cached_estimate
         .as_ref()
-        .ok_or_else(|| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
+        .ok_or_else(|| ProjectSimulationError::InvalidEstimate(format!("Missing referenced estimate: {}", issue_id.to_string())))?;
     to_three_point_triplet(cached)
 }
 
@@ -469,7 +469,7 @@ fn to_story_point_triplet(
 ) -> Result<(f32, f32, f32, bool), ProjectSimulationError> {
     let value = story_points
         .estimate
-        .ok_or_else(|| ProjectSimulationError::InvalidEstimate(issue_id.to_string()))?;
+        .ok_or_else(|| ProjectSimulationError::InvalidEstimate(format!("Missing story point estimate: {}", issue_id.to_string())))?;
     let (lower, upper) = fibonacci_bounds(value);
     let is_story_point_estimate = true;
     Ok((lower, value, upper, is_story_point_estimate))
