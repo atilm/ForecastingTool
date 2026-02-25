@@ -49,13 +49,17 @@ pub fn build_done_issue_with_deps(id: &str, deps: Option<&[&str]>, points: f32, 
     issue
 }
 
-pub fn build_three_point_issue(id: &str, days: f32, deps: &[&str]) -> Issue {
+pub fn build_constant_three_point_issue(id: &str, days: f32, deps: &[&str]) -> Issue {
+    return  build_three_point_issue(id, days, days, days, deps);
+}
+
+pub fn build_three_point_issue(id: &str, optimistic: f32, most_likely: f32, pessimistic: f32, deps: &[&str]) -> Issue {
     let mut issue = Issue::new();
     issue.issue_id = Some(IssueId { id: id.to_string() });
     issue.estimate = Some(Estimate::ThreePoint(ThreePointEstimate {
-        optimistic: Some(days),
-        most_likely: Some(days),
-        pessimistic: Some(days),
+        optimistic: Some(optimistic),
+        most_likely: Some(most_likely),
+        pessimistic: Some(pessimistic),
     }));
     issue.dependencies = if deps.is_empty() {
         None

@@ -1,6 +1,7 @@
 # ToDos
 
 * [ ] Show status and milestones in dependency diagram
+* [ ] Improve error reporting in project_yaml.rs
 
 * [ ] If possible, make it easier to configure project simulations.
   * [ ] Add explicit milestones
@@ -9,6 +10,7 @@
     * [ ] Simulate subproject based on story-points
     * [ ] Simulate subproject based on throughput
     * [ ] Simulate subproject based on three-point estimations
+    * [ ] Use multiple calendars to simulate increase of team size (e.g. 2 files to 3 files to increase velocity by factor 1.5)
     * [ ] Simulate master project file with three-point estimations and references
 
 * [ ] Complete Gantt diagrams

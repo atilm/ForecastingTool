@@ -136,8 +136,8 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
                 .get(id)
                 .ok_or(ProjectSimulationError::MissingIssueId)?;
 
-            let issue_start_date = if let Some(start_date) = node.start_date {
-                start_date
+            let issue_start_date = if let Some(node_start_date) = node.start_date {
+                node_start_date
             } else {
                 node.dependencies
                     .iter()
@@ -415,12 +415,18 @@ fn sample_duration<R: ThreePointSampler + ?Sized>(
 
     let sampled = sampler
         .sample(optimistic, most_likely, pessimistic)
-        .map_err(|_| ProjectSimulationError::InvalidEstimate(format!("Sampling failed: {}",issue_id.to_string())))?;
+        .map_err(|_| {
+            ProjectSimulationError::InvalidEstimate(format!(
+                "Sampling failed: {}",
+                issue_id.to_string()
+            ))
+        })?;
 
     if !sampled.is_finite() {
-        return Err(ProjectSimulationError::InvalidEstimate(
-            format!("sample is infinite: {}", issue_id.to_string()),
-        ));
+        return Err(ProjectSimulationError::InvalidEstimate(format!(
+            "sample is infinite: {}",
+            issue_id.to_string()
+        )));
     }
 
     if is_story_point_estimate {
@@ -456,10 +462,12 @@ fn to_reference_triplet(
     reference: &ReferenceEstimate,
     issue_id: &str,
 ) -> Result<(f32, f32, f32, bool), ProjectSimulationError> {
-    let cached = reference
-        .cached_estimate
-        .as_ref()
-        .ok_or_else(|| ProjectSimulationError::InvalidEstimate(format!("Missing referenced estimate: {}", issue_id.to_string())))?;
+    let cached = reference.cached_estimate.as_ref().ok_or_else(|| {
+        ProjectSimulationError::InvalidEstimate(format!(
+            "Missing referenced estimate: {}",
+            issue_id.to_string()
+        ))
+    })?;
     to_three_point_triplet(cached)
 }
 
@@ -467,9 +475,12 @@ fn to_story_point_triplet(
     story_points: &StoryPointEstimate,
     issue_id: &str,
 ) -> Result<(f32, f32, f32, bool), ProjectSimulationError> {
-    let value = story_points
-        .estimate
-        .ok_or_else(|| ProjectSimulationError::InvalidEstimate(format!("Missing story point estimate: {}", issue_id.to_string())))?;
+    let value = story_points.estimate.ok_or_else(|| {
+        ProjectSimulationError::InvalidEstimate(format!(
+            "Missing story point estimate: {}",
+            issue_id.to_string()
+        ))
+    })?;
     let (lower, upper) = fibonacci_bounds(value);
     let is_story_point_estimate = true;
     Ok((lower, value, upper, is_story_point_estimate))
@@ -545,8 +556,8 @@ mod tests {
     use crate::domain::issue::IssueId;
     use crate::test_support::{MockSampler, build_in_progress_story_point_issue};
     use crate::test_support::{
-        build_done_issue, build_done_issue_with_deps, build_story_point_issue,
-        build_story_point_issue_with_start_date, build_three_point_issue,
+        build_constant_three_point_issue, build_done_issue, build_done_issue_with_deps,
+        build_story_point_issue, build_story_point_issue_with_start_date, build_three_point_issue,
         create_calendar_without_any_free_days, on_date,
     };
     use chrono::NaiveDate;
@@ -747,11 +758,11 @@ mod tests {
                     done_issue.clone(),
                     build_story_point_issue("SP-1", 1.0, &[]),
                     build_story_point_issue("SP-2", 1.0, &["SP-1"]),
-                    build_three_point_issue("WP0", wp0, &[]),
-                    build_three_point_issue("WP1", wp1, &[]),
-                    build_three_point_issue("WP2", wp2, &["WP0", "WP1"]),
-                    build_three_point_issue("WP3", wp3, &["WP1"]),
-                    build_three_point_issue("FIN", 0.0, &["WP0", "WP2", "WP3"]),
+                    build_constant_three_point_issue("WP0", wp0, &[]),
+                    build_constant_three_point_issue("WP1", wp1, &[]),
+                    build_constant_three_point_issue("WP2", wp2, &["WP0", "WP1"]),
+                    build_constant_three_point_issue("WP3", wp3, &["WP1"]),
+                    build_constant_three_point_issue("FIN", 0.0, &["WP0", "WP2", "WP3"]),
                 ],
             };
             let calendar = create_calendar_without_any_free_days();
@@ -779,10 +790,10 @@ mod tests {
         let project = Project {
             name: "Dependent Project".to_string(),
             work_packages: vec![
-                build_three_point_issue("WP0", 2.0, &[]),
-                build_three_point_issue("WP1", 4.0, &[]),
-                build_three_point_issue("WP2", 3.0, &["WP0", "WP1"]),
-                build_three_point_issue("FIN", 0.0, &["WP2"]),
+                build_constant_three_point_issue("WP0", 2.0, &[]),
+                build_constant_three_point_issue("WP1", 4.0, &[]),
+                build_constant_three_point_issue("WP2", 3.0, &["WP0", "WP1"]),
+                build_constant_three_point_issue("FIN", 0.0, &["WP2"]),
             ],
         };
         let calendar = create_calendar_without_any_free_days();
@@ -831,6 +842,46 @@ mod tests {
     }
 
     #[test]
+    fn simulated_start_dates_match_simulated_end_dates() {
+        let mut rng = rand::thread_rng();
+        let mut sampler = BetaPertSampler::new(&mut rng);
+        let project = Project {
+            name: "Dependent Project".to_string(),
+            work_packages: vec![
+                build_three_point_issue("WP0", 1.0, 2.0, 5.0, &[]),
+                build_three_point_issue("WP1", 3.0, 5.0, 14.0, &[]),
+                build_three_point_issue("WP2", 1.0, 5.0, 14.0, &["WP0", "WP1"]),
+                build_three_point_issue("WP3", 1.0, 5.0, 14.0, &["WP2"]),
+            ],
+        };
+        let calendar = create_calendar_without_any_free_days();
+
+        let project_start_date = on_date(2026, 2, 25);
+
+        let output = run_simulation(
+            &project,
+            &topological_sort(&project).unwrap(),
+            None,
+            10000,
+            project_start_date,
+            &mut sampler,
+            &calendar,
+        );
+
+        let work_packages = output.unwrap().work_packages.unwrap();
+
+        let wp0 = work_packages.iter().find(|wp| wp.id == "WP0").unwrap();
+        let wp1 = work_packages.iter().find(|wp| wp.id == "WP1").unwrap();
+        let wp2 = work_packages.iter().find(|wp| wp.id == "WP2").unwrap();
+        let wp3 = work_packages.iter().find(|wp| wp.id == "WP3").unwrap();
+
+        assert_eq!(wp0.percentiles.p85.start_date, project_start_date);
+        assert_eq!(wp1.percentiles.p85.start_date, project_start_date);
+        assert_eq!(wp2.percentiles.p85.start_date, wp1.percentiles.p85.end_date);
+        assert_eq!(wp3.percentiles.p85.start_date, wp2.percentiles.p85.end_date);
+    }
+
+    #[test]
     fn the_calendar_is_only_applied_to_issues_estimated_in_story_points() {
         // Story Points of SP-1, Duration in days of WP1, expected end-date
         let test_cases: Vec<(f32, f32, NaiveDate)> = vec![
@@ -850,8 +901,8 @@ mod tests {
                 work_packages: vec![
                     build_done_issue("SP-0", 2.0, on_date(2026, 2, 13), on_date(2026, 2, 13)), // velocity of 2 points/day on Friday
                     build_story_point_issue("SP-1", sp1, &[]),
-                    build_three_point_issue("WP-1", wp1, &[]),
-                    build_three_point_issue("FIN", 0.0, &["SP-1", "WP-1"]),
+                    build_constant_three_point_issue("WP-1", wp1, &[]),
+                    build_constant_three_point_issue("FIN", 0.0, &["SP-1", "WP-1"]),
                 ],
             };
 
