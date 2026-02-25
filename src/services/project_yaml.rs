@@ -26,6 +26,12 @@ pub enum ProjectYamlError {
     InvalidStatus(String),
     #[error("missing previous issue for implicit dependency")]
     MissingPreviousDependency,
+    #[error("failed to load reference estimate from report file '{path}': {source}")]
+    ReferenceEstimateLoad {
+        path: String,
+        #[source]
+        source: ReportParseError,
+    },
 }
 
 #[derive(Error, Debug)]
@@ -93,7 +99,7 @@ pub fn deserialize_project_from_yaml_str(input: &str) -> Result<Project, Project
         });
         issue.summary = issue_record.summary;
         issue.description = issue_record.description;
-        issue.estimate = issue_record.estimate.map(estimate_from_record);
+        issue.estimate = issue_record.estimate.map(estimate_from_record).transpose()?;
         issue.status = parse_status(issue_record.status.as_deref())?;
         issue.created_date = parse_date_opt(issue_record.created_date.as_deref())?;
         issue.start_date = parse_date_opt(issue_record.start_date.as_deref())?;
@@ -158,29 +164,35 @@ fn issue_to_record(issue: &Issue) -> IssueRecord {
     }
 }
 
-fn estimate_from_record(record: EstimateRecord) -> Estimate {
+fn estimate_from_record(record: EstimateRecord) -> Result<Estimate, ProjectYamlError> {
     match record {
-        EstimateRecord::StoryPoints { value } => Estimate::StoryPoint(StoryPointEstimate {
+        EstimateRecord::StoryPoints { value } => Ok(Estimate::StoryPoint(StoryPointEstimate {
             estimate: Some(value),
-        }),
+        })),
         EstimateRecord::ThreePoint {
             optimistic,
             most_likely,
             pessimistic,
-        } => Estimate::ThreePoint(ThreePointEstimate {
+        } => Ok(Estimate::ThreePoint(ThreePointEstimate {
             optimistic: Some(optimistic),
             most_likely: Some(most_likely),
             pessimistic: Some(pessimistic),
-        }),
-        EstimateRecord::Reference { report_file_path } => Estimate::Reference(ReferenceEstimate {
-            cached_estimate: get_three_point_estimate_from_report_file(&report_file_path),
-            report_file_path: report_file_path,
-        }),
+        })),
+        EstimateRecord::Reference { report_file_path } => {
+            let cached_estimate = Some(
+                three_point_estimate_from_report_file(&report_file_path).map_err(|source| {
+                    ProjectYamlError::ReferenceEstimateLoad {
+                        path: report_file_path.clone(),
+                        source,
+                    }
+                })?,
+            );
+            Ok(Estimate::Reference(ReferenceEstimate {
+                cached_estimate,
+                report_file_path,
+            }))
+        }
     }
-}
-
-fn get_three_point_estimate_from_report_file(path: &str) -> Option<ThreePointEstimate> {
-    three_point_estimate_from_report_file(path).ok()
 }
 
 fn three_point_estimate_from_report_file(
@@ -387,6 +399,27 @@ work_packages:
 
         let error = deserialize_project_from_yaml_str(yaml).unwrap_err();
         assert!(matches!(error, ProjectYamlError::InvalidStatus(_)));
+    }
+
+    #[test]
+    fn deserialize_project_reports_reference_estimate_load_error() {
+        let yaml = r#"
+name: Demo
+work_packages:
+  - id: ABC-5
+    estimate:
+      type: reference
+      report_file_path: /definitely/missing/report.yaml
+"#;
+
+        let error = deserialize_project_from_yaml_str(yaml).unwrap_err();
+        match error {
+            ProjectYamlError::ReferenceEstimateLoad { path, source } => {
+                assert_eq!(path, "/definitely/missing/report.yaml");
+                assert!(matches!(source, ReportParseError::Io(_)));
+            }
+            _ => panic!("expected reference estimate load error"),
+        }
     }
 
     #[test]
