@@ -86,6 +86,9 @@ pub enum Commands {
         #[arg(short, long)]
         calendar_dir: Option<String>,
     },
+    /// Show the Git hash of the current build
+    GitHash {
+    },
     /// Generate shell completion scripts
     Completions {
         /// Shell to generate completions for

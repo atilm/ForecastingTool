@@ -1,6 +1,5 @@
 # ToDos
 
-* [ ] Add a possibility to show version and commit hash of the current application
 * [ ] Show status and milestones in dependency diagram
 * [ ] Improve error reporting in project_yaml.rs
 
@@ -13,16 +12,6 @@
     * [ ] Simulate subproject based on three-point estimations
     * [ ] Use multiple calendars to simulate increase of team size (e.g. 2 files to 3 files to increase velocity by factor 1.5)
     * [ ] Simulate master project file with three-point estimations and references
-
-* [ ] Complete Gantt diagrams
-  * [x] Completed Issues must be included in input data
-  * [x] Gantt diagram needs start_date and end_date per work package for predefined percentiles (-> enum)
-    * [x] WorkPackageSimulation should store these -> set in project simulation
-  * [ ] ProjectSimulation: case of already known start-date
-    * [ ] The ProjectSimulation should handle in-progress tasks correctly
-      * [x] already known start-date + sampled duration
-    * [ ] The ProjectSimulation should handle ToDo issues with fixed start_date correctly
-      * [x] already known start-date + sampled duration
 
 * [ ] Split `project_simulation.rs` in multiple files
 * [ ] Write test for milestones in Gantt diagram

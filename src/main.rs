@@ -31,6 +31,9 @@ fn main() {
         cmd @ Commands::Simulate { .. } => {
             simulate_command(cmd);
         }
+        Commands::GitHash { .. } => {
+            println!("Git Hash: {}", env!("GIT_HASH"));
+        }
         Commands::Completions { shell } => {
             let mut cmd = CliArgs::command();
             clap_complete::generate(shell, &mut cmd, env!("CARGO_PKG_NAME"), &mut io::stdout());
