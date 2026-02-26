@@ -1,5 +1,6 @@
 # ToDos
 
+* [ ] Add a possibility to show version and commit hash of the current application
 * [ ] Show status and milestones in dependency diagram
 * [ ] Improve error reporting in project_yaml.rs
 

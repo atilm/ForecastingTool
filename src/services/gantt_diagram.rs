@@ -56,8 +56,8 @@ pub fn generate_gantt_diagram(
 
 fn make_work_package_line(name: &str, wp: &WorkPackageSimulation) -> String {
     let issue = &wp.id;
-    let start_date = wp.percentiles.p85.start_date;
     let end_date = wp.percentiles.p85.end_date;
+    let start_date = end_date - chrono::Duration::days(wp.percentiles.p85.days.ceil() as i64);
 
     let status_str = match wp.status {
         crate::domain::issue_status::IssueStatus::ToDo => "",
@@ -97,7 +97,6 @@ mod tests {
     fn wp_percentile(start_date: NaiveDate, days: f32) -> SimulationPercentile {
         SimulationPercentile {
             days,
-            start_date,
             end_date: add_days(start_date, days),
         }
     }
@@ -114,7 +113,6 @@ mod tests {
         let days = (end_date - start_date).num_days() as f32;
         SimulationPercentile {
             days,
-            start_date,
             end_date,
         }
     }
@@ -149,22 +147,18 @@ mod tests {
                 simulated_items: 2,
                 p0: SimulationPercentile {
                     days: 0.0,
-                    start_date,
                     end_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 },
                 p50: SimulationPercentile {
                     days: 0.0,
-                    start_date,
                     end_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 },
                 p85: SimulationPercentile {
                     days: 0.0,
-                    start_date,
                     end_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 },
                 p100: SimulationPercentile {
                     days: 0.0,
-                    start_date,
                     end_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 },
             },
@@ -207,22 +201,18 @@ mod tests {
                 simulated_items: 2,
                 p0: SimulationPercentile {
                     days: 0.0,
-                    start_date,
                     end_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 },
                 p50: SimulationPercentile {
                     days: 0.0,
-                    start_date,
                     end_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 },
                 p85: SimulationPercentile {
                     days: 0.0,
-                    start_date,
                     end_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 },
                 p100: SimulationPercentile {
                     days: 0.0,
-                    start_date,
                     end_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
                 },
             },

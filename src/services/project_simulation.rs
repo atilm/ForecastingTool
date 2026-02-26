@@ -32,7 +32,6 @@ use petgraph::graph::NodeIndex;
 #[derive(Debug, Clone, Copy)]
 struct WorkItemSample {
     duration_days: f32,
-    start_date: chrono::NaiveDate,
     end_date: chrono::NaiveDate,
 }
 
@@ -161,7 +160,6 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
                 .or_insert_with(|| Vec::with_capacity(iterations))
                 .push(WorkItemSample {
                     duration_days: elapsed_days,
-                    start_date: issue_start_date,
                     end_date: issue_end_date,
                 });
             earliest_finish.insert(node.id.clone(), issue_end_date);
@@ -222,7 +220,6 @@ fn percentiles_from_samples(
     fn to_percentile(sample: WorkItemSample) -> SimulationPercentile {
         SimulationPercentile {
             days: sample.duration_days,
-            start_date: sample.start_date,
             end_date: sample.end_date,
         }
     }
@@ -230,7 +227,6 @@ fn percentiles_from_samples(
     if samples.is_empty() {
         let default = SimulationPercentile {
             days: 0.0,
-            start_date: default_project_start,
             end_date: default_project_start,
         };
         return WorkPackagePercentiles {
@@ -271,7 +267,6 @@ fn to_simulation_percentile(
     let days = calculate_days(start_date, end_date);
     SimulationPercentile {
         days,
-        start_date,
         end_date,
     }
 }
@@ -657,17 +652,11 @@ mod tests {
         assert!(wp4.status == IssueStatus::ToDo);
         assert!(wp5.status == IssueStatus::ToDo);
 
-        assert_eq!(wp0.percentiles.p0.start_date, on_date(2026, 1, 5));
         assert_eq!(wp0.percentiles.p0.end_date, on_date(2026, 1, 8));
-        assert_eq!(wp1.percentiles.p0.start_date, on_date(2026, 1, 9));
         assert_eq!(wp1.percentiles.p0.end_date, on_date(2026, 1, 14));
-        assert_eq!(wp2.percentiles.p0.start_date, on_date(2026, 1, 15));
         assert_eq!(wp2.percentiles.p0.end_date, on_date(2026, 1, 20));
-        assert_eq!(wp3.percentiles.p0.start_date, on_date(2026, 2, 16)); // starts on simulation start date
         assert_eq!(wp3.percentiles.p0.end_date, on_date(2026, 2, 20));
-        assert_eq!(wp4.percentiles.p0.start_date, on_date(2026, 2, 20));
         assert_eq!(wp4.percentiles.p0.end_date, on_date(2026, 2, 26));
-        assert_eq!(wp5.percentiles.p0.start_date, on_date(2026, 2, 26));
         assert_eq!(wp5.percentiles.p0.end_date, on_date(2026, 3, 4));
     }
 
@@ -716,11 +705,8 @@ mod tests {
         assert!(wp1.status == IssueStatus::InProgress);
         assert!(wp2.status == IssueStatus::ToDo);
 
-        assert_eq!(wp0.percentiles.p0.start_date, on_date(2026, 1, 5));
         assert_eq!(wp0.percentiles.p0.end_date, on_date(2026, 1, 8));
-        assert_eq!(wp1.percentiles.p0.start_date, feb_sixteen);
         assert_eq!(wp1.percentiles.p0.end_date, on_date(2026, 2, 20));
-        assert_eq!(wp2.percentiles.p0.start_date, on_date(2026, 2, 20));
         assert_eq!(wp2.percentiles.p0.end_date, on_date(2026, 2, 26));
     }
 
@@ -785,7 +771,7 @@ mod tests {
     }
 
     #[test]
-    fn work_package_percentiles_contain_start_and_end_dates() {
+    fn work_package_percentiles_contain_end_dates() {
         let mut sampler = MockSampler;
         let project = Project {
             name: "Dependent Project".to_string(),
@@ -818,7 +804,6 @@ mod tests {
         let fin = work_packages.iter().find(|wp| wp.id == "FIN").unwrap();
 
         assert_eq!(wp0.percentiles.p0.days, 2.0);
-        assert_eq!(wp0.percentiles.p0.start_date, project_start_date);
         assert_eq!(
             wp0.percentiles.p0.end_date,
             project_start_date + chrono::Duration::days(2)
@@ -827,58 +812,15 @@ mod tests {
         let wp1_end_date = project_start_date + chrono::Duration::days(4);
 
         assert_eq!(wp1.percentiles.p0.days, 4.0);
-        assert_eq!(wp1.percentiles.p0.start_date, project_start_date);
         assert_eq!(wp1.percentiles.p0.end_date, wp1_end_date);
 
         let wp2_end_date = wp1_end_date + chrono::Duration::days(3);
 
         assert_eq!(wp2.percentiles.p0.days, 3.0);
-        assert_eq!(wp2.percentiles.p0.start_date, wp1_end_date);
         assert_eq!(wp2.percentiles.p0.end_date, wp2_end_date);
 
         assert_eq!(fin.percentiles.p0.days, 0.0);
-        assert_eq!(fin.percentiles.p0.start_date, wp2_end_date);
         assert_eq!(fin.percentiles.p0.end_date, wp2_end_date);
-    }
-
-    #[test]
-    fn simulated_start_dates_match_simulated_end_dates() {
-        let mut rng = rand::thread_rng();
-        let mut sampler = BetaPertSampler::new(&mut rng);
-        let project = Project {
-            name: "Dependent Project".to_string(),
-            work_packages: vec![
-                build_three_point_issue("WP0", 1.0, 2.0, 5.0, &[]),
-                build_three_point_issue("WP1", 3.0, 5.0, 14.0, &[]),
-                build_three_point_issue("WP2", 1.0, 5.0, 14.0, &["WP0", "WP1"]),
-                build_three_point_issue("WP3", 1.0, 5.0, 14.0, &["WP2"]),
-            ],
-        };
-        let calendar = create_calendar_without_any_free_days();
-
-        let project_start_date = on_date(2026, 2, 25);
-
-        let output = run_simulation(
-            &project,
-            &topological_sort(&project).unwrap(),
-            None,
-            10000,
-            project_start_date,
-            &mut sampler,
-            &calendar,
-        );
-
-        let work_packages = output.unwrap().work_packages.unwrap();
-
-        let wp0 = work_packages.iter().find(|wp| wp.id == "WP0").unwrap();
-        let wp1 = work_packages.iter().find(|wp| wp.id == "WP1").unwrap();
-        let wp2 = work_packages.iter().find(|wp| wp.id == "WP2").unwrap();
-        let wp3 = work_packages.iter().find(|wp| wp.id == "WP3").unwrap();
-
-        assert_eq!(wp0.percentiles.p85.start_date, project_start_date);
-        assert_eq!(wp1.percentiles.p85.start_date, project_start_date);
-        assert_eq!(wp2.percentiles.p85.start_date, wp1.percentiles.p85.end_date);
-        assert_eq!(wp3.percentiles.p85.start_date, wp2.percentiles.p85.end_date);
     }
 
     #[test]

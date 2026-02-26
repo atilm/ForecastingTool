@@ -57,22 +57,18 @@ mod tests {
             simulated_items: 12,
             p0: SimulationPercentile {
                 days: 1.0,
-                start_date,
                 end_date: NaiveDate::from_ymd_opt(2026, 2, 2).unwrap(),
             },
             p50: SimulationPercentile {
                 days: 5.5,
-                start_date,
                 end_date: NaiveDate::from_ymd_opt(2026, 2, 6).unwrap(),
             },
             p85: SimulationPercentile {
                 days: 10.0,
-                start_date,
                 end_date: NaiveDate::from_ymd_opt(2026, 2, 11).unwrap(),
             },
             p100: SimulationPercentile {
                 days: 15.25,
-                start_date,
                 end_date: NaiveDate::from_ymd_opt(2026, 2, 16).unwrap(),
             },
         }
