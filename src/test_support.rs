@@ -3,7 +3,7 @@ use chrono::NaiveDate;
 use crate::domain::estimate::{Estimate, StoryPointEstimate, ThreePointEstimate};
 use crate::domain::issue::{Issue, IssueId};
 use crate::domain::issue_status::IssueStatus;
-use crate::services::beta_pert_sampler::ThreePointSampler;
+use crate::services::project_simulation::beta_pert_sampler::ThreePointSampler;
 
 // A mock ThreePointSampler that always returns the most likely value
 pub struct MockSampler;

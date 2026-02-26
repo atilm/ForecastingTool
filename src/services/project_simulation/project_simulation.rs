@@ -4,15 +4,17 @@ use thiserror::Error;
 
 use crate::domain::calendar::TeamCalendar;
 use crate::domain::estimate::{
-    Estimate, ReferenceEstimate, StoryPointEstimate, ThreePointEstimate,
+    Estimate, StoryPointEstimate,
 };
+
+use crate::services::project_simulation::sample_duration::sample_duration_days;
 
 use chrono::NaiveDate;
 
 use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
-use crate::services::beta_pert_sampler::BetaPertSampler;
-use crate::services::beta_pert_sampler::ThreePointSampler;
+use crate::services::project_simulation::beta_pert_sampler::BetaPertSampler;
+use crate::services::project_simulation::beta_pert_sampler::ThreePointSampler;
 use crate::services::histogram::HistogramError;
 use crate::services::percentiles;
 use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
@@ -23,8 +25,9 @@ use crate::services::simulation_types::{
 use crate::services::team_calendar_yaml::TeamCalendarYamlError;
 use crate::services::team_calendar_yaml::load_team_calendar_if_provided;
 use crate::services::util::dates::data_source_name;
-use crate::services::velocity_calculation::VelocityCalculationError;
-use crate::services::velocity_calculation::calculate_project_velocity;
+use crate::services::project_simulation::velocity_calculation::VelocityCalculationError;
+use crate::services::project_simulation::velocity_calculation::calculate_project_velocity;
+use crate::services::project_simulation::sample_duration::SamplingError;
 use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
@@ -53,20 +56,16 @@ pub enum ProjectSimulationError {
     MissingIssueId,
     #[error("missing estimate for issue {0}")]
     MissingEstimate(String),
-    #[error("invalid velocity value")]
-    InvalidVelocityValue,
-    #[error("missing velocity for story point estimates")]
-    MissingVelocity,
     #[error("dependency {dependency} not found for issue {issue}")]
     UnknownDependency { issue: String, dependency: String },
     #[error("dependency graph has a cycle")]
     CyclicDependencies,
-    #[error("invalid estimate values for issue {0}")]
-    InvalidEstimate(String),
     #[error("calendar capacity is insufficient to schedule work")]
     InsufficientCalendarCapacity,
     #[error("failed to render histogram: {0}")]
     Histogram(#[from] HistogramError),
+    #[error("failed to calculate percentiles: {0}")]
+    SamplingError(#[from] SamplingError),
 }
 
 pub fn simulate_project_from_yaml_file(
@@ -150,7 +149,7 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
                 done_date
             } else {
                 let (duration_days, apply_calendar) =
-                    sample_duration(&node.estimate, velocity, sampler, &node.id)?;
+                    sample_duration_days(&node.estimate, velocity, sampler, &node.id)?;
                 calculate_end_date(issue_start_date, duration_days, apply_calendar, calendar)?
             };
 
@@ -396,45 +395,6 @@ fn topological_sort(project: &Project) -> Result<Vec<String>, ProjectSimulationE
     Ok(ordered)
 }
 
-fn sample_duration<R: ThreePointSampler + ?Sized>(
-    estimate: &Estimate,
-    velocity: Option<f32>,
-    sampler: &mut R,
-    issue_id: &str,
-) -> Result<(f32, bool), ProjectSimulationError> {
-    let (optimistic, most_likely, pessimistic, is_story_point_estimate) = match estimate {
-        Estimate::StoryPoint(estimate) => to_story_point_triplet(estimate, issue_id)?,
-        Estimate::ThreePoint(estimate) => to_three_point_triplet(estimate)?,
-        Estimate::Reference(estimate) => to_reference_triplet(estimate, issue_id)?,
-    };
-
-    let sampled = sampler
-        .sample(optimistic, most_likely, pessimistic)
-        .map_err(|_| {
-            ProjectSimulationError::InvalidEstimate(format!(
-                "Sampling failed: {}",
-                issue_id.to_string()
-            ))
-        })?;
-
-    if !sampled.is_finite() {
-        return Err(ProjectSimulationError::InvalidEstimate(format!(
-            "sample is infinite: {}",
-            issue_id.to_string()
-        )));
-    }
-
-    if is_story_point_estimate {
-        let velocity = velocity.ok_or(ProjectSimulationError::MissingVelocity)?;
-        if velocity <= 0.0 {
-            return Err(ProjectSimulationError::InvalidVelocityValue);
-        }
-        Ok((sampled / velocity, true))
-    } else {
-        Ok((sampled, false))
-    }
-}
-
 fn calculate_end_date(
     start_date: chrono::NaiveDate,
     duration_days: f32,
@@ -451,77 +411,6 @@ fn calculate_end_date(
         let whole_days = duration_days.ceil() as i64;
         Ok(start_date + chrono::Duration::days(whole_days))
     }
-}
-
-fn to_reference_triplet(
-    reference: &ReferenceEstimate,
-    issue_id: &str,
-) -> Result<(f32, f32, f32, bool), ProjectSimulationError> {
-    let cached = reference.cached_estimate.as_ref().ok_or_else(|| {
-        ProjectSimulationError::InvalidEstimate(format!(
-            "Missing referenced estimate: {}",
-            issue_id.to_string()
-        ))
-    })?;
-    to_three_point_triplet(cached)
-}
-
-fn to_story_point_triplet(
-    story_points: &StoryPointEstimate,
-    issue_id: &str,
-) -> Result<(f32, f32, f32, bool), ProjectSimulationError> {
-    let value = story_points.estimate.ok_or_else(|| {
-        ProjectSimulationError::InvalidEstimate(format!(
-            "Missing story point estimate: {}",
-            issue_id.to_string()
-        ))
-    })?;
-    let (lower, upper) = fibonacci_bounds(value);
-    let is_story_point_estimate = true;
-    Ok((lower, value, upper, is_story_point_estimate))
-}
-
-fn to_three_point_triplet(
-    estimate: &ThreePointEstimate,
-) -> Result<(f32, f32, f32, bool), ProjectSimulationError> {
-    let optimistic = estimate.optimistic.ok_or_else(|| {
-        ProjectSimulationError::InvalidEstimate("missing optimistic value".to_string())
-    })?;
-    let most_likely = estimate.most_likely.ok_or_else(|| {
-        ProjectSimulationError::InvalidEstimate("missing most likely value".to_string())
-    })?;
-    let pessimistic = estimate.pessimistic.ok_or_else(|| {
-        ProjectSimulationError::InvalidEstimate("missing pessimistic value".to_string())
-    })?;
-    let is_story_point_estimate = false;
-    Ok((
-        optimistic,
-        most_likely,
-        pessimistic,
-        is_story_point_estimate,
-    ))
-}
-
-fn fibonacci_bounds(value: f32) -> (f32, f32) {
-    let series = [
-        0.0, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0, 55.0, 89.0, 144.0, 233.0, 377.0, 610.0,
-        987.0,
-    ];
-
-    if value <= series[0] {
-        return (series[0], series[1]);
-    }
-
-    for window in series.windows(2) {
-        let lower = window[0];
-        let upper = window[1];
-        if value <= upper {
-            return (lower, upper);
-        }
-    }
-
-    let last = *series.last().unwrap();
-    (last, last)
 }
 
 #[derive(Debug, Clone)]
@@ -552,7 +441,7 @@ mod tests {
     use crate::test_support::{MockSampler, build_in_progress_story_point_issue};
     use crate::test_support::{
         build_constant_three_point_issue, build_done_issue, build_done_issue_with_deps,
-        build_story_point_issue, build_story_point_issue_with_start_date, build_three_point_issue,
+        build_story_point_issue, build_story_point_issue_with_start_date,
         create_calendar_without_any_free_days, on_date,
     };
     use chrono::NaiveDate;

@@ -1,4 +1,3 @@
-pub(crate) mod beta_pert_sampler;
 pub(crate) mod data_converter;
 pub(crate) mod data_source;
 pub(crate) mod gantt_diagram;
@@ -8,10 +7,9 @@ pub(crate) mod percentiles;
 pub(crate) mod project_flow_diagram;
 pub(crate) mod project_simulation;
 pub(crate) mod project_yaml;
-pub(crate) mod throughput_simulation;
 pub(crate) mod simulation_types;
 pub(crate) mod team_calendar_yaml;
 pub(crate) mod throughput_plot;
+pub(crate) mod throughput_simulation;
 pub(crate) mod throughput_yaml;
-pub(crate) mod velocity_calculation;
 pub(crate) mod util;
