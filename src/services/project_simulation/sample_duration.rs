@@ -17,7 +17,7 @@ pub(crate) fn sample_duration_days<R: ThreePointSampler + ?Sized>(
     velocity: Option<f32>,
     sampler: &mut R,
     issue_id: &str,
-) -> Result<(f32, bool), SamplingError> {
+) -> Result<f32, SamplingError> {
     let (optimistic, most_likely, pessimistic, is_story_point_estimate) = match estimate {
         Estimate::StoryPoint(estimate) => to_story_point_triplet(estimate, issue_id)?,
         Estimate::ThreePoint(estimate) => to_three_point_triplet(estimate)?,
@@ -45,9 +45,9 @@ pub(crate) fn sample_duration_days<R: ThreePointSampler + ?Sized>(
         if velocity <= 0.0 {
             return Err(SamplingError::InvalidVelocityValue);
         }
-        Ok((sampled / velocity, true))
+        Ok(sampled / velocity)
     } else {
-        Ok((sampled, false))
+        Ok(sampled)
     }
 }
 

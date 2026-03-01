@@ -40,13 +40,6 @@ pub struct ResultNode {
     pub total_float: f32, // LS - ES or LF - EF. If 0, then the node is on the critical path
 }
 
-pub fn critical_path_method(
-    network: Vec<NetworkNode>,
-    project_start: NaiveDate,
-) -> Result<Vec<ResultNode>, CriticalPathMethodError> {
-    critical_path_method_with_calendar(network, project_start, None)
-}
-
 pub fn critical_path_method_with_calendar(
     network: Vec<NetworkNode>,
     project_start: NaiveDate,
@@ -270,7 +263,7 @@ mod tests {
             build_network_node("WP1", 1.0, &[]), // Duplicate ID
         ];
         let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
-        let result = critical_path_method(network, project_start);
+        let result = critical_path_method_with_calendar(network, project_start, None);
         assert!(matches!(
             result,
             Err(CriticalPathMethodError::DuplicateNodeId(_))
@@ -281,7 +274,7 @@ mod tests {
     fn empty_input_leads_to_empty_output() {
         let network = vec![];
         let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
-        let result = critical_path_method(network, project_start).unwrap();
+        let result = critical_path_method_with_calendar(network, project_start, None).unwrap();
         assert!(result.is_empty());
     }
 
@@ -307,7 +300,7 @@ mod tests {
             build_network_node("WP0", 1.0, &[]),
         ];
         let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
-        let result = critical_path_method(network, project_start).unwrap();
+        let result = critical_path_method_with_calendar(network, project_start, None).unwrap();
         let expected_order = vec!["WP0", "WP1", "WP2", "WP3", "FIN"];
         let result_order: Vec<String> = result.iter().map(|node| node.id.clone()).collect();
         assert_eq!(result_order, expected_order);
@@ -526,7 +519,7 @@ mod tests {
                 })
                 .collect();
 
-            let result = critical_path_method(network, base).unwrap();
+            let result = critical_path_method_with_calendar(network, base, None).unwrap();
 
             for wp in &test.work_packages {
                 let result_node = result.iter().find(|node| node.id == wp.id).unwrap();
@@ -603,7 +596,7 @@ mod tests {
         ];
         // Project start does not have any effect in this case
         let project_start = NaiveDate::from_ymd_opt(2026, 6, 6).unwrap();
-        let result = critical_path_method(network, project_start).unwrap();
+        let result = critical_path_method_with_calendar(network, project_start, None).unwrap();
 
         let wp0 = result.iter().find(|node| node.id == "WP0").unwrap();
         assert_eq!(wp0.earliest_start, on_date(2026, 1, 5));
@@ -665,7 +658,7 @@ mod tests {
             build_network_node("WP0", 1.0, &["WP1"]), // WP1 does not exist
         ];
         let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
-        let result = critical_path_method(network, project_start);
+        let result = critical_path_method_with_calendar(network, project_start, None);
         assert!(matches!(
             result,
             Err(CriticalPathMethodError::MissingDependency(_))
@@ -679,7 +672,7 @@ mod tests {
             build_network_node("WP1", 1.0, &["WP0"]),
         ];
         let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
-        let result = critical_path_method(network, project_start);
+        let result = critical_path_method_with_calendar(network, project_start, None);
         assert!(matches!(
             result,
             Err(CriticalPathMethodError::CycleDetected)
