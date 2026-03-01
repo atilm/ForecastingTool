@@ -190,57 +190,186 @@ mod tests {
         assert_eq!(result_order, expected_order);
     }
 
-    // struct WorkPackageTestCase {
-    //     id: &'static str,
-    //     duration: u32,
-    //     dependencies: Vec<&'static str>,
-    //     expected_earliest_start_day: NaiveDate,
-    //     expected_earliest_finish_day: NaiveDate,
-    //     expected_latest_start_day: NaiveDate,
-    //     expected_latest_finish_day: NaiveDate,
-    // }
+    struct WorkPackageTestCase {
+        id: &'static str,
+        duration: f32,
+        dependencies: Vec<&'static str>,
+        expected_earliest_start_day: f32,
+        expected_earliest_finish_day: f32,
+        expected_latest_start_day: f32,
+        expected_latest_finish_day: f32,
+    }
+
+    impl WorkPackageTestCase {
+        fn new(
+            id: &'static str,
+            duration: f32,
+            dependencies: Vec<&'static str>,
+            expected_earliest_start_day: f32,
+            expected_earliest_finish_day: f32,
+            expected_latest_start_day: f32,
+            expected_latest_finish_day: f32,
+        ) -> Self {
+            Self {
+                id,
+                duration,
+                dependencies,
+                expected_earliest_start_day,
+                expected_earliest_finish_day,
+                expected_latest_start_day,
+                expected_latest_finish_day,
+            }
+        }
+    }
+
+    struct TestCase {
+        id: &'static str,
+        work_packages: Vec<WorkPackageTestCase>,
+    }
 
     #[test]
-    fn earliest_start_and_eraliest_finish_are_calculated_correctly() {
+    fn critical_path_method_is_calculated_correctly() {
         let base = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
 
-        // WP0, WP1, WP2, WP3, expected duration
-        let test_cases: Vec<(f32, f32, f32, f32, f32)> = vec![
-            (1.0, 1.0, 1.0, 1.0, 2.0), // Crit path: WP0 -> WP2 -> FIN
-            (6.0, 1.0, 0.0, 1.0, 6.0), // Crit path: WP0 -> FIN
-            (2.0, 1.0, 4.0, 1.0, 6.0), // Crit path: WP0 -> WP2 -> FIN
-            (1.0, 5.0, 2.0, 1.0, 7.0), // Crit path: WP1 -> WP2 -> FIN
-            (1.0, 5.0, 1.0, 4.0, 9.0), // Crit path: WP1 -> WP3 -> FIN
+        let tests = vec![
+            TestCase {
+                id: "Test Case 1",
+                work_packages: vec![
+                    WorkPackageTestCase::new("WP0", 1.0, vec![], 0.0, 1.0, 0.0, 1.0),
+                    WorkPackageTestCase::new("WP1", 1.0, vec![], 0.0, 1.0, 0.0, 1.0),
+                    WorkPackageTestCase::new("WP2", 1.0, vec!["WP0", "WP1"], 1.0, 2.0, 1.0, 2.0),
+                    WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 1.0, 2.0, 1.0, 2.0),
+                    WorkPackageTestCase::new(
+                        "FIN",
+                        0.0,
+                        vec!["WP0", "WP2", "WP3"],
+                        2.0,
+                        2.0,
+                        2.0,
+                        2.0,
+                    ),
+                ],
+            },
+            TestCase {
+                id: "Test Case 2",
+                work_packages: vec![
+                    WorkPackageTestCase::new("WP0", 6.0, vec![], 0.0, 6.0, 0.0, 6.0),
+                    WorkPackageTestCase::new("WP1", 1.0, vec![], 0.0, 1.0, 4.0, 5.0),
+                    WorkPackageTestCase::new("WP2", 0.0, vec!["WP0", "WP1"], 6.0, 6.0, 6.0, 6.0),
+                    WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 1.0, 2.0, 5.0, 6.0),
+                    WorkPackageTestCase::new(
+                        "FIN",
+                        0.0,
+                        vec!["WP0", "WP2", "WP3"],
+                        6.0,
+                        6.0,
+                        6.0,
+                        6.0,
+                    ),
+                ],
+            },
+            TestCase {
+                id: "Test Case 3",
+                work_packages: vec![
+                    WorkPackageTestCase::new("WP0", 2.0, vec![], 0.0, 2.0, 0.0, 2.0),
+                    WorkPackageTestCase::new("WP1", 1.0, vec![], 0.0, 1.0, 1.0, 2.0),
+                    WorkPackageTestCase::new("WP2", 4.0, vec!["WP0", "WP1"], 2.0, 6.0, 2.0, 6.0),
+                    WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 1.0, 2.0, 5.0, 6.0),
+                    WorkPackageTestCase::new(
+                        "FIN",
+                        0.0,
+                        vec!["WP0", "WP2", "WP3"],
+                        6.0,
+                        6.0,
+                        6.0,
+                        6.0,
+                    ),
+                ],
+            },
+            TestCase {
+                id: "Test Case 4",
+                work_packages: vec![
+                    WorkPackageTestCase::new("WP0", 1.0, vec![], 0.0, 1.0, 4.0, 5.0),
+                    WorkPackageTestCase::new("WP1", 5.0, vec![], 0.0, 5.0, 0.0, 5.0),
+                    WorkPackageTestCase::new("WP2", 2.0, vec!["WP0", "WP1"], 5.0, 7.0, 5.0, 7.0),
+                    WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 5.0, 6.0, 6.0, 7.0),
+                    WorkPackageTestCase::new(
+                        "FIN",
+                        0.0,
+                        vec!["WP0", "WP2", "WP3"],
+                        7.0,
+                        7.0,
+                        7.0,
+                        7.0,
+                    ),
+                ],
+            },
+            TestCase {
+                id: "Test Case 5",
+                work_packages: vec![
+                    WorkPackageTestCase::new("WP0", 1.0, vec![], 0.0, 1.0, 7.0, 8.0),
+                    WorkPackageTestCase::new("WP1", 5.0, vec![], 0.0, 5.0, 0.0, 5.0),
+                    WorkPackageTestCase::new("WP2", 1.0, vec!["WP0", "WP1"], 5.0, 6.0, 8.0, 9.0),
+                    WorkPackageTestCase::new("WP3", 4.0, vec!["WP1"], 5.0, 9.0, 5.0, 9.0),
+                    WorkPackageTestCase::new(
+                        "FIN",
+                        0.0,
+                        vec!["WP0", "WP2", "WP3"],
+                        9.0,
+                        9.0,
+                        9.0,
+                        9.0,
+                    ),
+                ],
+            },
         ];
 
-        // The dependency graph for the test is:
-        //
-        //    WP0      WP1
-        //     |        |
-        //     |        |
-        //     |    +---+----+
-        //     |    |        |
-        //     +---WP2      WP3
-        //     |    |        |
-        //     +----+--+-----+
-        //            |
-        //           FIN
-        for (_idx, (wp0, wp1, wp2, wp3, expected_duration)) in test_cases.into_iter().enumerate() {
-            let network = vec![
-                build_network_node("WP0", wp0, &[]),
-                build_network_node("WP1", wp1, &[]),
-                build_network_node("WP2", wp2, &["WP0", "WP1"]),
-                build_network_node("WP3", wp3, &["WP1"]),
-                build_network_node("FIN", 0.0, &["WP0", "WP2", "WP3"]),
-            ];
+        for test in tests {
+            let network: Vec<NetworkNode> = test
+                .work_packages
+                .iter()
+                .map(|wp| {
+                    build_network_node(
+                        wp.id,
+                        wp.duration,
+                        &wp.dependencies.iter().map(|s| *s).collect::<Vec<_>>(),
+                    )
+                })
+                .collect();
 
             let result = critical_path_method(network, base).unwrap();
-            let fin_node = result.iter().find(|node| node.id == "FIN").unwrap();
 
-            assert_eq!(
-                fin_node.earliest_finish,
-                base + chrono::Duration::days(expected_duration as i64)
-            );
+            for wp in &test.work_packages {
+                let result_node = result.iter().find(|node| node.id == wp.id).unwrap();
+                assert_eq!(
+                    result_node.earliest_start,
+                    base + chrono::Duration::days(wp.expected_earliest_start_day as i64),
+                    "Earliest start mismatch for {} in {}",
+                    wp.id,
+                    test.id
+                );
+                assert_eq!(
+                    result_node.earliest_finish,
+                    base + chrono::Duration::days(wp.expected_earliest_finish_day as i64),
+                    "Earliest finish mismatch for {} in {}",
+                    wp.id,
+                    test.id
+                );
+                // assert_eq!(
+                //     result_node.lastest_start,
+                //     base + chrono::Duration::days(wp.expected_latest_start_day as i64),
+                //     "Latest start mismatch for {} in {}",
+                //     wp.id,
+                //     test.id
+                // );
+                // assert_eq!(
+                //     result_node.latest_finish,
+                //     base + chrono::Duration::days(wp.expected_latest_finish_day as i64),
+                //     "Latest finish mismatch for {} in {}",
+                //     wp.id,
+                //     test.id
+                // );
+            }
         }
     }
 }
