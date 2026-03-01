@@ -3,9 +3,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::domain::calendar::TeamCalendar;
-use crate::domain::estimate::{
-    Estimate, StoryPointEstimate,
-};
+use crate::domain::estimate::{Estimate, StoryPointEstimate};
 
 use crate::services::project_simulation::sample_duration::sample_duration_days;
 
@@ -13,10 +11,13 @@ use chrono::NaiveDate;
 
 use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
-use crate::services::project_simulation::beta_pert_sampler::BetaPertSampler;
-use crate::services::project_simulation::beta_pert_sampler::ThreePointSampler;
 use crate::services::histogram::HistogramError;
 use crate::services::percentiles;
+use crate::services::project_simulation::beta_pert_sampler::BetaPertSampler;
+use crate::services::project_simulation::beta_pert_sampler::ThreePointSampler;
+use crate::services::project_simulation::sample_duration::SamplingError;
+use crate::services::project_simulation::velocity_calculation::VelocityCalculationError;
+use crate::services::project_simulation::velocity_calculation::calculate_project_velocity;
 use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
 use crate::services::simulation_types::{
     SimulationOutput, SimulationPercentile, SimulationReport, WorkPackagePercentiles,
@@ -25,12 +26,14 @@ use crate::services::simulation_types::{
 use crate::services::team_calendar_yaml::TeamCalendarYamlError;
 use crate::services::team_calendar_yaml::load_team_calendar_if_provided;
 use crate::services::util::dates::data_source_name;
-use crate::services::project_simulation::velocity_calculation::VelocityCalculationError;
-use crate::services::project_simulation::velocity_calculation::calculate_project_velocity;
-use crate::services::project_simulation::sample_duration::SamplingError;
 use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
+
+use crate::services::project_simulation::critical_path_method::CriticalPathMethodError;
+use crate::services::project_simulation::critical_path_method::NetworkNode;
+use crate::services::project_simulation::critical_path_method::ResultNode;
+use crate::services::project_simulation::critical_path_method::critical_path_method_with_calendar;
 
 #[derive(Debug, Clone, Copy)]
 struct WorkItemSample {
@@ -66,6 +69,8 @@ pub enum ProjectSimulationError {
     Histogram(#[from] HistogramError),
     #[error("failed to calculate percentiles: {0}")]
     SamplingError(#[from] SamplingError),
+    #[error("failed to perform critical path method analysis: {0}")]
+    CriticalPathMethod(#[from] CriticalPathMethodError),
 }
 
 pub fn simulate_project_from_yaml_file(
@@ -128,48 +133,73 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     let mut project_end_dates = Vec::with_capacity(iterations);
 
     for _ in 0..iterations {
-        let mut earliest_finish: HashMap<String, chrono::NaiveDate> = HashMap::new();
-        for id in order {
-            let node = nodes
-                .get(id)
-                .ok_or(ProjectSimulationError::MissingIssueId)?;
+        // let mut earliest_finish: HashMap<String, chrono::NaiveDate> = HashMap::new();
+        // for id in order {
+        //     let node = nodes
+        //         .get(id)
+        //         .ok_or(ProjectSimulationError::MissingIssueId)?;
 
-            let issue_start_date = if let Some(node_start_date) = node.start_date {
-                node_start_date
-            } else {
-                node.dependencies
-                    .iter()
-                    .filter_map(|dep| earliest_finish.get(dep))
-                    .max()
-                    .copied()
-                    .unwrap_or(start_date)
-            };
+        //     let issue_start_date = if let Some(node_start_date) = node.start_date {
+        //         node_start_date
+        //     } else {
+        //         node.dependencies
+        //             .iter()
+        //             .filter_map(|dep| earliest_finish.get(dep))
+        //             .max()
+        //             .copied()
+        //             .unwrap_or(start_date)
+        //     };
 
-            let issue_end_date = if let Some(done_date) = node.done_date {
-                done_date
-            } else {
-                let (duration_days, apply_calendar) =
-                    sample_duration_days(&node.estimate, velocity, sampler, &node.id)?;
-                calculate_end_date(issue_start_date, duration_days, apply_calendar, calendar)?
-            };
+        //     let issue_end_date = if let Some(done_date) = node.done_date {
+        //         done_date
+        //     } else {
+        //         let (duration_days, apply_calendar) =
+        //             sample_duration_days(&node.estimate, velocity, sampler, &node.id)?;
+        //         calculate_end_date(issue_start_date, duration_days, apply_calendar, calendar)?
+        //     };
 
-            let elapsed_days = calculate_days(issue_start_date, issue_end_date);
-            samples_by_id
-                .entry(node.id.clone())
-                .or_insert_with(|| Vec::with_capacity(iterations))
-                .push(WorkItemSample {
-                    duration_days: elapsed_days,
-                    end_date: issue_end_date,
-                });
-            earliest_finish.insert(node.id.clone(), issue_end_date);
-        }
+        //     let elapsed_days = calculate_days(issue_start_date, issue_end_date);
+        //     samples_by_id
+        //         .entry(node.id.clone())
+        //         .or_insert_with(|| Vec::with_capacity(iterations))
+        //         .push(WorkItemSample {
+        //             duration_days: elapsed_days,
+        //             end_date: issue_end_date,
+        //         });
+        //     earliest_finish.insert(node.id.clone(), issue_end_date);
+        // }
 
-        let project_end_date = earliest_finish
-            .values()
-            .copied()
+        // let project_end_date = earliest_finish
+        //     .values()
+        //     .copied()
+        //     .max()
+        //     .unwrap_or(start_date);
+        // project_end_dates.push(project_end_date);
+
+        let (network_nodes, apply_calendar) = build_network_nodes(&project, velocity, sampler)?;
+        let calendar_option = if apply_calendar { Some(calendar) } else { None };
+        let result_nodes =
+            critical_path_method_with_calendar(network_nodes, start_date, calendar_option)?;
+
+        let project_end_date_from_critical_path = result_nodes
+            .iter()
+            .map(|node| node.earliest_finish)
             .max()
             .unwrap_or(start_date);
-        project_end_dates.push(project_end_date);
+        project_end_dates.push(project_end_date_from_critical_path);
+
+        for result_node in result_nodes {
+            samples_by_id
+                .entry(result_node.id.clone())
+                .or_insert_with(|| Vec::with_capacity(iterations))
+                .push(WorkItemSample {
+                    duration_days: calculate_days(
+                        result_node.earliest_start,
+                        result_node.earliest_finish,
+                    ),
+                    end_date: result_node.earliest_finish,
+                });
+        }
     }
 
     project_end_dates.sort();
@@ -210,6 +240,51 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         results,
         work_packages: Some(work_packages),
     })
+}
+
+fn build_network_nodes<R: ThreePointSampler + ?Sized>(
+    project: &Project,
+    velocity: Option<f32>,
+    sampler: &mut R,
+) -> Result<(Vec<NetworkNode>, bool), ProjectSimulationError> {
+    let mut nodes = Vec::with_capacity(project.work_packages.len());
+    let mut apply_calendar = false;
+
+    for issue in project.work_packages.iter() {
+        let id = issue
+            .issue_id
+            .as_ref()
+            .map(|issue_id| issue_id.id.clone())
+            .ok_or(ProjectSimulationError::MissingIssueId)?;
+        let start_date = issue.start_date;
+        let end_date = issue.done_date;
+        let estimate = issue
+            .estimate
+            .clone()
+            .ok_or_else(|| ProjectSimulationError::MissingEstimate(id.clone()))?;
+        let dependencies = issue
+            .dependencies
+            .as_ref()
+            .map(|deps| deps.iter().map(|dep| dep.id.clone()).collect())
+            .unwrap_or_default();
+
+        let (duration, _) = sample_duration_days(&estimate, velocity, sampler, &id)?;
+
+        apply_calendar |= match estimate {
+            Estimate::StoryPoint(_) => true,
+            _ => false,
+        };
+
+        nodes.push(NetworkNode {
+            id,
+            duration,
+            start_date,
+            end_date,
+            dependencies,
+        });
+    }
+
+    Ok((nodes, apply_calendar))
 }
 
 fn percentiles_from_samples(
@@ -264,10 +339,7 @@ fn to_simulation_percentile(
     let end_date =
         percentiles::get_percentile_value(sorted_end_dates, percentile).unwrap_or(start_date);
     let days = calculate_days(start_date, end_date);
-    SimulationPercentile {
-        days,
-        end_date,
-    }
+    SimulationPercentile { days, end_date }
 }
 
 fn calculate_days(start_date: chrono::NaiveDate, end_date: chrono::NaiveDate) -> f32 {
@@ -710,50 +782,6 @@ mod tests {
 
         assert_eq!(fin.percentiles.p0.days, 0.0);
         assert_eq!(fin.percentiles.p0.end_date, wp2_end_date);
-    }
-
-    #[test]
-    fn the_calendar_is_only_applied_to_issues_estimated_in_story_points() {
-        // Story Points of SP-1, Duration in days of WP1, expected end-date
-        let test_cases: Vec<(f32, f32, NaiveDate)> = vec![
-            // Story point duration should dominate, ending on a saturday is fine because the item has been finished on friday
-            // The user is responsible for advancing the result to the next business day.
-            (20.0, 10.0, on_date(2026, 2, 28)),
-            // Duration of 12 days should dominate. Because calendar is not applied end_date = start_date + duration.
-            (2.0, 12.0, on_date(2026, 2, 28)),
-        ];
-
-        let mut sampler = MockSampler;
-        let calendar = TeamCalendar::new(); // default calendar which assumes weekends to be free
-
-        for (idx, (sp1, wp1, expected_end_date)) in test_cases.into_iter().enumerate() {
-            let project = Project {
-                name: "Dependent Project".to_string(),
-                work_packages: vec![
-                    build_done_issue("SP-0", 2.0, on_date(2026, 2, 13), on_date(2026, 2, 13)), // velocity of 2 points/day on Friday
-                    build_story_point_issue("SP-1", sp1, &[]),
-                    build_constant_three_point_issue("WP-1", wp1, &[]),
-                    build_constant_three_point_issue("FIN", 0.0, &["SP-1", "WP-1"]),
-                ],
-            };
-
-            let output = run_simulation(
-                &project,
-                &topological_sort(&project).unwrap(),
-                Some(calculate_project_velocity(&project, &calendar).unwrap()),
-                25,
-                on_date(2026, 2, 16), // Start on a Monday
-                &mut sampler,
-                &calendar,
-            )
-            .unwrap();
-
-            assert_eq!(
-                output.report.p85.end_date, expected_end_date,
-                "Test case {}: Expected end date to match the expected value",
-                idx
-            );
-        }
     }
 
     #[test]

@@ -23,21 +23,21 @@ pub enum CriticalPathMethodError {
 
 #[derive(Debug)]
 pub struct NetworkNode {
-    id: String,
-    duration: f32,
-    start_date: Option<NaiveDate>,
-    end_date: Option<NaiveDate>,
-    dependencies: Vec<String>,
+    pub id: String,
+    pub duration: f32,
+    pub start_date: Option<NaiveDate>,
+    pub end_date: Option<NaiveDate>,
+    pub dependencies: Vec<String>,
 }
 
 pub struct ResultNode {
-    id: String,
-    earliest_start: NaiveDate,
-    latest_start: NaiveDate,
-    earliest_finish: NaiveDate,
-    latest_finish: NaiveDate,
-    free_float: f32,  // ES of next node - EF of current node.
-    total_float: f32, // LS - ES or LF - EF. If 0, then the node is on the critical path
+    pub id: String,
+    pub earliest_start: NaiveDate,
+    pub latest_start: NaiveDate,
+    pub earliest_finish: NaiveDate,
+    pub latest_finish: NaiveDate,
+    pub free_float: f32,  // ES of next node - EF of current node.
+    pub total_float: f32, // LS - ES or LF - EF. If 0, then the node is on the critical path
 }
 
 pub fn critical_path_method(
@@ -50,7 +50,7 @@ pub fn critical_path_method(
 pub fn critical_path_method_with_calendar(
     network: Vec<NetworkNode>,
     project_start: NaiveDate,
-    calendar: Option<TeamCalendar>,
+    calendar: Option<&TeamCalendar>,
 ) -> Result<Vec<ResultNode>, CriticalPathMethodError> {
     let nodes_count = network.len();
     let sorted_nodes = topological_sort(network)?;
@@ -75,7 +75,7 @@ pub fn critical_path_method_with_calendar(
         let earliest_finish = if let Some(end_date) = node.end_date {
             end_date
         } else {
-            calculate_end_date(earliest_start, node.duration, calendar.as_ref())?
+            calculate_end_date(earliest_start, node.duration, calendar)?
         };
 
         earliest_finish_dates.insert(node.id.clone(), earliest_finish);
@@ -648,7 +648,7 @@ mod tests {
         ];
 
         let result =
-            critical_path_method_with_calendar(network, project_start, Some(calendar)).unwrap();
+            critical_path_method_with_calendar(network, project_start, Some(&calendar)).unwrap();
 
         let wp0 = result.iter().find(|node| node.id == "WP0").unwrap();
         assert_eq!(wp0.earliest_start, project_start);
