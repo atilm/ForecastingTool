@@ -5,6 +5,8 @@ use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
 use thiserror::Error;
 
+use crate::domain::calendar::TeamCalendar;
+
 #[derive(Error, Debug)]
 pub enum CriticalPathMethodError {
     #[error("The network contains duplicate node IDs: {0}")]
@@ -13,6 +15,10 @@ pub enum CriticalPathMethodError {
     CycleDetected,
     #[error("A node has a dependency on a non-existent node: {0}")]
     MissingDependency(String),
+    #[error(
+        "The provided calendar does not have enough capacity to complete the task within a reasonable time frame."
+    )]
+    InsufficientCalendarCapacity,
 }
 
 #[derive(Debug)]
@@ -27,7 +33,7 @@ pub struct NetworkNode {
 pub struct ResultNode {
     id: String,
     earliest_start: NaiveDate,
-    lastest_start: NaiveDate,
+    latest_start: NaiveDate,
     earliest_finish: NaiveDate,
     latest_finish: NaiveDate,
     free_float: f32,  // ES of next node - EF of current node.
@@ -38,10 +44,18 @@ pub fn critical_path_method(
     network: Vec<NetworkNode>,
     project_start: NaiveDate,
 ) -> Result<Vec<ResultNode>, CriticalPathMethodError> {
+    critical_path_method_with_calendar(network, project_start, None)
+}
+
+pub fn critical_path_method_with_calendar(
+    network: Vec<NetworkNode>,
+    project_start: NaiveDate,
+    calendar: Option<TeamCalendar>,
+) -> Result<Vec<ResultNode>, CriticalPathMethodError> {
     let nodes_count = network.len();
     let sorted_nodes = topological_sort(network)?;
 
-    let mut earliest_finish: HashMap<String, chrono::NaiveDate> =
+    let mut earliest_finish_dates: HashMap<String, chrono::NaiveDate> =
         HashMap::with_capacity(nodes_count);
     let mut result_nodes: HashMap<String, ResultNode> = HashMap::with_capacity(nodes_count);
 
@@ -52,31 +66,30 @@ pub fn critical_path_method(
         } else {
             node.dependencies
                 .iter()
-                .filter_map(|dep| earliest_finish.get(dep))
+                .filter_map(|dep| earliest_finish_dates.get(dep))
                 .max()
                 .cloned()
                 .unwrap_or(project_start)
         };
 
-        let earliest_finish_date = if let Some(end_date) = node.end_date {
+        let earliest_finish = if let Some(end_date) = node.end_date {
             end_date
         } else {
-            let whole_days = node.duration.ceil() as i64;
-            earliest_start + chrono::Duration::days(whole_days)
+            calculate_end_date(earliest_start, node.duration, calendar.as_ref())?
         };
 
-        earliest_finish.insert(node.id.clone(), earliest_finish_date);
+        earliest_finish_dates.insert(node.id.clone(), earliest_finish);
 
         result_nodes.insert(
             node.id.clone(),
             ResultNode {
                 id: node.id.clone(),
                 earliest_start,
-                lastest_start: project_start, // Placeholder, should be calculated based on dependencies
-                earliest_finish: earliest_finish_date,
-                latest_finish: project_start, // Placeholder, should be calculated based on dependencies
-                free_float: 0.0, // Placeholder, should be calculated based on dependencies
-                total_float: 0.0, // Placeholder, should be calculated based on dependencies
+                latest_start: project_start, // Placeholder, will be calculated in backward pass
+                earliest_finish,
+                latest_finish: project_start, // Placeholder, will be calculated in backward pass 
+                free_float: 0.0, // Placeholder, will be calculated in backward pass
+                total_float: 0.0, // Placeholder, will be calculated in backward pass
             },
         );
     }
@@ -94,7 +107,7 @@ pub fn critical_path_method(
     }
 
     // Find project end date = max of all earliest finish dates
-    let project_end = earliest_finish
+    let project_end = earliest_finish_dates
         .values()
         .max()
         .cloned()
@@ -121,11 +134,11 @@ pub fn critical_path_method(
             .min()
             .unwrap_or(project_end);
         let free_float =
-            (earliest_start_of_successors - earliest_finish[&node.id]).num_days() as f32;
+            (earliest_start_of_successors - earliest_finish_dates[&node.id]).num_days() as f32;
 
         if let Some(result_node) = result_nodes.get_mut(&node.id) {
             result_node.latest_finish = latest_finish_date;
-            result_node.lastest_start = latest_start_date;
+            result_node.latest_start = latest_start_date;
             result_node.free_float = free_float.max(0.0); // Free float cannot be negative
             result_node.total_float =
                 (latest_start_date - result_node.earliest_start).num_days() as f32;
@@ -140,6 +153,55 @@ pub fn critical_path_method(
         .collect();
 
     Ok(result_vector)
+}
+
+fn calculate_end_date(
+    start_date: chrono::NaiveDate,
+    duration_days: f32,
+    calendar: Option<&TeamCalendar>,
+) -> Result<chrono::NaiveDate, CriticalPathMethodError> {
+    if duration_days <= 0.0 {
+        return Ok(start_date);
+    }
+
+    if let Some(calendar) = calendar {
+        end_date_from_capacity_days(start_date, duration_days, calendar)
+    } else {
+        let whole_days = duration_days.ceil() as i64;
+        Ok(start_date + chrono::Duration::days(whole_days))
+    }
+}
+
+fn end_date_from_capacity_days(
+    start_date: chrono::NaiveDate,
+    days_at_full_capacity: f32,
+    calendar: &TeamCalendar,
+) -> Result<chrono::NaiveDate, CriticalPathMethodError> {
+    if days_at_full_capacity <= 0.0 {
+        return Ok(start_date);
+    }
+
+    let mut remaining_capacity = days_at_full_capacity;
+    let mut date = start_date;
+    for _ in 0..(365 * 200) {
+        let todays_capacity_fraction = calendar.get_capacity(date);
+        if todays_capacity_fraction > 0.0 {
+            remaining_capacity -= todays_capacity_fraction;
+        }
+
+        date += chrono::Duration::days(1);
+
+        if remaining_capacity <= 0.0 {
+            let next_non_zero_capacity_date = (0..365 * 200)
+                .map(|i| date + chrono::Duration::days(i))
+                .find(|d| calendar.get_capacity(*d) > 0.0)
+                .unwrap_or(date); // If we can't find a non-zero capacity date within a reasonable time frame, just return the current date
+
+            return Ok(next_non_zero_capacity_date);
+        }
+    }
+
+    Err(CriticalPathMethodError::InsufficientCalendarCapacity)
 }
 
 fn topological_sort(
@@ -483,7 +545,7 @@ mod tests {
                     test.id
                 );
                 assert_eq!(
-                    result_node.lastest_start,
+                    result_node.latest_start,
                     base + chrono::Duration::days(wp.expected_latest_start_day as i64),
                     "Latest start mismatch for {} in {}",
                     wp.id,
@@ -554,6 +616,47 @@ mod tests {
         let wp2 = result.iter().find(|node| node.id == "WP2").unwrap();
         assert_eq!(wp2.earliest_start, on_date(2026, 1, 16));
         assert_eq!(wp2.earliest_finish, on_date(2026, 1, 20));
+    }
+
+    #[test]
+    fn when_a_calendar_is_given_it_is_applied() {
+        use crate::domain::calendar::Calendar;
+        use crate::domain::calendar::FreeDateRange;
+        use chrono::Weekday;
+
+        let calendar = TeamCalendar {
+            calendars: vec![
+                Calendar {
+                    free_weekdays: vec![Weekday::Sat, Weekday::Sun],
+                    free_date_ranges: vec![FreeDateRange {
+                        start_date: on_date(2026, 1, 12),
+                        end_date: on_date(2026, 1, 23),
+                    }],
+                },
+                Calendar {
+                    free_weekdays: vec![Weekday::Sat, Weekday::Sun],
+                    free_date_ranges: vec![],
+                },
+            ],
+        };
+
+        let project_start = NaiveDate::from_ymd_opt(2026, 1, 5).unwrap();
+
+        let network = vec![
+            build_network_node("WP0", 5.0, &[]), // Should be finished after 5 days on Sat. 10th.
+            build_network_node("WP1", 3.0, &["WP0"]), // Should take 6 days, because we work at half capacity. -> Finished on Tue. 20th
+        ];
+
+        let result =
+            critical_path_method_with_calendar(network, project_start, Some(calendar)).unwrap();
+
+        let wp0 = result.iter().find(|node| node.id == "WP0").unwrap();
+        assert_eq!(wp0.earliest_start, project_start);
+        assert_eq!(wp0.earliest_finish, on_date(2026, 1, 12));
+
+        let wp1 = result.iter().find(|node| node.id == "WP1").unwrap();
+        assert_eq!(wp1.earliest_start, on_date(2026, 1, 12));
+        assert_eq!(wp1.earliest_finish, on_date(2026, 1, 20));
     }
 
     #[test]
