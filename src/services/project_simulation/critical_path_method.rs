@@ -57,7 +57,8 @@ pub fn critical_path_method(
             .cloned()
             .unwrap_or(project_start);
 
-        let earliest_finish_date = earliest_start + chrono::Duration::days(node.duration as i64);
+        let whole_days = node.duration.ceil() as i64;
+        let earliest_finish_date = earliest_start + chrono::Duration::days(whole_days);
         earliest_finish.insert(node.id.clone(), earliest_finish_date);
 
         result_nodes.insert(
@@ -76,7 +77,7 @@ pub fn critical_path_method(
         );
     }
 
-    
+
     // Build successor map (reverse of dependencies)
     let mut successors: HashMap<String, Vec<String>> = HashMap::new();
     for node in &sorted_nodes {
@@ -105,8 +106,9 @@ pub fn critical_path_method(
             .cloned()
             .unwrap_or(project_end);
 
+        let whole_days = node.duration.ceil() as i64;
         let latest_start_date =
-            latest_finish_date - chrono::Duration::days(node.duration as i64);
+            latest_finish_date - chrono::Duration::days(whole_days);
 
         if let Some(result_node) = result_nodes.get_mut(&node.id) {
             result_node.latest_finish = latest_finish_date;
