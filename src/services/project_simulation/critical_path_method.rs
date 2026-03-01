@@ -31,9 +31,8 @@ pub struct ResultNode {
     lastest_start: NaiveDate,
     earliest_finish: NaiveDate,
     latest_finish: NaiveDate,
-    free_float: f32,
-    total_float: f32,
-    drag: f32,
+    free_float: f32,  // ES of next node - EF of current node.
+    total_float: f32, // LS - ES or LF - EF. If 0, then the node is on the critical path
 }
 
 pub fn critical_path_method(
@@ -72,18 +71,19 @@ pub fn critical_path_method(
                 latest_finish: project_start, // Placeholder, should be calculated based on dependencies
                 free_float: 0.0, // Placeholder, should be calculated based on dependencies
                 total_float: 0.0, // Placeholder, should be calculated based on dependencies
-                drag: 0.0,       // Placeholder, should be calculated based on dependencies
             },
         );
     }
-
 
     // Build successor map (reverse of dependencies)
     let mut successors: HashMap<String, Vec<String>> = HashMap::new();
     for node in &sorted_nodes {
         successors.entry(node.id.clone()).or_default();
         for dep in &node.dependencies {
-            successors.entry(dep.clone()).or_default().push(node.id.clone());
+            successors
+                .entry(dep.clone())
+                .or_default()
+                .push(node.id.clone());
         }
     }
 
@@ -95,8 +95,7 @@ pub fn critical_path_method(
         .unwrap_or(project_start);
 
     // Backward pass to calculate latest start and finish times
-    let mut latest_start: HashMap<String, chrono::NaiveDate> =
-        HashMap::with_capacity(nodes_count);
+    let mut latest_start: HashMap<String, chrono::NaiveDate> = HashMap::with_capacity(nodes_count);
 
     for node in sorted_nodes.iter().rev() {
         let latest_finish_date = successors[&node.id]
@@ -107,12 +106,21 @@ pub fn critical_path_method(
             .unwrap_or(project_end);
 
         let whole_days = node.duration.ceil() as i64;
-        let latest_start_date =
-            latest_finish_date - chrono::Duration::days(whole_days);
+        let latest_start_date = latest_finish_date - chrono::Duration::days(whole_days);            
+
+        let earliest_start_of_successors = successors[&node.id]
+            .iter()
+            .filter_map(|succ| result_nodes.get(succ))
+            .map(|succ_node| succ_node.earliest_start)
+            .min()
+            .unwrap_or(project_end);
+        let free_float = (earliest_start_of_successors - earliest_finish[&node.id]).num_days() as f32;
 
         if let Some(result_node) = result_nodes.get_mut(&node.id) {
             result_node.latest_finish = latest_finish_date;
             result_node.lastest_start = latest_start_date;
+            result_node.free_float = free_float.max(0.0); // Free float cannot be negative
+            result_node.total_float = (latest_start_date - result_node.earliest_start).num_days() as f32;
         }
 
         latest_start.insert(node.id.clone(), latest_start_date);
@@ -241,6 +249,8 @@ mod tests {
         expected_earliest_finish_day: f32,
         expected_latest_start_day: f32,
         expected_latest_finish_day: f32,
+        expected_free_float: f32,
+        expected_total_float: f32,
     }
 
     impl WorkPackageTestCase {
@@ -252,6 +262,8 @@ mod tests {
             expected_earliest_finish_day: f32,
             expected_latest_start_day: f32,
             expected_latest_finish_day: f32,
+            expected_free_float: f32,
+            expected_total_float: f32,
         ) -> Self {
             Self {
                 id,
@@ -261,6 +273,8 @@ mod tests {
                 expected_earliest_finish_day,
                 expected_latest_start_day,
                 expected_latest_finish_day,
+                expected_free_float,
+                expected_total_float,
             }
         }
     }
@@ -278,10 +292,10 @@ mod tests {
             TestCase {
                 id: "Test Case 1",
                 work_packages: vec![
-                    WorkPackageTestCase::new("WP0", 1.0, vec![], 0.0, 1.0, 0.0, 1.0),
-                    WorkPackageTestCase::new("WP1", 1.0, vec![], 0.0, 1.0, 0.0, 1.0),
-                    WorkPackageTestCase::new("WP2", 1.0, vec!["WP0", "WP1"], 1.0, 2.0, 1.0, 2.0),
-                    WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 1.0, 2.0, 1.0, 2.0),
+                    WorkPackageTestCase::new("WP0", 1.0, vec![], 0.0, 1.0, 0.0, 1.0, 0.0, 0.0),
+                    WorkPackageTestCase::new("WP1", 1.0, vec![], 0.0, 1.0, 0.0, 1.0, 0.0, 0.0),
+                    WorkPackageTestCase::new("WP2", 1.0, vec!["WP0", "WP1"], 1.0, 2.0, 1.0, 2.0, 0.0, 0.0),
+                    WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 1.0, 2.0, 1.0, 2.0, 0.0, 0.0),
                     WorkPackageTestCase::new(
                         "FIN",
                         0.0,
@@ -290,16 +304,18 @@ mod tests {
                         2.0,
                         2.0,
                         2.0,
+                        0.0,
+                        0.0
                     ),
                 ],
             },
             TestCase {
                 id: "Test Case 2",
                 work_packages: vec![
-                    WorkPackageTestCase::new("WP0", 6.0, vec![], 0.0, 6.0, 0.0, 6.0),
-                    WorkPackageTestCase::new("WP1", 1.0, vec![], 0.0, 1.0, 4.0, 5.0),
-                    WorkPackageTestCase::new("WP2", 0.0, vec!["WP0", "WP1"], 6.0, 6.0, 6.0, 6.0),
-                    WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 1.0, 2.0, 5.0, 6.0),
+                    WorkPackageTestCase::new("WP0", 6.0, vec![], 0.0, 6.0, 0.0, 6.0, 0.0, 0.0),
+                    WorkPackageTestCase::new("WP1", 1.0, vec![], 0.0, 1.0, 4.0, 5.0, 0.0, 4.0),
+                    WorkPackageTestCase::new("WP2", 0.0, vec!["WP0", "WP1"], 6.0, 6.0, 6.0, 6.0, 0.0, 0.0),
+                    WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 1.0, 2.0, 5.0, 6.0, 4.0, 4.0),
                     WorkPackageTestCase::new(
                         "FIN",
                         0.0,
@@ -308,16 +324,18 @@ mod tests {
                         6.0,
                         6.0,
                         6.0,
+                        0.0,
+                        0.0
                     ),
                 ],
             },
             TestCase {
                 id: "Test Case 3",
                 work_packages: vec![
-                    WorkPackageTestCase::new("WP0", 2.0, vec![], 0.0, 2.0, 0.0, 2.0),
-                    WorkPackageTestCase::new("WP1", 1.0, vec![], 0.0, 1.0, 1.0, 2.0),
-                    WorkPackageTestCase::new("WP2", 4.0, vec!["WP0", "WP1"], 2.0, 6.0, 2.0, 6.0),
-                    WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 1.0, 2.0, 5.0, 6.0),
+                    WorkPackageTestCase::new("WP0", 2.0, vec![], 0.0, 2.0, 0.0, 2.0, 0.0, 0.0),
+                    WorkPackageTestCase::new("WP1", 1.0, vec![], 0.0, 1.0, 1.0, 2.0, 0.0, 1.0),
+                    WorkPackageTestCase::new("WP2", 4.0, vec!["WP0", "WP1"], 2.0, 6.0, 2.0, 6.0, 0.0, 0.0),
+                    WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 1.0, 2.0, 5.0, 6.0, 4.0, 4.0),
                     WorkPackageTestCase::new(
                         "FIN",
                         0.0,
@@ -326,16 +344,18 @@ mod tests {
                         6.0,
                         6.0,
                         6.0,
+                        0.0,
+                        0.0
                     ),
                 ],
             },
             TestCase {
                 id: "Test Case 4",
                 work_packages: vec![
-                    WorkPackageTestCase::new("WP0", 1.0, vec![], 0.0, 1.0, 4.0, 5.0),
-                    WorkPackageTestCase::new("WP1", 5.0, vec![], 0.0, 5.0, 0.0, 5.0),
-                    WorkPackageTestCase::new("WP2", 2.0, vec!["WP0", "WP1"], 5.0, 7.0, 5.0, 7.0),
-                    WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 5.0, 6.0, 6.0, 7.0),
+                    WorkPackageTestCase::new("WP0", 1.0, vec![], 0.0, 1.0, 4.0, 5.0, 4.0, 4.0),
+                    WorkPackageTestCase::new("WP1", 5.0, vec![], 0.0, 5.0, 0.0, 5.0, 0.0, 0.0),
+                    WorkPackageTestCase::new("WP2", 2.0, vec!["WP0", "WP1"], 5.0, 7.0, 5.0, 7.0, 0.0, 0.0),
+                    WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 5.0, 6.0, 6.0, 7.0, 1.0, 1.0),
                     WorkPackageTestCase::new(
                         "FIN",
                         0.0,
@@ -344,16 +364,18 @@ mod tests {
                         7.0,
                         7.0,
                         7.0,
+                        0.0,
+                        0.0
                     ),
                 ],
             },
             TestCase {
                 id: "Test Case 5",
                 work_packages: vec![
-                    WorkPackageTestCase::new("WP0", 1.0, vec![], 0.0, 1.0, 7.0, 8.0),
-                    WorkPackageTestCase::new("WP1", 5.0, vec![], 0.0, 5.0, 0.0, 5.0),
-                    WorkPackageTestCase::new("WP2", 1.0, vec!["WP0", "WP1"], 5.0, 6.0, 8.0, 9.0),
-                    WorkPackageTestCase::new("WP3", 4.0, vec!["WP1"], 5.0, 9.0, 5.0, 9.0),
+                    WorkPackageTestCase::new("WP0", 1.0, vec![], 0.0, 1.0, 7.0, 8.0, 4.0, 7.0),
+                    WorkPackageTestCase::new("WP1", 5.0, vec![], 0.0, 5.0, 0.0, 5.0, 0.0, 0.0),
+                    WorkPackageTestCase::new("WP2", 1.0, vec!["WP0", "WP1"], 5.0, 6.0, 8.0, 9.0, 3.0, 3.0),
+                    WorkPackageTestCase::new("WP3", 4.0, vec!["WP1"], 5.0, 9.0, 5.0, 9.0, 0.0, 0.0),
                     WorkPackageTestCase::new(
                         "FIN",
                         0.0,
@@ -362,6 +384,8 @@ mod tests {
                         9.0,
                         9.0,
                         9.0,
+                        0.0,
+                        0.0
                     ),
                 ],
             },
@@ -411,6 +435,20 @@ mod tests {
                     "Latest finish mismatch for {} in {}",
                     wp.id,
                     test.id
+                );
+                assert!(
+                    (result_node.free_float - wp.expected_free_float).abs() < 0.01,
+                    "Free float mismatch for {} in {}",
+                    wp.id,
+                    test.id
+                );
+                assert!(
+                    (result_node.total_float - wp.expected_total_float).abs() < 0.01,
+                    "Total float mismatch for {} ({} vs. {}) in {}",
+                    wp.id,
+                    result_node.total_float,
+                    wp.expected_total_float,
+                    test.id,
                 );
             }
         }
