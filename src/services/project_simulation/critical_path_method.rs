@@ -18,7 +18,7 @@ pub enum CriticalPathMethodError {
 #[derive(Debug)]
 pub struct NetworkNode {
     id: String,
-    duration: u32,
+    duration: f32,
     start_date: Option<NaiveDate>,
     end_date: Option<NaiveDate>,
     dependencies: Vec<String>,
@@ -26,14 +26,14 @@ pub struct NetworkNode {
 
 pub struct ResultNode {
     id: String,
-    duration: u32,
+    duration: f32,
     earliest_start: NaiveDate,
     lastest_start: NaiveDate,
     earliest_finish: NaiveDate,
     latest_finish: NaiveDate,
-    free_float: u32,
-    total_float: u32,
-    drag: u32,
+    free_float: f32,
+    total_float: f32,
+    drag: f32,
 }
 
 pub fn critical_path_method(
@@ -43,7 +43,8 @@ pub fn critical_path_method(
     let nodes_count = network.len();
     let sorted_nodes = topological_sort(network)?;
 
-    let mut earliest_finish: HashMap<String, chrono::NaiveDate> = HashMap::with_capacity(nodes_count);
+    let mut earliest_finish: HashMap<String, chrono::NaiveDate> =
+        HashMap::with_capacity(nodes_count);
     let mut result_nodes: HashMap<String, ResultNode> = HashMap::with_capacity(nodes_count);
 
     for node in &sorted_nodes {
@@ -67,9 +68,9 @@ pub fn critical_path_method(
                 lastest_start: project_start, // Placeholder, should be calculated based on dependencies
                 earliest_finish: earliest_finish_date,
                 latest_finish: project_start, // Placeholder, should be calculated based on dependencies
-                free_float: 0, // Placeholder, should be calculated based on dependencies
-                total_float: 0, // Placeholder, should be calculated based on dependencies
-                drag: 0,       // Placeholder, should be calculated based on dependencies
+                free_float: 0.0, // Placeholder, should be calculated based on dependencies
+                total_float: 0.0, // Placeholder, should be calculated based on dependencies
+                drag: 0.0,       // Placeholder, should be calculated based on dependencies
             },
         );
     }
@@ -82,7 +83,9 @@ pub fn critical_path_method(
     Ok(result_vector)
 }
 
-fn topological_sort(network: Vec<NetworkNode>) -> Result<Vec<NetworkNode>, CriticalPathMethodError> {
+fn topological_sort(
+    network: Vec<NetworkNode>,
+) -> Result<Vec<NetworkNode>, CriticalPathMethodError> {
     let mut graph: DiGraph<String, ()> = DiGraph::new();
     let mut nodes_by_index = HashMap::new();
     let mut index_by_id = HashMap::new();
@@ -127,7 +130,7 @@ mod tests {
     use super::*;
     use chrono::NaiveDate;
 
-    fn build_network_node(id: &str, duration: u32, dependencies: &[&str]) -> NetworkNode {
+    fn build_network_node(id: &str, duration: f32, dependencies: &[&str]) -> NetworkNode {
         NetworkNode {
             id: id.to_string(),
             duration,
@@ -140,12 +143,15 @@ mod tests {
     #[test]
     fn duplicate_node_ids_are_detected() {
         let network = vec![
-            build_network_node("WP1", 1, &[]),
-            build_network_node("WP1", 1, &[]), // Duplicate ID
+            build_network_node("WP1", 1.0, &[]),
+            build_network_node("WP1", 1.0, &[]), // Duplicate ID
         ];
         let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
         let result = critical_path_method(network, project_start);
-        assert!(matches!(result, Err(CriticalPathMethodError::DuplicateNodeId(_))));
+        assert!(matches!(
+            result,
+            Err(CriticalPathMethodError::DuplicateNodeId(_))
+        ));
     }
 
     #[test]
@@ -171,11 +177,11 @@ mod tests {
     #[test]
     fn a_topologically_sorted_vec_of_result_nodes_is_returned() {
         let network = vec![
-            build_network_node("WP3", 1, &["WP1"]),
-            build_network_node("FIN", 0, &["WP0", "WP2", "WP3"]),
-            build_network_node("WP1", 1, &[]),
-            build_network_node("WP2", 1, &["WP0", "WP1"]),
-            build_network_node("WP0", 1, &[]),
+            build_network_node("WP3", 1.0, &["WP1"]),
+            build_network_node("FIN", 0.0, &["WP0", "WP2", "WP3"]),
+            build_network_node("WP1", 1.0, &[]),
+            build_network_node("WP2", 1.0, &["WP0", "WP1"]),
+            build_network_node("WP0", 1.0, &[]),
         ];
         let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
         let result = critical_path_method(network, project_start).unwrap();
@@ -184,24 +190,34 @@ mod tests {
         assert_eq!(result_order, expected_order);
     }
 
+    // struct WorkPackageTestCase {
+    //     id: &'static str,
+    //     duration: u32,
+    //     dependencies: Vec<&'static str>,
+    //     expected_earliest_start_day: NaiveDate,
+    //     expected_earliest_finish_day: NaiveDate,
+    //     expected_latest_start_day: NaiveDate,
+    //     expected_latest_finish_day: NaiveDate,
+    // }
+
     #[test]
     fn earliest_start_and_eraliest_finish_are_calculated_correctly() {
         let base = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
 
         // WP0, WP1, WP2, WP3, expected duration
-        let test_cases: Vec<(u32, u32, u32, u32, u32)> = vec![
-            (1, 1, 1, 1, 2), // Crit path: WP0 -> WP2 -> FIN
-            (6, 1, 0, 1, 6), // Crit path: WP0 -> FIN
-            (2, 1, 4, 1, 6), // Crit path: WP0 -> WP2 -> FIN
-            (1, 5, 2, 1, 7), // Crit path: WP1 -> WP2 -> FIN
-            (1, 5, 1, 4, 9), // Crit path: WP1 -> WP3 -> FIN
+        let test_cases: Vec<(f32, f32, f32, f32, f32)> = vec![
+            (1.0, 1.0, 1.0, 1.0, 2.0), // Crit path: WP0 -> WP2 -> FIN
+            (6.0, 1.0, 0.0, 1.0, 6.0), // Crit path: WP0 -> FIN
+            (2.0, 1.0, 4.0, 1.0, 6.0), // Crit path: WP0 -> WP2 -> FIN
+            (1.0, 5.0, 2.0, 1.0, 7.0), // Crit path: WP1 -> WP2 -> FIN
+            (1.0, 5.0, 1.0, 4.0, 9.0), // Crit path: WP1 -> WP3 -> FIN
         ];
 
         // The dependency graph for the test is:
         //
-        //    WP0      WP1        
-        //     |        |        
-        //     |        |        
+        //    WP0      WP1
+        //     |        |
+        //     |        |
         //     |    +---+----+
         //     |    |        |
         //     +---WP2      WP3
@@ -211,19 +227,20 @@ mod tests {
         //           FIN
         for (_idx, (wp0, wp1, wp2, wp3, expected_duration)) in test_cases.into_iter().enumerate() {
             let network = vec![
-                build_network_node("WP0", wp0 as u32, &[]),
-                build_network_node("WP1", wp1 as u32, &[]),
-                build_network_node("WP2", wp2 as u32, &["WP0", "WP1"]),
-                build_network_node("WP3", wp3 as u32, &["WP1"]),
-                build_network_node("FIN", 0, &["WP0", "WP2", "WP3"]),
+                build_network_node("WP0", wp0, &[]),
+                build_network_node("WP1", wp1, &[]),
+                build_network_node("WP2", wp2, &["WP0", "WP1"]),
+                build_network_node("WP3", wp3, &["WP1"]),
+                build_network_node("FIN", 0.0, &["WP0", "WP2", "WP3"]),
             ];
 
             let result = critical_path_method(network, base).unwrap();
             let fin_node = result.iter().find(|node| node.id == "FIN").unwrap();
-            
-            assert_eq!(fin_node.earliest_finish, base + chrono::Duration::days(expected_duration as i64));
+
+            assert_eq!(
+                fin_node.earliest_finish,
+                base + chrono::Duration::days(expected_duration as i64)
+            );
         }
     }
-
-
 }
