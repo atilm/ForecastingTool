@@ -29,7 +29,7 @@ use crate::services::util::dates::data_source_name;
 
 use crate::services::project_simulation::critical_path_method::CriticalPathMethodError;
 use crate::services::project_simulation::critical_path_method::NetworkNode;
-use crate::services::project_simulation::critical_path_method::critical_path_method_with_calendar;
+use crate::services::project_simulation::critical_path_method::critical_path_method;
 
 #[derive(Debug, Clone, Copy)]
 struct WorkItemSample {
@@ -124,7 +124,7 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         let network_nodes = build_network_nodes(&project, velocity, sampler)?;
 
         let result_nodes =
-            critical_path_method_with_calendar(network_nodes, start_date, calendar_option)?;
+            critical_path_method(network_nodes, start_date, calendar_option)?;
 
         let project_end_date = result_nodes
             .iter()
