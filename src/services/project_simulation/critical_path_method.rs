@@ -172,7 +172,7 @@ mod tests {
     fn a_topologically_sorted_vec_of_result_nodes_is_returned() {
         let network = vec![
             build_network_node("WP3", 1, &["WP1"]),
-            build_network_node("FIN", 1, &["WP0", "WP2", "WP3"]),
+            build_network_node("FIN", 0, &["WP0", "WP2", "WP3"]),
             build_network_node("WP1", 1, &[]),
             build_network_node("WP2", 1, &["WP0", "WP1"]),
             build_network_node("WP0", 1, &[]),
@@ -209,19 +209,19 @@ mod tests {
         //     +----+--+-----+
         //            |
         //           FIN
-        for (_idx, (wp0, wp1, wp2, wp3, expected)) in test_cases.into_iter().enumerate() {
+        for (_idx, (wp0, wp1, wp2, wp3, expected_duration)) in test_cases.into_iter().enumerate() {
             let network = vec![
                 build_network_node("WP0", wp0 as u32, &[]),
                 build_network_node("WP1", wp1 as u32, &[]),
                 build_network_node("WP2", wp2 as u32, &["WP0", "WP1"]),
                 build_network_node("WP3", wp3 as u32, &["WP1"]),
-                build_network_node("FIN", expected as u32, &["WP0", "WP2", "WP3"]),
+                build_network_node("FIN", 0, &["WP0", "WP2", "WP3"]),
             ];
 
             let result = critical_path_method(network, base).unwrap();
             let fin_node = result.iter().find(|node| node.id == "FIN").unwrap();
             
-            assert_eq!(fin_node.earliest_finish, base + chrono::Duration::days(expected as i64));
+            assert_eq!(fin_node.earliest_finish, base + chrono::Duration::days(expected_duration as i64));
         }
     }
 
