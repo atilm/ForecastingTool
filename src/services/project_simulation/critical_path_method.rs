@@ -26,7 +26,6 @@ pub struct NetworkNode {
 
 pub struct ResultNode {
     id: String,
-    duration: f32,
     earliest_start: NaiveDate,
     lastest_start: NaiveDate,
     earliest_finish: NaiveDate,
@@ -48,23 +47,30 @@ pub fn critical_path_method(
 
     // Forward pass to calculate earliest start and finish times
     for node in &sorted_nodes {
-        let earliest_start = node
-            .dependencies
-            .iter()
-            .filter_map(|dep| earliest_finish.get(dep))
-            .max()
-            .cloned()
-            .unwrap_or(project_start);
+        let earliest_start = if let Some(start_date) = node.start_date {
+            start_date
+        } else {
+            node.dependencies
+                .iter()
+                .filter_map(|dep| earliest_finish.get(dep))
+                .max()
+                .cloned()
+                .unwrap_or(project_start)
+        };
 
-        let whole_days = node.duration.ceil() as i64;
-        let earliest_finish_date = earliest_start + chrono::Duration::days(whole_days);
+        let earliest_finish_date = if let Some(end_date) = node.end_date {
+            end_date
+        } else {
+            let whole_days = node.duration.ceil() as i64;
+            earliest_start + chrono::Duration::days(whole_days)
+        };
+
         earliest_finish.insert(node.id.clone(), earliest_finish_date);
 
         result_nodes.insert(
             node.id.clone(),
             ResultNode {
                 id: node.id.clone(),
-                duration: node.duration,
                 earliest_start,
                 lastest_start: project_start, // Placeholder, should be calculated based on dependencies
                 earliest_finish: earliest_finish_date,
@@ -106,7 +112,7 @@ pub fn critical_path_method(
             .unwrap_or(project_end);
 
         let whole_days = node.duration.ceil() as i64;
-        let latest_start_date = latest_finish_date - chrono::Duration::days(whole_days);            
+        let latest_start_date = latest_finish_date - chrono::Duration::days(whole_days);
 
         let earliest_start_of_successors = successors[&node.id]
             .iter()
@@ -114,13 +120,15 @@ pub fn critical_path_method(
             .map(|succ_node| succ_node.earliest_start)
             .min()
             .unwrap_or(project_end);
-        let free_float = (earliest_start_of_successors - earliest_finish[&node.id]).num_days() as f32;
+        let free_float =
+            (earliest_start_of_successors - earliest_finish[&node.id]).num_days() as f32;
 
         if let Some(result_node) = result_nodes.get_mut(&node.id) {
             result_node.latest_finish = latest_finish_date;
             result_node.lastest_start = latest_start_date;
             result_node.free_float = free_float.max(0.0); // Free float cannot be negative
-            result_node.total_float = (latest_start_date - result_node.earliest_start).num_days() as f32;
+            result_node.total_float =
+                (latest_start_date - result_node.earliest_start).num_days() as f32;
         }
 
         latest_start.insert(node.id.clone(), latest_start_date);
@@ -178,6 +186,8 @@ fn topological_sort(
 
 #[cfg(test)]
 mod tests {
+    use crate::test_support::on_date;
+
     use super::*;
     use chrono::NaiveDate;
 
@@ -279,13 +289,13 @@ mod tests {
         }
     }
 
-    struct TestCase {
-        id: &'static str,
-        work_packages: Vec<WorkPackageTestCase>,
-    }
-
     #[test]
     fn critical_path_method_is_calculated_correctly() {
+        struct TestCase {
+            id: &'static str,
+            work_packages: Vec<WorkPackageTestCase>,
+        }
+
         let base = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
 
         let tests = vec![
@@ -294,7 +304,17 @@ mod tests {
                 work_packages: vec![
                     WorkPackageTestCase::new("WP0", 1.0, vec![], 0.0, 1.0, 0.0, 1.0, 0.0, 0.0),
                     WorkPackageTestCase::new("WP1", 1.0, vec![], 0.0, 1.0, 0.0, 1.0, 0.0, 0.0),
-                    WorkPackageTestCase::new("WP2", 1.0, vec!["WP0", "WP1"], 1.0, 2.0, 1.0, 2.0, 0.0, 0.0),
+                    WorkPackageTestCase::new(
+                        "WP2",
+                        1.0,
+                        vec!["WP0", "WP1"],
+                        1.0,
+                        2.0,
+                        1.0,
+                        2.0,
+                        0.0,
+                        0.0,
+                    ),
                     WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 1.0, 2.0, 1.0, 2.0, 0.0, 0.0),
                     WorkPackageTestCase::new(
                         "FIN",
@@ -305,7 +325,7 @@ mod tests {
                         2.0,
                         2.0,
                         0.0,
-                        0.0
+                        0.0,
                     ),
                 ],
             },
@@ -314,7 +334,17 @@ mod tests {
                 work_packages: vec![
                     WorkPackageTestCase::new("WP0", 6.0, vec![], 0.0, 6.0, 0.0, 6.0, 0.0, 0.0),
                     WorkPackageTestCase::new("WP1", 1.0, vec![], 0.0, 1.0, 4.0, 5.0, 0.0, 4.0),
-                    WorkPackageTestCase::new("WP2", 0.0, vec!["WP0", "WP1"], 6.0, 6.0, 6.0, 6.0, 0.0, 0.0),
+                    WorkPackageTestCase::new(
+                        "WP2",
+                        0.0,
+                        vec!["WP0", "WP1"],
+                        6.0,
+                        6.0,
+                        6.0,
+                        6.0,
+                        0.0,
+                        0.0,
+                    ),
                     WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 1.0, 2.0, 5.0, 6.0, 4.0, 4.0),
                     WorkPackageTestCase::new(
                         "FIN",
@@ -325,7 +355,7 @@ mod tests {
                         6.0,
                         6.0,
                         0.0,
-                        0.0
+                        0.0,
                     ),
                 ],
             },
@@ -334,7 +364,17 @@ mod tests {
                 work_packages: vec![
                     WorkPackageTestCase::new("WP0", 2.0, vec![], 0.0, 2.0, 0.0, 2.0, 0.0, 0.0),
                     WorkPackageTestCase::new("WP1", 1.0, vec![], 0.0, 1.0, 1.0, 2.0, 0.0, 1.0),
-                    WorkPackageTestCase::new("WP2", 4.0, vec!["WP0", "WP1"], 2.0, 6.0, 2.0, 6.0, 0.0, 0.0),
+                    WorkPackageTestCase::new(
+                        "WP2",
+                        4.0,
+                        vec!["WP0", "WP1"],
+                        2.0,
+                        6.0,
+                        2.0,
+                        6.0,
+                        0.0,
+                        0.0,
+                    ),
                     WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 1.0, 2.0, 5.0, 6.0, 4.0, 4.0),
                     WorkPackageTestCase::new(
                         "FIN",
@@ -345,7 +385,7 @@ mod tests {
                         6.0,
                         6.0,
                         0.0,
-                        0.0
+                        0.0,
                     ),
                 ],
             },
@@ -354,7 +394,17 @@ mod tests {
                 work_packages: vec![
                     WorkPackageTestCase::new("WP0", 1.0, vec![], 0.0, 1.0, 4.0, 5.0, 4.0, 4.0),
                     WorkPackageTestCase::new("WP1", 5.0, vec![], 0.0, 5.0, 0.0, 5.0, 0.0, 0.0),
-                    WorkPackageTestCase::new("WP2", 2.0, vec!["WP0", "WP1"], 5.0, 7.0, 5.0, 7.0, 0.0, 0.0),
+                    WorkPackageTestCase::new(
+                        "WP2",
+                        2.0,
+                        vec!["WP0", "WP1"],
+                        5.0,
+                        7.0,
+                        5.0,
+                        7.0,
+                        0.0,
+                        0.0,
+                    ),
                     WorkPackageTestCase::new("WP3", 1.0, vec!["WP1"], 5.0, 6.0, 6.0, 7.0, 1.0, 1.0),
                     WorkPackageTestCase::new(
                         "FIN",
@@ -365,7 +415,7 @@ mod tests {
                         7.0,
                         7.0,
                         0.0,
-                        0.0
+                        0.0,
                     ),
                 ],
             },
@@ -374,7 +424,17 @@ mod tests {
                 work_packages: vec![
                     WorkPackageTestCase::new("WP0", 1.0, vec![], 0.0, 1.0, 7.0, 8.0, 4.0, 7.0),
                     WorkPackageTestCase::new("WP1", 5.0, vec![], 0.0, 5.0, 0.0, 5.0, 0.0, 0.0),
-                    WorkPackageTestCase::new("WP2", 1.0, vec!["WP0", "WP1"], 5.0, 6.0, 8.0, 9.0, 3.0, 3.0),
+                    WorkPackageTestCase::new(
+                        "WP2",
+                        1.0,
+                        vec!["WP0", "WP1"],
+                        5.0,
+                        6.0,
+                        8.0,
+                        9.0,
+                        3.0,
+                        3.0,
+                    ),
                     WorkPackageTestCase::new("WP3", 4.0, vec!["WP1"], 5.0, 9.0, 5.0, 9.0, 0.0, 0.0),
                     WorkPackageTestCase::new(
                         "FIN",
@@ -385,7 +445,7 @@ mod tests {
                         9.0,
                         9.0,
                         0.0,
-                        0.0
+                        0.0,
                     ),
                 ],
             },
@@ -452,5 +512,74 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn done_tasks_and_tasks_with_fixed_start_date_are_handled_correctly() {
+        let network = vec![
+            NetworkNode {
+                id: "WP0".to_string(),
+                duration: 3.0,
+                start_date: Some(on_date(2026, 1, 5)),
+                end_date: Some(on_date(2026, 1, 8)),
+                dependencies: vec![],
+            },
+            NetworkNode {
+                id: "WP1".to_string(),
+                duration: 4.0,
+                start_date: Some(on_date(2026, 1, 12)),
+                end_date: None,
+                dependencies: vec!["WP0".to_string()],
+            },
+            NetworkNode {
+                id: "WP2".to_string(),
+                duration: 4.0,
+                start_date: None,
+                end_date: None,
+                dependencies: vec!["WP1".to_string()],
+            },
+        ];
+        // Project start does not have any effect in this case
+        let project_start = NaiveDate::from_ymd_opt(2026, 6, 6).unwrap();
+        let result = critical_path_method(network, project_start).unwrap();
+
+        let wp0 = result.iter().find(|node| node.id == "WP0").unwrap();
+        assert_eq!(wp0.earliest_start, on_date(2026, 1, 5));
+        assert_eq!(wp0.earliest_finish, on_date(2026, 1, 8));
+
+        let wp1 = result.iter().find(|node| node.id == "WP1").unwrap();
+        assert_eq!(wp1.earliest_start, on_date(2026, 1, 12));
+        assert_eq!(wp1.earliest_finish, on_date(2026, 1, 16));
+
+        let wp2 = result.iter().find(|node| node.id == "WP2").unwrap();
+        assert_eq!(wp2.earliest_start, on_date(2026, 1, 16));
+        assert_eq!(wp2.earliest_finish, on_date(2026, 1, 20));
+    }
+
+    #[test]
+    fn missing_dependency_is_detected() {
+        let network = vec![
+            build_network_node("WP0", 1.0, &["WP1"]), // WP1 does not exist
+        ];
+        let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+        let result = critical_path_method(network, project_start);
+        assert!(matches!(
+            result,
+            Err(CriticalPathMethodError::MissingDependency(_))
+        ));
+    }
+
+    #[test]
+    fn cycle_detection_works() {
+        let network = vec![
+            build_network_node("WP0", 1.0, &["WP1"]),
+            build_network_node("WP1", 1.0, &["WP0"]),
+        ];
+        let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+        let result = critical_path_method(network, project_start);
+        assert!(matches!(
+            result,
+            Err(CriticalPathMethodError::CycleDetected)
+        ));
     }
 }
