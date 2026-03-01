@@ -15,7 +15,7 @@ pub enum CriticalPathMethodError {
     MissingDependency(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct NetworkNode {
     id: String,
     duration: u32,
@@ -44,12 +44,35 @@ pub fn critical_path_method(
         return Ok(vec![]);
     }
 
-    let mut graph: DiGraph<String, ()> = DiGraph::new();
+    let sorted_nodes = topological_sort(network)?;
+
+    let result_vector = sorted_nodes
+        .into_iter()
+        .map(|node| {
+            ResultNode {
+                id: node.id.clone(),
+                duration: node.duration,
+                earliest_start: project_start, // Placeholder, should be calculated based on dependencies
+                lastest_start: project_start, // Placeholder, should be calculated based on dependencies
+                earliest_finish: project_start, // Placeholder, should be calculated based on dependencies
+                latest_finish: project_start, // Placeholder, should be calculated based on dependencies
+                free_float: 0, // Placeholder, should be calculated based on dependencies
+                total_float: 0, // Placeholder, should be calculated based on dependencies
+                drag: 0,       // Placeholder, should be calculated based on dependencies
+            }
+        })
+        .collect();
+
+    Ok(result_vector)
+}
+
+fn topological_sort(network: Vec<NetworkNode>) -> Result<Vec<NetworkNode>, CriticalPathMethodError> {
+        let mut graph: DiGraph<String, ()> = DiGraph::new();
     let mut nodes_by_index = HashMap::new();
     let mut index_by_id = HashMap::new();
 
     // Add nodes to graph
-    for node in &network {
+    for node in network {
         let graph_node_index = graph.add_node(node.id.clone());
 
         if index_by_id.contains_key(&node.id) {
@@ -72,25 +95,12 @@ pub fn critical_path_method(
     let sorted_indices =
         toposort(&graph, None).map_err(|_| CriticalPathMethodError::CycleDetected)?;
 
-    let result_vector = sorted_indices
-        .into_iter()
-        .map(|index| {
-            let node = nodes_by_index.get(&index).unwrap();
-            ResultNode {
-                id: node.id.clone(),
-                duration: node.duration,
-                earliest_start: project_start, // Placeholder, should be calculated based on dependencies
-                lastest_start: project_start, // Placeholder, should be calculated based on dependencies
-                earliest_finish: project_start, // Placeholder, should be calculated based on dependencies
-                latest_finish: project_start, // Placeholder, should be calculated based on dependencies
-                free_float: 0, // Placeholder, should be calculated based on dependencies
-                total_float: 0, // Placeholder, should be calculated based on dependencies
-                drag: 0,       // Placeholder, should be calculated based on dependencies
-            }
-        })
+    let sorted_nodes: Vec<NetworkNode> = sorted_indices
+        .iter()
+        .map(|index| nodes_by_index.remove(index).unwrap())
         .collect();
 
-    Ok(result_vector)
+    Ok(sorted_nodes)
 }
 
 #[cfg(test)]
