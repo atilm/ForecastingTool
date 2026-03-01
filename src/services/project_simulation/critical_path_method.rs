@@ -47,6 +47,7 @@ pub fn critical_path_method(
         HashMap::with_capacity(nodes_count);
     let mut result_nodes: HashMap<String, ResultNode> = HashMap::with_capacity(nodes_count);
 
+    // Forward pass to calculate earliest start and finish times
     for node in &sorted_nodes {
         let earliest_start = node
             .dependencies
@@ -73,6 +74,46 @@ pub fn critical_path_method(
                 drag: 0.0,       // Placeholder, should be calculated based on dependencies
             },
         );
+    }
+
+    
+    // Build successor map (reverse of dependencies)
+    let mut successors: HashMap<String, Vec<String>> = HashMap::new();
+    for node in &sorted_nodes {
+        successors.entry(node.id.clone()).or_default();
+        for dep in &node.dependencies {
+            successors.entry(dep.clone()).or_default().push(node.id.clone());
+        }
+    }
+
+    // Find project end date = max of all earliest finish dates
+    let project_end = earliest_finish
+        .values()
+        .max()
+        .cloned()
+        .unwrap_or(project_start);
+
+    // Backward pass to calculate latest start and finish times
+    let mut latest_start: HashMap<String, chrono::NaiveDate> =
+        HashMap::with_capacity(nodes_count);
+
+    for node in sorted_nodes.iter().rev() {
+        let latest_finish_date = successors[&node.id]
+            .iter()
+            .filter_map(|succ| latest_start.get(succ))
+            .min()
+            .cloned()
+            .unwrap_or(project_end);
+
+        let latest_start_date =
+            latest_finish_date - chrono::Duration::days(node.duration as i64);
+
+        if let Some(result_node) = result_nodes.get_mut(&node.id) {
+            result_node.latest_finish = latest_finish_date;
+            result_node.lastest_start = latest_start_date;
+        }
+
+        latest_start.insert(node.id.clone(), latest_start_date);
     }
 
     let result_vector: Vec<ResultNode> = sorted_nodes
@@ -355,20 +396,20 @@ mod tests {
                     wp.id,
                     test.id
                 );
-                // assert_eq!(
-                //     result_node.lastest_start,
-                //     base + chrono::Duration::days(wp.expected_latest_start_day as i64),
-                //     "Latest start mismatch for {} in {}",
-                //     wp.id,
-                //     test.id
-                // );
-                // assert_eq!(
-                //     result_node.latest_finish,
-                //     base + chrono::Duration::days(wp.expected_latest_finish_day as i64),
-                //     "Latest finish mismatch for {} in {}",
-                //     wp.id,
-                //     test.id
-                // );
+                assert_eq!(
+                    result_node.lastest_start,
+                    base + chrono::Duration::days(wp.expected_latest_start_day as i64),
+                    "Latest start mismatch for {} in {}",
+                    wp.id,
+                    test.id
+                );
+                assert_eq!(
+                    result_node.latest_finish,
+                    base + chrono::Duration::days(wp.expected_latest_finish_day as i64),
+                    "Latest finish mismatch for {} in {}",
+                    wp.id,
+                    test.id
+                );
             }
         }
     }
