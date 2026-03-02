@@ -1,5 +1,9 @@
 # ToDos
 
+* [ ] Separate Gantt Diagram Generation from Monte Carlo Simulation
+  * [ ] Simulation -> No Gantt. Instead: work package and milestone percentiles. Candle Stick plots.
+  * [ ] PERT command -> Gantt diagram with PERT durations
+
 * [ ] Show status and milestones in dependency diagram
 * [ ] Improve error reporting in project_yaml.rs
 
@@ -13,7 +17,6 @@
     * [ ] Use multiple calendars to simulate increase of team size (e.g. 2 files to 3 files to increase velocity by factor 1.5)
     * [ ] Simulate master project file with three-point estimations and references
 
-* [.] Split `project_simulation.rs` in multiple files
 * [ ] Write test for milestones in Gantt diagram
 * [ ] Modify the CLI to use subcommands
 * [ ] Write a readme

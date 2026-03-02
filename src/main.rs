@@ -4,6 +4,7 @@ use forecasts::commands::get_throughput_cmd::get_throughput_command;
 use forecasts::commands::get_project_cmd::get_project_command;
 use forecasts::commands::plot_throughput_cmd::plot_throughput_command;
 use forecasts::commands::plot_project_cmd::plot_project_command;
+use forecasts::commands::plot_gantt_cmd::plot_gantt_command;
 use forecasts::commands::simulate_n_cmd::simulate_n_command;
 use forecasts::commands::simulate_cmd::simulate_command;
 use clap::{CommandFactory, Parser};
@@ -21,6 +22,9 @@ fn main() {
         }
         cmd @ Commands::PlotProject { .. } => {
             plot_project_command(cmd);
+        }
+        cmd @ Commands::PlotGantt { .. } => {
+            plot_gantt_command(cmd);
         }
         cmd @ Commands::GetProject { .. } => {
             get_project_command(cmd);

@@ -38,6 +38,15 @@ pub enum Commands {
         #[arg(short, long)]
         output: String,
     },
+    /// Plot a Gantt diagram using PERT expected durations from a project YAML
+    PlotGantt {
+        /// Project YAML file
+        #[arg(short, long)]
+        input: String,
+        /// Output Markdown file
+        #[arg(short, long)]
+        output: String,
+    },
     /// Get project data from Jira and serialize to YAML
     GetProject {
         /// Path to Jira config YAML
