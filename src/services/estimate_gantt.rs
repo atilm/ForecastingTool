@@ -1,8 +1,10 @@
 use std::io;
 
+use predicates::str::StartsWithPredicate;
 use thiserror::Error;
 
-use crate::domain::calendar::TeamCalendar;
+use chrono::NaiveDate;
+use crate::domain::calendar::{self, TeamCalendar};
 use crate::domain::project::Project;
 use crate::services::estimate_duration::{
     EstimateDurationError, WorkPackageDuration, compute_expected_durations,
@@ -16,6 +18,7 @@ use crate::services::project_simulation::network_nodes::build_network_nodes;
 use crate::services::project_simulation::velocity_calculation::VelocityCalculationError;
 use crate::services::project_simulation::velocity_calculation::calculate_project_velocity;
 use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
+use crate::services::team_calendar_yaml::load_team_calendar_if_provided;
 
 #[derive(Error, Debug)]
 pub enum EstimateGanttError {
@@ -38,13 +41,11 @@ pub enum EstimateGanttError {
 pub fn write_pert_gantt_markdown(
     input_path: &str,
     output_path: &str,
+    start_date: NaiveDate,
+    calendar_path: Option<&str>,
 ) -> Result<(), EstimateGanttError> {
     let project = load_project_from_yaml_file(input_path)?;
-
-    // Todo: parse team calender from passed path
-    let calendar = TeamCalendar::new();
-    // instantiate start_date to today
-    let start_date = chrono::Utc::now().date_naive();
+    let calendar = load_team_calendar_if_provided(calendar_path)?;
 
     let velocity = if project.has_story_points() {
         Some(calculate_project_velocity(&project, &calendar)?)

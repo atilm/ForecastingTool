@@ -46,6 +46,12 @@ pub enum Commands {
         /// Output Markdown file
         #[arg(short, long)]
         output: String,
+        /// Optional path to a calendar directory
+        #[arg(short, long)]
+        calendar_dir: Option<String>,
+        /// Project start date (YYYY-MM-DD)
+        #[arg(short, long, default_value_t = default_start_date())]
+        start_date: String,
     },
     /// Get project data from Jira and serialize to YAML
     GetProject {
