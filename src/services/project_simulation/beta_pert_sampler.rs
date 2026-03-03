@@ -1,27 +1,16 @@
 use rand::Rng;
 use rand_distr::{Beta, Distribution};
 
-pub trait ThreePointSampler {
-    fn sample(&mut self, optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ()>;
-}
-
-/// Calculates the PERT expected value: (optimistic + 4 * most_likely + pessimistic) / 6
-pub fn pert_expected_value(optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, PertError> {
-    if pessimistic < optimistic {
-        return Err(PertError::PessimisticLessThanOptimistic);
-    }
-    if most_likely < optimistic || most_likely > pessimistic {
-        return Err(PertError::MostLikelyOutOfRange);
-    }
-    Ok((optimistic + 4.0 * most_likely + pessimistic) / 6.0)
-}
-
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum PertError {
     #[error("pessimistic value must be >= optimistic value")]
     PessimisticLessThanOptimistic,
     #[error("most_likely value must be between optimistic and pessimistic")]
     MostLikelyOutOfRange,
+}
+
+pub trait ThreePointSampler {
+    fn sample(&mut self, optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ()>;
 }
 
 pub struct BetaPertSampler<R: Rng> {
@@ -53,6 +42,25 @@ impl<R: Rng> ThreePointSampler for BetaPertSampler<R> {
         let sample = beta_dist.sample(&mut self.rng) as f32;
         Ok(optimistic + sample * (pessimistic - optimistic))
     }
+}
+
+pub struct PertExpectedValueSampler;
+
+impl ThreePointSampler for PertExpectedValueSampler {
+    fn sample(&mut self, optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ()> {
+        pert_expected_value(optimistic, most_likely, pessimistic).map_err(|_| ())
+    }
+}
+
+/// Calculates the PERT expected value: (optimistic + 4 * most_likely + pessimistic) / 6
+pub fn pert_expected_value(optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, PertError> {
+    if pessimistic < optimistic {
+        return Err(PertError::PessimisticLessThanOptimistic);
+    }
+    if most_likely < optimistic || most_likely > pessimistic {
+        return Err(PertError::MostLikelyOutOfRange);
+    }
+    Ok((optimistic + 4.0 * most_likely + pessimistic) / 6.0)
 }
 
 #[cfg(test)]

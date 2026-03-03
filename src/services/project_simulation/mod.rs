@@ -3,3 +3,4 @@ pub(crate) mod project_simulation;
 pub(crate) mod velocity_calculation;
 pub(crate) mod sample_duration;
 pub(crate) mod critical_path_method;
+pub(crate) mod network_nodes;

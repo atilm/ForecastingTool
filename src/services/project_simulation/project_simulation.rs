@@ -3,9 +3,8 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::domain::calendar::TeamCalendar;
-use crate::domain::estimate::{Estimate, StoryPointEstimate};
 
-use crate::services::project_simulation::sample_duration::sample_duration_days;
+use crate::services::project_simulation::network_nodes::build_network_nodes;
 
 use chrono::NaiveDate;
 
@@ -28,8 +27,8 @@ use crate::services::team_calendar_yaml::load_team_calendar_if_provided;
 use crate::services::util::dates::data_source_name;
 
 use crate::services::project_simulation::critical_path_method::CriticalPathMethodError;
-use crate::services::project_simulation::critical_path_method::NetworkNode;
 use crate::services::project_simulation::critical_path_method::critical_path_method;
+use crate::services::project_simulation::network_nodes::NetworkNodesError;
 
 #[derive(Debug, Clone, Copy)]
 struct WorkItemSample {
@@ -51,16 +50,14 @@ pub enum ProjectSimulationError {
     InvalidIterations,
     #[error("project has no work packages")]
     EmptyProject,
-    #[error("missing issue id")]
-    MissingIssueId,
-    #[error("missing estimate for issue {0}")]
-    MissingEstimate(String),
     #[error("failed to render histogram: {0}")]
     Histogram(#[from] HistogramError),
     #[error("failed to calculate percentiles: {0}")]
     SamplingError(#[from] SamplingError),
     #[error("failed to perform critical path method analysis: {0}")]
     CriticalPathMethod(#[from] CriticalPathMethodError),
+    #[error("failed to build network nodes: {0}")]
+    NetworkNodes(#[from] NetworkNodesError),
 }
 
 pub fn simulate_project_from_yaml_file(
@@ -89,7 +86,7 @@ pub fn simulate_project(
         return Err(ProjectSimulationError::EmptyProject);
     }
 
-    let velocity = if project_has_story_points(project) {
+    let velocity = if project.has_story_points() {
         Some(calculate_project_velocity(project, &calendar)?)
     } else {
         None
@@ -118,13 +115,16 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
 ) -> Result<SimulationOutput, ProjectSimulationError> {
     let mut samples_by_id: HashMap<String, Vec<WorkItemSample>> = HashMap::new();
     let mut project_end_dates = Vec::with_capacity(iterations);
-    let calendar_option = if project_has_story_points(project) { Some(calendar) } else { None };
-    
+    let calendar_option = if project.has_story_points() {
+        Some(calendar)
+    } else {
+        None
+    };
+
     for _ in 0..iterations {
         let network_nodes = build_network_nodes(&project, velocity, sampler)?;
 
-        let result_nodes =
-            critical_path_method(network_nodes, start_date, calendar_option)?;
+        let result_nodes = critical_path_method(network_nodes, start_date, calendar_option)?;
 
         let project_end_date = result_nodes
             .iter()
@@ -160,24 +160,28 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         p100: to_simulation_percentile(&project_end_dates, 100.0, start_date),
     };
 
-    let work_packages = project.work_packages.iter().map(|issue| {
-        let id = issue
-            .issue_id
-            .as_ref()
-            .map(|issue_id| issue_id.id.clone())
-            .unwrap_or_default();
-        WorkPackageSimulation {
-            id,
-            status: issue.status.clone().unwrap_or(IssueStatus::ToDo),
-            percentiles: percentiles_from_samples(
-                samples_by_id
-                    .get(issue.issue_id.as_ref().unwrap().id.as_str())
-                    .map(Vec::as_slice)
-                    .unwrap_or(&[]),
-                start_date,
-            ),
-        }
-    }).collect();
+    let work_packages = project
+        .work_packages
+        .iter()
+        .map(|issue| {
+            let id = issue
+                .issue_id
+                .as_ref()
+                .map(|issue_id| issue_id.id.clone())
+                .unwrap_or_default();
+            WorkPackageSimulation {
+                id,
+                status: issue.status.clone().unwrap_or(IssueStatus::ToDo),
+                percentiles: percentiles_from_samples(
+                    samples_by_id
+                        .get(issue.issue_id.as_ref().unwrap().id.as_str())
+                        .map(Vec::as_slice)
+                        .unwrap_or(&[]),
+                    start_date,
+                ),
+            }
+        })
+        .collect();
 
     let results = project_end_dates
         .iter()
@@ -189,45 +193,6 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         results,
         work_packages: Some(work_packages),
     })
-}
-
-fn build_network_nodes<R: ThreePointSampler + ?Sized>(
-    project: &Project,
-    velocity: Option<f32>,
-    sampler: &mut R,
-) -> Result<Vec<NetworkNode>, ProjectSimulationError> {
-    let mut nodes = Vec::with_capacity(project.work_packages.len());
-
-    for issue in project.work_packages.iter() {
-        let id = issue
-            .issue_id
-            .as_ref()
-            .map(|issue_id| issue_id.id.clone())
-            .ok_or(ProjectSimulationError::MissingIssueId)?;
-        let start_date = issue.start_date;
-        let end_date = issue.done_date;
-        let estimate = issue
-            .estimate
-            .clone()
-            .ok_or_else(|| ProjectSimulationError::MissingEstimate(id.clone()))?;
-        let dependencies = issue
-            .dependencies
-            .as_ref()
-            .map(|deps| deps.iter().map(|dep| dep.id.clone()).collect())
-            .unwrap_or_default();
-
-        let duration = sample_duration_days(&estimate, velocity, sampler, &id)?;
-
-        nodes.push(NetworkNode {
-            id,
-            duration,
-            start_date,
-            end_date,
-            dependencies,
-        });
-    }
-
-    Ok(nodes)
 }
 
 fn percentiles_from_samples(
@@ -289,17 +254,6 @@ fn calculate_days(start_date: chrono::NaiveDate, end_date: chrono::NaiveDate) ->
     (end_date - start_date).num_days().max(0) as f32
 }
 
-fn project_has_story_points(project: &Project) -> bool {
-    project.work_packages.iter().any(|issue| {
-        matches!(
-            issue.estimate,
-            Some(Estimate::StoryPoint(StoryPointEstimate {
-                estimate: Some(_)
-            }))
-        )
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -338,7 +292,10 @@ mod tests {
         let calendar = create_calendar_without_any_free_days();
 
         let error = simulate_project(&project, 10, on_date(2026, 1, 1), calendar).unwrap_err();
-        assert!(matches!(error, ProjectSimulationError::CriticalPathMethod(CriticalPathMethodError::CycleDetected)));
+        assert!(matches!(
+            error,
+            ProjectSimulationError::CriticalPathMethod(CriticalPathMethodError::CycleDetected)
+        ));
     }
 
     #[test]

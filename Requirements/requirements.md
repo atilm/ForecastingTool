@@ -1,5 +1,13 @@
 # ToDos
 
+* [ ] Test simulation manually again
+
+* [ ] show critical path in gantt chart
+* [ ] in plot-gantt command, optionally take a start_date which defaults to today
+* [ ] Let calculate_project_velocity return an Option to avoid if else  
+* [ ] Use Errors in ThreePointSampler
+* [ ] in plot-gantt command, optionally read a calendar dir
+
 * [ ] Separate Gantt Diagram Generation from Monte Carlo Simulation
   * [ ] Simulation -> No Gantt. Instead: work package and milestone percentiles. Candle Stick plots.
   * [ ] PERT command -> Gantt diagram with PERT durations

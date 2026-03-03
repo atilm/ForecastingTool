@@ -2,11 +2,20 @@ use std::io;
 
 use thiserror::Error;
 
+use crate::domain::calendar::TeamCalendar;
 use crate::domain::project::Project;
 use crate::services::estimate_duration::{
-    compute_expected_durations, EstimateDurationError, WorkPackageDuration,
+    EstimateDurationError, WorkPackageDuration, compute_expected_durations,
 };
-use crate::services::project_yaml::{load_project_from_yaml_file, ProjectYamlError};
+use crate::services::project_simulation::beta_pert_sampler::PertExpectedValueSampler;
+use crate::services::project_simulation::critical_path_method::CriticalPathMethodError;
+use crate::services::project_simulation::critical_path_method::ResultNode;
+use crate::services::project_simulation::critical_path_method::critical_path_method;
+use crate::services::project_simulation::network_nodes::NetworkNodesError;
+use crate::services::project_simulation::network_nodes::build_network_nodes;
+use crate::services::project_simulation::velocity_calculation::VelocityCalculationError;
+use crate::services::project_simulation::velocity_calculation::calculate_project_velocity;
+use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
 
 #[derive(Error, Debug)]
 pub enum EstimateGanttError {
@@ -16,26 +25,52 @@ pub enum EstimateGanttError {
     Duration(#[from] EstimateDurationError),
     #[error("failed to write output: {0}")]
     Io(#[from] io::Error),
+    #[error("failed to calculate velocity: {0}")]
+    Velocity(#[from] VelocityCalculationError),
+    #[error("failed to build network nodes: {0}")]
+    NetworkNodes(#[from] NetworkNodesError),
+    #[error("failed to perform critical path method analysis: {0}")]
+    CriticalPathMethod(#[from] CriticalPathMethodError),
 }
 
 /// Loads a project YAML, computes expected durations, and writes
 /// the Mermaid Gantt diagram to the output file.
-pub fn write_estimate_gantt_markdown(
+pub fn write_pert_gantt_markdown(
     input_path: &str,
     output_path: &str,
 ) -> Result<(), EstimateGanttError> {
     let project = load_project_from_yaml_file(input_path)?;
-    let durations = compute_expected_durations(&project)?;
-    let markdown = generate_estimate_gantt(&project, &durations);
+
+    // Todo: parse team calender from passed path
+    let calendar = TeamCalendar::new();
+    // instantiate start_date to today
+    let start_date = chrono::Utc::now().date_naive();
+
+    let velocity = if project.has_story_points() {
+        Some(calculate_project_velocity(&project, &calendar)?)
+    } else {
+        None
+    };
+
+    let mut expected_value_sampler = PertExpectedValueSampler;
+
+    let network_nodes = build_network_nodes(&project, velocity, &mut expected_value_sampler)?;
+    let result_nodes = critical_path_method(network_nodes, start_date, Some(&calendar))?;
+
+    let markdown = generate_gantt_markdown(&result_nodes, &project);
+
+    // let durations = compute_expected_durations(&project)?;
+    // let markdown = generate_estimate_gantt(&project, &durations);
     std::fs::write(output_path, markdown)?;
     Ok(())
 }
 
+pub fn generate_gantt_markdown(result_nodes: &[ResultNode], project: &Project) -> String {
+    "".to_string() // Placeholder implementation
+}
+
 /// Generates a Mermaid Gantt diagram from a project and its expected durations.
-pub fn generate_estimate_gantt(
-    project: &Project,
-    durations: &[WorkPackageDuration],
-) -> String {
+pub fn generate_estimate_gantt(project: &Project, durations: &[WorkPackageDuration]) -> String {
     let mut duration_map = std::collections::HashMap::new();
     for d in durations {
         duration_map.insert(d.id.as_str(), d);
@@ -48,11 +83,7 @@ pub fn generate_estimate_gantt(
     lines.push("    dateFormat YYYY-MM-DD".to_string());
 
     for issue in &project.work_packages {
-        let id = issue
-            .issue_id
-            .as_ref()
-            .map(|i| i.id.as_str())
-            .unwrap_or("");
+        let id = issue.issue_id.as_ref().map(|i| i.id.as_str()).unwrap_or("");
         let name = issue.summary.as_deref().unwrap_or(id);
 
         let wp_duration = duration_map.get(id);
@@ -95,7 +126,7 @@ fn make_after_clause(issue: &crate::domain::issue::Issue) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::estimate::{Estimate, StoryPointEstimate, ThreePointEstimate};
+    use crate::domain::estimate::{Estimate, ThreePointEstimate};
     use crate::domain::issue::{Issue, IssueId};
     use crate::domain::issue_status::IssueStatus;
     use crate::domain::project::Project;
@@ -103,9 +134,7 @@ mod tests {
 
     fn build_issue(id: &str, summary: &str, deps: &[&str]) -> Issue {
         let mut issue = Issue::new();
-        issue.issue_id = Some(IssueId {
-            id: id.to_string(),
-        });
+        issue.issue_id = Some(IssueId { id: id.to_string() });
         issue.summary = Some(summary.to_string());
         issue.estimate = Some(Estimate::ThreePoint(ThreePointEstimate {
             optimistic: Some(1.0),
@@ -115,13 +144,7 @@ mod tests {
         issue.dependencies = if deps.is_empty() {
             None
         } else {
-            Some(
-                deps.iter()
-                    .map(|d| IssueId {
-                        id: d.to_string(),
-                    })
-                    .collect(),
-            )
+            Some(deps.iter().map(|d| IssueId { id: d.to_string() }).collect())
         };
         issue
     }
