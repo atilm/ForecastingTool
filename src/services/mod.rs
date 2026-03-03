@@ -1,6 +1,5 @@
 pub(crate) mod data_converter;
 pub(crate) mod data_source;
-pub(crate) mod estimate_duration;
 pub(crate) mod estimate_gantt;
 pub(crate) mod gantt_diagram;
 pub(crate) mod histogram;

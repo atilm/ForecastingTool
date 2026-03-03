@@ -40,6 +40,18 @@ pub struct ResultNode {
     pub total_float: f32, // LS - ES or LF - EF. If 0, then the node is on the critical path
 }
 
+impl ResultNode {
+    /// Returns true if this node is on the critical path (total float is zero).
+    pub fn is_critical(&self) -> bool {
+        self.total_float.abs() < f32::EPSILON
+    }
+
+    /// Returns true if this node is a milestone (zero duration).
+    pub fn is_milestone(&self) -> bool {
+        self.earliest_start == self.earliest_finish
+    }
+}
+
 pub fn critical_path_method(
     network: Vec<NetworkNode>,
     project_start: NaiveDate,
