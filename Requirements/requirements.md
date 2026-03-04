@@ -1,8 +1,7 @@
 # ToDos
 
-* [ ] Test simulation manually again
+* [ ] Remove tokio from tests
 
-* [ ] Repair critical path method to apply calendar in backward pass
 * [ ] Remove gantt chart generation from simulation
 * [ ] Let calculate_project_velocity return an Option to avoid if else  
 * [ ] Use Errors in ThreePointSampler

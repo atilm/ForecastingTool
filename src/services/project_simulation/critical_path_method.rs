@@ -129,8 +129,7 @@ pub fn critical_path_method(
             .cloned()
             .unwrap_or(project_end);
 
-        let whole_days = node.duration.ceil() as i64;
-        let latest_start_date = latest_finish_date - chrono::Duration::days(whole_days);
+        let latest_start_date = calculate_start_date(latest_finish_date, node.duration, calendar)?;
 
         let earliest_start_of_successors = successors[&node.id]
             .iter()
@@ -177,6 +176,23 @@ fn calculate_end_date(
     }
 }
 
+fn calculate_start_date(
+    end_date: chrono::NaiveDate,
+    duration_days: f32,
+    calendar: Option<&TeamCalendar>,
+) -> Result<chrono::NaiveDate, CriticalPathMethodError> {
+    if duration_days <= 0.0 {
+        return Ok(end_date);
+    }
+
+    if let Some(calendar) = calendar {
+        start_date_from_capacity_days(end_date, duration_days, calendar)
+    } else {
+        let whole_days = duration_days.ceil() as i64;
+        Ok(end_date - chrono::Duration::days(whole_days))
+    }
+}
+
 fn end_date_from_capacity_days(
     start_date: chrono::NaiveDate,
     days_at_full_capacity: f32,
@@ -203,6 +219,33 @@ fn end_date_from_capacity_days(
                 .unwrap_or(date); // If we can't find a non-zero capacity date within a reasonable time frame, just return the current date
 
             return Ok(next_non_zero_capacity_date);
+        }
+    }
+
+    Err(CriticalPathMethodError::InsufficientCalendarCapacity)
+}
+
+fn start_date_from_capacity_days(
+    end_date: chrono::NaiveDate,
+    days_at_full_capacity: f32,
+    calendar: &TeamCalendar,
+) -> Result<chrono::NaiveDate, CriticalPathMethodError> {
+    if days_at_full_capacity <= 0.0 {
+        return Ok(end_date);
+    }
+
+    let mut remaining_capacity = days_at_full_capacity;
+    let mut date = end_date;
+    for _ in 0..(365 * 200) {
+        date -= chrono::Duration::days(1);
+
+        let todays_capacity_fraction = calendar.get_capacity(date);
+        if todays_capacity_fraction > 0.0 {
+            remaining_capacity -= todays_capacity_fraction;
+        }
+
+        if remaining_capacity <= 0.0 {
+            return Ok(date);
         }
     }
 
@@ -662,6 +705,80 @@ mod tests {
         let wp1 = result.iter().find(|node| node.id == "WP1").unwrap();
         assert_eq!(wp1.earliest_start, on_date(2026, 1, 12));
         assert_eq!(wp1.earliest_finish, on_date(2026, 1, 20));
+    }
+
+    /// A linear chain of tasks (WP0 -> WP1 -> WP2 -> WP3) spanning several weeks
+    /// with a calendar that has weekends off. All tasks should be on the critical path
+    /// because there is only one path through the network.
+    #[test]
+    fn linear_sequence_with_calendar_all_tasks_on_critical_path() {
+        use crate::domain::calendar::Calendar;
+        use chrono::Weekday;
+
+        let calendar = TeamCalendar {
+            calendars: vec![Calendar {
+                free_weekdays: vec![Weekday::Sat, Weekday::Sun],
+                free_date_ranges: vec![],
+            }],
+        };
+
+        // Start on Monday 2026-01-05
+        let project_start = on_date(2026, 1, 5);
+
+        // Linear chain: WP0 -> WP1 -> WP2 -> WP3
+        // Each task takes 5 working days (one full work week).
+        let network = vec![
+            build_network_node("WP0", 5.0, &[]),
+            build_network_node("WP1", 5.0, &["WP0"]),
+            build_network_node("WP2", 5.0, &["WP1"]),
+            build_network_node("WP3", 5.0, &["WP2"]),
+        ];
+
+        let result = critical_path_method(network, project_start, Some(&calendar)).unwrap();
+
+        // WP0: Mon 5 Jan - Fri 9 Jan (next working day: Mon 12 Jan)
+        let wp0 = result.iter().find(|n| n.id == "WP0").unwrap();
+        assert_eq!(wp0.earliest_start, on_date(2026, 1, 5));
+        assert_eq!(wp0.earliest_finish, on_date(2026, 1, 12));
+
+        // WP1: Mon 12 Jan - Fri 16 Jan (next working day: Mon 19 Jan)
+        let wp1 = result.iter().find(|n| n.id == "WP1").unwrap();
+        assert_eq!(wp1.earliest_start, on_date(2026, 1, 12));
+        assert_eq!(wp1.earliest_finish, on_date(2026, 1, 19));
+
+        // WP2: Mon 19 Jan - Fri 23 Jan (next working day: Mon 26 Jan)
+        let wp2 = result.iter().find(|n| n.id == "WP2").unwrap();
+        assert_eq!(wp2.earliest_start, on_date(2026, 1, 19));
+        assert_eq!(wp2.earliest_finish, on_date(2026, 1, 26));
+
+        // WP3: Mon 26 Jan - Fri 30 Jan (next working day: Mon 2 Feb)
+        let wp3 = result.iter().find(|n| n.id == "WP3").unwrap();
+        assert_eq!(wp3.earliest_start, on_date(2026, 1, 26));
+        assert_eq!(wp3.earliest_finish, on_date(2026, 2, 2));
+
+        // All tasks must be on the critical path (total_float == 0)
+        for node in &result {
+            assert!(
+                node.is_critical(),
+                "Node {} should be on the critical path but has total_float = {}",
+                node.id,
+                node.total_float,
+            );
+        }
+
+        // Verify latest == earliest for all nodes (another way to confirm critical path)
+        for node in &result {
+            assert_eq!(
+                node.earliest_start, node.latest_start,
+                "Node {} latest_start should equal earliest_start on critical path",
+                node.id,
+            );
+            assert_eq!(
+                node.earliest_finish, node.latest_finish,
+                "Node {} latest_finish should equal earliest_finish on critical path",
+                node.id,
+            );
+        }
     }
 
     #[test]
