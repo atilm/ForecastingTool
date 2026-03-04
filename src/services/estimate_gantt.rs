@@ -42,11 +42,7 @@ pub fn write_pert_gantt_markdown(
     let project = load_project_from_yaml_file(input_path)?;
     let calendar = load_team_calendar_if_provided(calendar_path)?;
 
-    let velocity = if project.has_story_points() {
-        Some(calculate_project_velocity(&project, &calendar)?)
-    } else {
-        None
-    };
+    let velocity = calculate_project_velocity(&project, &calendar)?;
 
     let mut expected_value_sampler = PertExpectedValueSampler;
 

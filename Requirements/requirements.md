@@ -1,15 +1,9 @@
 # ToDos
 
-* [ ] Remove tokio from tests
-
-* [ ] Remove gantt chart generation from simulation
-* [ ] Let calculate_project_velocity return an Option to avoid if else  
 * [ ] Use Errors in ThreePointSampler
 
-* [ ] Separate Gantt Diagram Generation from Monte Carlo Simulation
-  * [ ] Simulation -> No Gantt. Instead: work package and milestone percentiles. Candle Stick plots.
-  * [ ] PERT command -> Gantt diagram with PERT durations
-
+* [ ] Output percentiles of work packages / milestones in report
+* [ ] Plot candle stick diagram of milestone finish percentiles
 * [ ] Show status and milestones in dependency diagram
 * [ ] Improve error reporting in project_yaml.rs
 

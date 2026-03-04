@@ -19,7 +19,11 @@ pub enum VelocityCalculationError {
 pub fn calculate_project_velocity(
     project: &Project,
     calendar: &TeamCalendar,
-) -> Result<f32, VelocityCalculationError> {
+) -> Result<Option<f32>, VelocityCalculationError> {
+    if !project.has_story_points() {
+        return Ok(None);
+    }
+
     let mut completed: Vec<&Issue> = project
         .work_packages
         .iter()
@@ -67,7 +71,7 @@ pub fn calculate_project_velocity(
         return Err(VelocityCalculationError::InvalidVelocityValue);
     }
 
-    Ok(velocity)
+    Ok(Some(velocity))
 }
 
 fn summed_capacity_in_period(
@@ -108,7 +112,7 @@ mod tests {
         };
         let no_free_days_calendar = create_calendar_without_any_free_days();
 
-        let velocity = calculate_project_velocity(&project, &no_free_days_calendar).unwrap();
+        let velocity = calculate_project_velocity(&project, &no_free_days_calendar).unwrap().unwrap();
         // The 30 issues span an inclusive period of 31 days (from first start_date to last done_date).
         assert!((velocity - 2.0 * 30.0 / 31.0).abs() < f32::EPSILON);
     }
@@ -129,7 +133,7 @@ mod tests {
 
         let no_free_days_calendar = create_calendar_without_any_free_days();
 
-        let velocity = calculate_project_velocity(&project, &no_free_days_calendar).unwrap();
+        let velocity = calculate_project_velocity(&project, &no_free_days_calendar).unwrap().unwrap();
         // The 30 selected issues span an inclusive period of 31 days.
         let expected = 30.0 / 31.0;
         assert!((velocity - expected).abs() < f32::EPSILON);
@@ -170,7 +174,7 @@ mod tests {
             work_packages: issues,
         };
 
-        let velocity = calculate_project_velocity(&project, &half_capacity_calendar).unwrap();
+        let velocity = calculate_project_velocity(&project, &half_capacity_calendar).unwrap().unwrap();
         let expected = 12.0 / 7.0 * 2.0; // 12 points over 7 working days with half capacity is double the velocity compared to full capacity
         assert!((velocity - expected).abs() < f32::EPSILON);
     }

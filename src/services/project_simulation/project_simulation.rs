@@ -86,11 +86,7 @@ pub fn simulate_project(
         return Err(ProjectSimulationError::EmptyProject);
     }
 
-    let velocity = if project.has_story_points() {
-        Some(calculate_project_velocity(project, &calendar)?)
-    } else {
-        None
-    };
+    let velocity = calculate_project_velocity(project, &calendar)?;
 
     let mut rng = rand::thread_rng();
     let mut sampler = BetaPertSampler::new(&mut rng);
@@ -337,7 +333,7 @@ mod tests {
         let ignored_simulation_start = on_date(2000, 1, 1);
         let output = run_simulation(
             &project,
-            Some(calculate_project_velocity(&project, &calendar).unwrap()),
+            calculate_project_velocity(&project, &calendar).unwrap(),
             1,
             ignored_simulation_start,
             &mut sampler,
@@ -395,7 +391,7 @@ mod tests {
         let ignored_simulation_start = on_date(2000, 1, 1);
         let output = run_simulation(
             &project,
-            Some(calculate_project_velocity(&project, &calendar).unwrap()),
+            calculate_project_velocity(&project, &calendar).unwrap(),
             1,
             ignored_simulation_start,
             &mut sampler,
@@ -465,7 +461,7 @@ mod tests {
 
             let output = run_simulation(
                 &project,
-                Some(calculate_project_velocity(&project, &calendar).unwrap()),
+                calculate_project_velocity(&project, &calendar).unwrap(),
                 25,
                 base,
                 &mut sampler,
@@ -550,7 +546,7 @@ mod tests {
 
         let output = run_simulation(
             &project,
-            Some(calculate_project_velocity(&project, &calendar).unwrap()),
+            calculate_project_velocity(&project, &calendar).unwrap(),
             1,
             on_date(2026, 2, 16), // Start on a Monday
             &mut sampler,
