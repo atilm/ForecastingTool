@@ -71,7 +71,6 @@ work_packages:
     let input_arg = input_file.path().to_str().unwrap().to_string();
     let output_arg = output_file.path().to_str().unwrap().to_string();
     let histogram_path = format!("{output_arg}.png");
-    let gantt_path = format!("{output_arg}.gantt.md");
 
     let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
     cmd.args(&[
@@ -99,10 +98,6 @@ work_packages:
     assert!(output.contains("p0:"));
 
     assert!(fs::metadata(&histogram_path).is_ok());
-    assert!(fs::metadata(&gantt_path).is_ok());
-    let gantt_output = fs::read_to_string(&gantt_path).unwrap();
-    assert!(gantt_output.contains("gantt"));
-    assert!(gantt_output.contains("dateFormat"));
 }
 
 #[test]

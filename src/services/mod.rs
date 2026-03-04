@@ -1,7 +1,6 @@
 pub(crate) mod data_converter;
 pub(crate) mod data_source;
 pub(crate) mod estimate_gantt;
-pub(crate) mod gantt_diagram;
 pub(crate) mod histogram;
 pub(crate) mod jira_api;
 pub(crate) mod percentiles;

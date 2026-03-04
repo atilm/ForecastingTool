@@ -1,6 +1,5 @@
 use chrono::NaiveDate;
 
-use thiserror::Error;
 use crate::domain::estimate::Estimate;
 use crate::domain::estimate::StoryPointEstimate;
 use crate::domain::issue_status::IssueStatus;
@@ -24,12 +23,6 @@ pub struct Issue {
     pub done_date: Option<NaiveDate>,
 }
 
-#[derive(Error, Debug)]
-pub enum IssueError {
-    #[error("issue is missing an estimate")]
-    NoEstimate,
-}
-
 impl Issue {
     pub fn new() -> Self {
         Self {
@@ -44,21 +37,6 @@ impl Issue {
             Estimate::ThreePoint(_) => None,
             Estimate::Reference(_) => None,
         }
-    }
-
-    pub fn has_zero_duration(&self) -> Result<bool, IssueError> {
-        let estimate = self.estimate.as_ref().ok_or(IssueError::NoEstimate)?;
-        let result = match estimate {
-            Estimate::StoryPoint(StoryPointEstimate { estimate }) => *estimate == Some(0.0),
-            Estimate::ThreePoint(three_point) => {
-                three_point.optimistic == Some(0.0)
-                    && three_point.most_likely == Some(0.0)
-                    && three_point.pessimistic == Some(0.0)
-            }
-            Estimate::Reference(_) => false,
-        };
-
-        Ok(result)
     }
 }
 
