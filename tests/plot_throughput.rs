@@ -2,8 +2,8 @@ use assert_fs::prelude::*;
 use predicates::prelude::*;
 use std::fs;
 
-#[tokio::test]
-async fn plot_throughput_creates_png() {
+#[test]
+fn plot_throughput_creates_png() {
     let throughput_yaml = "- date: 2026-01-26\n  completed_issues: 2\n- date: 2026-01-27\n  completed_issues: 0\n- date: 2026-01-28\n  completed_issues: 3\n";
 
     let input_file = assert_fs::NamedTempFile::new("throughput.yaml").unwrap();

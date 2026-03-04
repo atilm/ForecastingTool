@@ -3,8 +3,8 @@ use predicates::prelude::*;
 use std::fs;
 use serde_yaml::Value;
 
-#[tokio::test()]
-async fn simulate_by_throughput() {
+#[test]
+fn simulate_by_throughput() {
     let throughput_yaml = "- date: 2026-01-26
   completed_issues: 2
 - date: 2026-01-27
@@ -71,8 +71,8 @@ async fn simulate_by_throughput() {
     assert!(output.contains("p100:"));
 }
 
-#[tokio::test()]
-async fn simulate_by_throughput_parses_calendar_dir() {
+#[test]
+fn simulate_by_throughput_parses_calendar_dir() {
   // Deterministic throughput distribution: always 1 issue/day.
   let throughput_yaml = "- date: 2026-02-16\n  completed_issues: 1\n";
 

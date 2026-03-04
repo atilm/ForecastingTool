@@ -1,10 +1,9 @@
 use assert_fs::prelude::*;
 use predicates::prelude::*;
 use std::fs;
-use tokio::task;
 
-#[tokio::test]
-async fn plot_gantt_writes_mermaid_gantt_diagram() {
+#[test]
+fn plot_gantt_writes_mermaid_gantt_diagram() {
     let project_yaml = r#"
 name: Demo
 work_packages:
@@ -41,21 +40,20 @@ work_packages:
     let input_arg = input_file.path().to_str().unwrap().to_string();
     let output_arg = output_file.path().to_str().unwrap().to_string();
 
-    task::spawn_blocking(move || {
-        let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
-        cmd.args(&[
-            "plot-gantt",
-            "-i", &input_arg,
-            "-o", &output_arg,
-            "-s", "2026-01-05",
-        ]);
+    let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
+    cmd.args(&[
+        "plot-gantt",
+        "-i",
+        &input_arg,
+        "-o",
+        &output_arg,
+        "-s",
+        "2026-01-05",
+    ]);
 
-        cmd.assert()
-            .success()
-            .stdout(predicate::str::contains("Gantt diagram written to"));
-    })
-    .await
-    .unwrap();
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Gantt diagram written to"));
 
     let output = fs::read_to_string(output_file.path()).unwrap();
     assert!(output.contains("```mermaid"));
@@ -71,8 +69,8 @@ work_packages:
     assert!(output.contains("2026-01-05"));
 }
 
-#[tokio::test]
-async fn plot_gantt_with_calendar_dir() {
+#[test]
+fn plot_gantt_with_calendar_dir() {
     let project_yaml = r#"
 name: CalendarDemo
 work_packages:
@@ -112,22 +110,22 @@ free_date_ranges: []
     let output_arg = output_file.path().to_str().unwrap().to_string();
     let calendar_arg = calendar_dir.path().to_str().unwrap().to_string();
 
-    task::spawn_blocking(move || {
-        let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
-        cmd.args(&[
-            "plot-gantt",
-            "-i", &input_arg,
-            "-o", &output_arg,
-            "-s", "2026-01-05",
-            "-c", &calendar_arg,
-        ]);
+    let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
+    cmd.args(&[
+        "plot-gantt",
+        "-i",
+        &input_arg,
+        "-o",
+        &output_arg,
+        "-s",
+        "2026-01-05",
+        "-c",
+        &calendar_arg,
+    ]);
 
-        cmd.assert()
-            .success()
-            .stdout(predicate::str::contains("Gantt diagram written to"));
-    })
-    .await
-    .unwrap();
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Gantt diagram written to"));
 
     let output = fs::read_to_string(output_file.path()).unwrap();
     assert!(output.contains("```mermaid"));
