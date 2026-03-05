@@ -3,12 +3,12 @@ use chrono::NaiveDate;
 use crate::domain::estimate::{Estimate, StoryPointEstimate, ThreePointEstimate};
 use crate::domain::issue::{Issue, IssueId};
 use crate::domain::issue_status::IssueStatus;
-use crate::services::project_simulation::beta_pert_sampler::ThreePointSampler;
+use crate::services::project_simulation::beta_pert_sampler::{ThreePointSampler, ThreePointSamplerError};
 
 // A mock ThreePointSampler that always returns the most likely value
 pub struct MockSampler;
 impl ThreePointSampler for MockSampler {
-    fn sample(&mut self, _optimistic: f32, most_likely: f32, _pessimistic: f32) -> Result<f32, ()> {
+    fn sample(&mut self, _optimistic: f32, most_likely: f32, _pessimistic: f32) -> Result<f32, ThreePointSamplerError> {
         Ok(most_likely)
     }
 }

@@ -1,7 +1,5 @@
 # ToDos
 
-* [ ] Use Errors in ThreePointSampler
-
 * [ ] Output percentiles of work packages / milestones in report
 * [ ] Plot candle stick diagram of milestone finish percentiles
 * [ ] Show status and milestones in dependency diagram
@@ -27,7 +25,7 @@
 # Requirements Specification
 
 * ~~New Estimate Type: fixed time box~~ -> workaround: three-point-estimate with three equal values
-* Start-Date for Tasks, so that they can be plotted correctly
+* ~~Start-Date for Tasks, so that they can be plotted correctly~~
 
 * [ ] Download data from web APIs
   * [ ] Supported APIs

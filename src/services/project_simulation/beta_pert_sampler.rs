@@ -2,15 +2,17 @@ use rand::Rng;
 use rand_distr::{Beta, Distribution};
 
 #[derive(Debug, thiserror::Error, PartialEq)]
-pub enum PertError {
+pub enum ThreePointSamplerError {
     #[error("pessimistic value must be >= optimistic value")]
     PessimisticLessThanOptimistic,
     #[error("most_likely value must be between optimistic and pessimistic")]
     MostLikelyOutOfRange,
+    #[error("beta distribution error: {0}")]
+    BetaDistributionError(#[from] rand_distr::BetaError),
 }
 
 pub trait ThreePointSampler {
-    fn sample(&mut self, optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ()>;
+    fn sample(&mut self, optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ThreePointSamplerError>;
 }
 
 pub struct BetaPertSampler<R: Rng> {
@@ -24,21 +26,21 @@ impl<R: Rng> BetaPertSampler<R> {
 }
 
 impl<R: Rng> ThreePointSampler for BetaPertSampler<R> {
-    fn sample(&mut self, optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ()> {
+    fn sample(&mut self, optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ThreePointSamplerError> {
         if pessimistic < optimistic {
-            return Err(());
+            return Err(ThreePointSamplerError::PessimisticLessThanOptimistic);
         }
         if (pessimistic - optimistic).abs() < f32::EPSILON {
             return Ok(optimistic);
         }
         if most_likely < optimistic || most_likely > pessimistic {
-            return Err(());
+            return Err(ThreePointSamplerError::MostLikelyOutOfRange);
         }
 
         let range = (pessimistic - optimistic) as f64;
         let alpha = 1.0 + 4.0 * ((most_likely - optimistic) as f64 / range);
         let beta = 1.0 + 4.0 * ((pessimistic - most_likely) as f64 / range);
-        let beta_dist = Beta::new(alpha, beta).map_err(|_| ())?;
+        let beta_dist = Beta::new(alpha, beta)?;
         let sample = beta_dist.sample(&mut self.rng) as f32;
         Ok(optimistic + sample * (pessimistic - optimistic))
     }
@@ -47,18 +49,18 @@ impl<R: Rng> ThreePointSampler for BetaPertSampler<R> {
 pub struct PertExpectedValueSampler;
 
 impl ThreePointSampler for PertExpectedValueSampler {
-    fn sample(&mut self, optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ()> {
-        pert_expected_value(optimistic, most_likely, pessimistic).map_err(|_| ())
+    fn sample(&mut self, optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ThreePointSamplerError> {
+        pert_expected_value(optimistic, most_likely, pessimistic)
     }
 }
 
 /// Calculates the PERT expected value: (optimistic + 4 * most_likely + pessimistic) / 6
-pub fn pert_expected_value(optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, PertError> {
+pub fn pert_expected_value(optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ThreePointSamplerError> {
     if pessimistic < optimistic {
-        return Err(PertError::PessimisticLessThanOptimistic);
+        return Err(ThreePointSamplerError::PessimisticLessThanOptimistic);
     }
     if most_likely < optimistic || most_likely > pessimistic {
-        return Err(PertError::MostLikelyOutOfRange);
+        return Err(ThreePointSamplerError::MostLikelyOutOfRange);
     }
     Ok((optimistic + 4.0 * most_likely + pessimistic) / 6.0)
 }
@@ -95,18 +97,18 @@ mod tests {
     #[test]
     fn expected_value_rejects_pessimistic_less_than_optimistic() {
         let result = pert_expected_value(10.0, 5.0, 2.0);
-        assert_eq!(result, Err(PertError::PessimisticLessThanOptimistic));
+        assert_eq!(result, Err(ThreePointSamplerError::PessimisticLessThanOptimistic));
     }
 
     #[test]
     fn expected_value_rejects_most_likely_below_optimistic() {
         let result = pert_expected_value(5.0, 3.0, 10.0);
-        assert_eq!(result, Err(PertError::MostLikelyOutOfRange));
+        assert_eq!(result, Err(ThreePointSamplerError::MostLikelyOutOfRange));
     }
 
     #[test]
     fn expected_value_rejects_most_likely_above_pessimistic() {
         let result = pert_expected_value(1.0, 12.0, 10.0);
-        assert_eq!(result, Err(PertError::MostLikelyOutOfRange));
+        assert_eq!(result, Err(ThreePointSamplerError::MostLikelyOutOfRange));
     }
 }
