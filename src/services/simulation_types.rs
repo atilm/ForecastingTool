@@ -35,6 +35,7 @@ pub struct WorkPackagePercentiles {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct WorkPackageSimulation {
     pub id: String,
+    pub is_milestone: bool,
     pub percentiles: WorkPackagePercentiles,
 }
 

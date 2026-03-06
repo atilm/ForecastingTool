@@ -5,7 +5,7 @@
 * [ ] Improve error reporting in project_yaml.rs
 
 * [ ] If possible, make it easier to configure project simulations.
-  * [ ] Add explicit milestones
+  * [x] ~~Add explicit milestones~~
   * [x] ~~Add simulation steps with fixed duration~~ -> Done by three-point estimates with equal values
   * [ ] Cases
     * [ ] Simulate subproject based on story-points

@@ -154,6 +154,7 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
                 .unwrap_or_default();
             WorkPackageSimulation {
                 id,
+                is_milestone: issue.is_milestone(),
                 percentiles: percentiles_from_samples(
                     samples_by_id
                         .get(issue.issue_id.as_ref().unwrap().id.as_str())
