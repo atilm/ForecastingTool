@@ -513,6 +513,10 @@ p0:
   days: 1
   start_date: "2026-01-01"
   end_date: "2026-01-02"
+p15:
+    days: 1.5
+    start_date: "2026-01-01"
+    end_date: "2026-01-03"
 p50:
   days: 2
   start_date: "2026-01-01"

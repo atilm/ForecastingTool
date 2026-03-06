@@ -16,6 +16,7 @@ pub struct SimulationReport {
     pub iterations: usize,
     pub simulated_items: usize,
     pub p0: SimulationPercentile,
+    pub p15: SimulationPercentile,
     pub p50: SimulationPercentile,
     pub p85: SimulationPercentile,
     pub p100: SimulationPercentile,
@@ -25,6 +26,7 @@ pub struct SimulationReport {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct WorkPackagePercentiles {
     pub p0: SimulationPercentile,
+    pub p15: SimulationPercentile,
     pub p50: SimulationPercentile,
     pub p85: SimulationPercentile,
     pub p100: SimulationPercentile,

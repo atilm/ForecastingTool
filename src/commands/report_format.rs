@@ -21,6 +21,7 @@ pub fn format_simulation_report(report: &SimulationReport) -> String {
     lines.push("Percentile | Days | Date".to_string());
     lines.push("-----------|------|-----".to_string());
     lines.push(format_percentile_row("P0", &report.p0));
+    lines.push(format_percentile_row("P15", &report.p15));
     lines.push(format_percentile_row("P50", &report.p50));
     lines.push(format_percentile_row("P85", &report.p85));
     lines.push(format_percentile_row("P100", &report.p100));
@@ -59,6 +60,10 @@ mod tests {
                 days: 1.0,
                 end_date: NaiveDate::from_ymd_opt(2026, 2, 2).unwrap(),
             },
+            p15: SimulationPercentile {
+                days: 2.0,
+                end_date: NaiveDate::from_ymd_opt(2026, 2, 3).unwrap(),
+            },
             p50: SimulationPercentile {
                 days: 5.5,
                 end_date: NaiveDate::from_ymd_opt(2026, 2, 6).unwrap(),
@@ -88,6 +93,7 @@ mod tests {
         assert!(output.contains("Velocity: 2.50"));
         assert!(output.contains("Percentile | Days | Date"));
         assert!(output.contains("P0 | 1.00 | 2026-02-02"));
+        assert!(output.contains("P15 | 2.00 | 2026-02-03"));
         assert!(output.contains("P50 | 5.50 | 2026-02-06"));
         assert!(output.contains("P85 | 10.00 | 2026-02-11"));
         assert!(output.contains("P100 | 15.25 | 2026-02-16"));

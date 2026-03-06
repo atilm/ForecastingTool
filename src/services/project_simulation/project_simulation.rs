@@ -173,6 +173,7 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         iterations,
         simulated_items: project.work_packages.len(),
         p0: to_simulation_percentile(&project_end_dates, 0.0, start_date),
+        p15: to_simulation_percentile(&project_end_dates, 15.0, start_date),
         p50: to_simulation_percentile(&project_end_dates, 50.0, start_date),
         p85: to_simulation_percentile(&project_end_dates, 85.0, start_date),
         p100: to_simulation_percentile(&project_end_dates, 100.0, start_date),
@@ -208,6 +209,7 @@ fn percentiles_from_samples(
         };
         return WorkPackagePercentiles {
             p0: default.clone(),
+            p15: default.clone(),
             p50: default.clone(),
             p85: default.clone(),
             p100: default,
@@ -228,6 +230,7 @@ fn percentiles_from_samples(
 
     WorkPackagePercentiles {
         p0: pick(0.0),
+        p15: pick(15.0),
         p50: pick(50.0),
         p85: pick(85.0),
         p100: pick(100.0),

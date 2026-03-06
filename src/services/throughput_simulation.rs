@@ -113,6 +113,7 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
     results.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
     let p0_days = percentiles::get_percentile_value_f32(&results, 0.0);
+    let p15_days = percentiles::get_percentile_value_f32(&results, 15.0);
     let p50_days = percentiles::get_percentile_value_f32(&results, 50.0);
     let p85_days = percentiles::get_percentile_value_f32(&results, 85.0);
     let p100_days = percentiles::get_percentile_value_f32(&results, 100.0);
@@ -126,6 +127,10 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
         p0: SimulationPercentile {
             days: p0_days,
             end_date: end_date_from_days(start_date, p0_days),
+        },
+        p15: SimulationPercentile {
+            days: p15_days,
+            end_date: end_date_from_days(start_date, p15_days),
         },
         p50: SimulationPercentile {
             days: p50_days,
