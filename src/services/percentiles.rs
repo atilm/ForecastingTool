@@ -25,27 +25,6 @@ pub fn get_percentile_value<T: Copy>(sorted_values: &[T], percentile: f64) -> Op
     sorted_values.get(index).copied()
 }
 
-/// Returns the index into a sorted slice for the given percentile.
-///
-/// This is useful when you want to select a percentile from a slice of non-`Copy`
-/// values without cloning the selected element.
-pub fn get_percentile_index(len: usize, percentile: f64) -> Option<usize> {
-    if len == 0 {
-        return None;
-    }
-
-    let index = if percentile <= 0.0 {
-        0
-    } else if percentile >= 100.0 {
-        len - 1
-    } else {
-        let position = (percentile / 100.0) * (len as f64 - 1.0);
-        position.round() as usize
-    };
-
-    Some(index)
-}
-
 /// Convenience wrapper for `f32` results.
 pub fn get_percentile_value_f32(sorted_values: &[f32], percentile: f64) -> f32 {
     get_percentile_value(sorted_values, percentile).unwrap_or(0.0)
@@ -86,12 +65,5 @@ mod tests {
     fn value_f32_sorted_returns_zero_for_empty_input() {
         let values: [f32; 0] = [];
         assert_eq!(get_percentile_value_f32(&values, 50.0), 0.0);
-    }
-
-    #[test]
-    fn get_percentile_index_matches_value_selection() {
-        let values = [10, 20, 30, 40];
-        let idx = get_percentile_index(values.len(), 50.0).unwrap();
-        assert_eq!(values[idx], get_percentile_value(&values, 50.0).unwrap());
     }
 }

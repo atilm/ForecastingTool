@@ -3,6 +3,7 @@ pub(crate) mod data_source;
 pub(crate) mod estimate_gantt;
 pub(crate) mod histogram;
 pub(crate) mod jira_api;
+pub(crate) mod mileston_plot;
 pub(crate) mod percentiles;
 pub(crate) mod project_flow_diagram;
 pub(crate) mod project_simulation;

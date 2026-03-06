@@ -31,7 +31,6 @@ use crate::services::project_simulation::network_nodes::NetworkNodesError;
 
 #[derive(Debug, Clone, Copy)]
 struct WorkItemSample {
-    duration_days: f32,
     end_date: chrono::NaiveDate,
 }
 
@@ -133,16 +132,11 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
                 .entry(result_node.id.clone())
                 .or_insert_with(|| Vec::with_capacity(iterations))
                 .push(WorkItemSample {
-                    duration_days: calculate_days(
-                        result_node.earliest_start,
-                        result_node.earliest_finish,
-                    ),
                     end_date: result_node.earliest_finish,
                 });
         }
     }
 
-    
     let work_packages = project
         .work_packages
         .iter()
@@ -186,55 +180,22 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         .map(|date| calculate_days(start_date, *date))
         .collect();
 
-    Ok(SimulationOutput {
-        report,
-        results,
-    })
+    Ok(SimulationOutput { report, results })
 }
 
 fn percentiles_from_samples(
     samples: &[WorkItemSample],
-    default_project_start: chrono::NaiveDate,
+    start_date: chrono::NaiveDate,
 ) -> WorkPackagePercentiles {
-    fn to_percentile(sample: WorkItemSample) -> SimulationPercentile {
-        SimulationPercentile {
-            days: sample.duration_days,
-            end_date: sample.end_date,
-        }
-    }
-
-    if samples.is_empty() {
-        let default = SimulationPercentile {
-            days: 0.0,
-            end_date: default_project_start,
-        };
-        return WorkPackagePercentiles {
-            p0: default.clone(),
-            p15: default.clone(),
-            p50: default.clone(),
-            p85: default.clone(),
-            p100: default,
-        };
-    }
-
-    let mut sorted = samples.to_vec();
-    sorted.sort_by(|a, b| {
-        a.duration_days
-            .partial_cmp(&b.duration_days)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    let pick = |p: f64| {
-        let idx = percentiles::get_percentile_index(sorted.len(), p).unwrap_or(0);
-        to_percentile(sorted[idx])
-    };
+    let mut sorted_end_dates = samples.iter().map(|s| s.end_date).collect::<Vec<_>>();
+    sorted_end_dates.sort();
 
     WorkPackagePercentiles {
-        p0: pick(0.0),
-        p15: pick(15.0),
-        p50: pick(50.0),
-        p85: pick(85.0),
-        p100: pick(100.0),
+        p0: to_simulation_percentile(&sorted_end_dates, 0.0, start_date),
+        p15: to_simulation_percentile(&sorted_end_dates, 15.0, start_date),
+        p50: to_simulation_percentile(&sorted_end_dates, 50.0, start_date),
+        p85: to_simulation_percentile(&sorted_end_dates, 85.0, start_date),
+        p100: to_simulation_percentile(&sorted_end_dates, 100.0, start_date),
     }
 }
 
@@ -512,10 +473,10 @@ mod tests {
 
         let wp2_end_date = wp1_end_date + chrono::Duration::days(3);
 
-        assert_eq!(wp2.percentiles.p0.days, 3.0);
+        assert_eq!(wp2.percentiles.p0.days, 7.0);
         assert_eq!(wp2.percentiles.p0.end_date, wp2_end_date);
 
-        assert_eq!(fin.percentiles.p0.days, 0.0);
+        assert_eq!(fin.percentiles.p0.days, 7.0);
         assert_eq!(fin.percentiles.p0.end_date, wp2_end_date);
     }
 
