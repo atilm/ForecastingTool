@@ -8,7 +8,6 @@ use crate::services::project_simulation::network_nodes::build_network_nodes;
 
 use chrono::NaiveDate;
 
-use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
 use crate::services::histogram::HistogramError;
 use crate::services::percentiles;
@@ -143,19 +142,7 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         }
     }
 
-    project_end_dates.sort();
-    let report = SimulationReport {
-        data_source: String::new(),
-        start_date,
-        velocity,
-        iterations,
-        simulated_items: project.work_packages.len(),
-        p0: to_simulation_percentile(&project_end_dates, 0.0, start_date),
-        p50: to_simulation_percentile(&project_end_dates, 50.0, start_date),
-        p85: to_simulation_percentile(&project_end_dates, 85.0, start_date),
-        p100: to_simulation_percentile(&project_end_dates, 100.0, start_date),
-    };
-
+    
     let work_packages = project
         .work_packages
         .iter()
@@ -167,7 +154,6 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
                 .unwrap_or_default();
             WorkPackageSimulation {
                 id,
-                status: issue.status.clone().unwrap_or(IssueStatus::ToDo),
                 percentiles: percentiles_from_samples(
                     samples_by_id
                         .get(issue.issue_id.as_ref().unwrap().id.as_str())
@@ -179,6 +165,20 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         })
         .collect();
 
+    project_end_dates.sort();
+    let report = SimulationReport {
+        data_source: String::new(),
+        start_date,
+        velocity,
+        iterations,
+        simulated_items: project.work_packages.len(),
+        p0: to_simulation_percentile(&project_end_dates, 0.0, start_date),
+        p50: to_simulation_percentile(&project_end_dates, 50.0, start_date),
+        p85: to_simulation_percentile(&project_end_dates, 85.0, start_date),
+        p100: to_simulation_percentile(&project_end_dates, 100.0, start_date),
+        work_packages: Some(work_packages),
+    };
+
     let results = project_end_dates
         .iter()
         .map(|date| calculate_days(start_date, *date))
@@ -187,7 +187,6 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     Ok(SimulationOutput {
         report,
         results,
-        work_packages: Some(work_packages),
     })
 }
 
@@ -344,20 +343,13 @@ mod tests {
         let velocity = output.report.velocity.unwrap();
         assert_eq!(velocity, 2.0); // 8 points / 4 days = 2 points/day
 
-        let work_packages = output.work_packages.unwrap();
+        let work_packages = output.report.work_packages.unwrap();
         let wp0 = work_packages.iter().find(|wp| wp.id == "SP-0").unwrap();
         let wp1 = work_packages.iter().find(|wp| wp.id == "SP-1").unwrap();
         let wp2 = work_packages.iter().find(|wp| wp.id == "SP-2").unwrap();
         let wp3 = work_packages.iter().find(|wp| wp.id == "SP-3").unwrap();
         let wp4 = work_packages.iter().find(|wp| wp.id == "SP-4").unwrap();
         let wp5 = work_packages.iter().find(|wp| wp.id == "SP-5").unwrap();
-
-        assert!(wp0.status == IssueStatus::Done);
-        assert!(wp1.status == IssueStatus::Done);
-        assert!(wp2.status == IssueStatus::Done);
-        assert!(wp3.status == IssueStatus::ToDo);
-        assert!(wp4.status == IssueStatus::ToDo);
-        assert!(wp5.status == IssueStatus::ToDo);
 
         assert_eq!(wp0.percentiles.p0.end_date, on_date(2026, 1, 8));
         assert_eq!(wp1.percentiles.p0.end_date, on_date(2026, 1, 14));
@@ -402,14 +394,10 @@ mod tests {
         let velocity = output.report.velocity.unwrap();
         assert_eq!(velocity, 2.0); // 8 points / 4 days = 2 points/day
 
-        let work_packages = output.work_packages.unwrap();
+        let work_packages = output.report.work_packages.unwrap();
         let wp0 = work_packages.iter().find(|wp| wp.id == "SP-0").unwrap();
         let wp1 = work_packages.iter().find(|wp| wp.id == "SP-1").unwrap();
         let wp2 = work_packages.iter().find(|wp| wp.id == "SP-2").unwrap();
-
-        assert!(wp0.status == IssueStatus::Done);
-        assert!(wp1.status == IssueStatus::InProgress);
-        assert!(wp2.status == IssueStatus::ToDo);
 
         assert_eq!(wp0.percentiles.p0.end_date, on_date(2026, 1, 8));
         assert_eq!(wp1.percentiles.p0.end_date, on_date(2026, 2, 20));
@@ -500,7 +488,7 @@ mod tests {
             &calendar,
         );
 
-        let work_packages = output.unwrap().work_packages.unwrap();
+        let work_packages = output.unwrap().report.work_packages.unwrap();
 
         let wp0 = work_packages.iter().find(|wp| wp.id == "WP0").unwrap();
         let wp1 = work_packages.iter().find(|wp| wp.id == "WP1").unwrap();

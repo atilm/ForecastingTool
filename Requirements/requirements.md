@@ -1,7 +1,6 @@
 # ToDos
 
-* [ ] Output percentiles of work packages / milestones in report
-* [ ] Plot candle stick diagram of milestone finish percentiles
+* [ ] Plot box plot diagram of milestone finish percentiles
 * [ ] Show status and milestones in dependency diagram
 * [ ] Improve error reporting in project_yaml.rs
 

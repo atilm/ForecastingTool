@@ -1,7 +1,6 @@
 use serde::Deserialize;
 use serde::Serialize;
 use chrono::NaiveDate;
-use crate::domain::issue_status::IssueStatus;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct SimulationPercentile {
@@ -20,9 +19,10 @@ pub struct SimulationReport {
     pub p50: SimulationPercentile,
     pub p85: SimulationPercentile,
     pub p100: SimulationPercentile,
+    pub work_packages: Option<Vec<WorkPackageSimulation>>,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct WorkPackagePercentiles {
     pub p0: SimulationPercentile,
     pub p50: SimulationPercentile,
@@ -30,10 +30,9 @@ pub struct WorkPackagePercentiles {
     pub p100: SimulationPercentile,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct WorkPackageSimulation {
     pub id: String,
-    pub status: IssueStatus,
     pub percentiles: WorkPackagePercentiles,
 }
 
@@ -41,7 +40,6 @@ pub struct WorkPackageSimulation {
 pub struct SimulationOutput {
     pub report: SimulationReport,
     pub results: Vec<f32>,
-    pub work_packages: Option<Vec<WorkPackageSimulation>>,
 }
 
 #[cfg(test)]

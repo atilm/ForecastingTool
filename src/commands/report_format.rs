@@ -71,6 +71,7 @@ mod tests {
                 days: 15.25,
                 end_date: NaiveDate::from_ymd_opt(2026, 2, 16).unwrap(),
             },
+            work_packages: None,
         }
     }
 

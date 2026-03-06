@@ -139,12 +139,12 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
             days: p100_days,
             end_date: end_date_from_days(start_date, p100_days),
         },
+        work_packages: None,
     };
 
     Ok(SimulationOutput {
         report,
         results,
-        work_packages: None,
     })
 }
 
