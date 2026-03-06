@@ -31,6 +31,24 @@ pub fn write_milestone_plot_png(
     render_milestone_plot_png(output_path, &milestones)
 }
 
+fn milestone_label_for_y(value: f32, milestones: &[&WorkPackageSimulation]) -> String {
+    const HALF_STEP: f32 = 0.5;
+    const EPSILON: f32 = 0.001;
+
+    let idx_as_float = value - HALF_STEP;
+    let rounded = idx_as_float.round();
+    if (idx_as_float - rounded).abs() > EPSILON {
+        return String::new();
+    }
+
+    let idx = rounded as isize;
+    if idx < 0 || idx as usize >= milestones.len() {
+        return String::new();
+    }
+
+    milestones[idx as usize].id.clone()
+}
+
 fn collect_milestones(
     report: &SimulationReport,
 ) -> Result<Vec<&WorkPackageSimulation>, MilestonePlotError> {
@@ -85,14 +103,8 @@ fn render_milestone_plot_png(
         .y_desc("Milestones")
         .label_style(("sans-serif", 16))
         .axis_desc_style(("sans-serif", 20))
-        .y_labels(milestones.len() + 1)
-        .y_label_formatter(&|value| {
-            let idx = value.round() as isize;
-            if idx < 0 || idx as usize >= milestones.len() {
-                return String::new();
-            }
-            milestones[idx as usize].id.clone()
-        })
+        .y_labels(milestones.len().saturating_mul(2).saturating_add(1))
+        .y_label_formatter(&|value| milestone_label_for_y(*value, milestones))
         .draw()
         .map_err(|e| MilestonePlotError::Plot(e.to_string()))?;
 
@@ -230,5 +242,17 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(error, MilestonePlotError::NoMilestones));
+    }
+
+    #[test]
+    fn milestone_label_for_y_labels_half_step_positions_only() {
+        let milestone_1 = build_wp("M1", true, 1.0, 2.0, 3.0, 4.0, 5.0);
+        let milestone_2 = build_wp("M2", true, 2.0, 3.0, 4.0, 5.0, 6.0);
+        let milestones = vec![&milestone_1, &milestone_2];
+
+        assert_eq!(milestone_label_for_y(0.5, &milestones), "M1");
+        assert_eq!(milestone_label_for_y(1.5, &milestones), "M2");
+        assert_eq!(milestone_label_for_y(1.0, &milestones), "");
+        assert_eq!(milestone_label_for_y(2.5, &milestones), "");
     }
 }

@@ -1,6 +1,5 @@
 # ToDos
 
-* [ ] Plot box plot diagram of milestone finish percentiles
 * [ ] Show status and milestones in dependency diagram
 * [ ] Improve error reporting in project_yaml.rs
 
@@ -70,10 +69,11 @@
     * [x] ~~Dependency diagram (mermaid)~~
       * [ ] **Mark completed items in dependency chart**
     * [x] ~~Gantt diagram (mermaid)~~
-      * [ ] **Show completed items in Gantt chart**
+      * [x] ~~Show completed items in Gantt chart~~
       * [x] ~~Add milestones to Gantt diagram~~
         * [x] ~~Display duration 0 entries as milestones in Gantt diagram~~
     * [x] ~~Histogram (`png`)~~
+    * [x]~~ Plot box plot diagram of milestone finish percentiles (labels are not aligned yet)~~
     * [ ] Burn down chart (`png`)
   * [ ] Extra tool to update the project Readme
     * [ ] List of risks
