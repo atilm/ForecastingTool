@@ -22,6 +22,7 @@ pub(crate) fn sample_duration_days<R: ThreePointSampler + ?Sized>(
         Estimate::StoryPoint(estimate) => to_story_point_triplet(estimate, issue_id)?,
         Estimate::ThreePoint(estimate) => to_three_point_triplet(estimate)?,
         Estimate::Reference(estimate) => to_reference_triplet(estimate, issue_id)?,
+        Estimate::Milestone => (0.0, 0.0, 0.0, false),
     };
 
     let sampled = sampler

@@ -24,6 +24,7 @@ pub enum CriticalPathMethodError {
 #[derive(Debug)]
 pub struct NetworkNode {
     pub id: String,
+    pub is_milestone: bool,
     pub duration: f32,
     pub start_date: Option<NaiveDate>,
     pub end_date: Option<NaiveDate>,
@@ -32,6 +33,7 @@ pub struct NetworkNode {
 
 pub struct ResultNode {
     pub id: String,
+    pub is_milestone: bool,
     pub earliest_start: NaiveDate,
     pub latest_start: NaiveDate,
     pub earliest_finish: NaiveDate,
@@ -44,11 +46,6 @@ impl ResultNode {
     /// Returns true if this node is on the critical path (total float is zero).
     pub fn is_critical(&self) -> bool {
         self.total_float.abs() < f32::EPSILON
-    }
-
-    /// Returns true if this node is a milestone (zero duration).
-    pub fn is_milestone(&self) -> bool {
-        self.earliest_start == self.earliest_finish
     }
 }
 
@@ -89,6 +86,7 @@ pub fn critical_path_method(
             node.id.clone(),
             ResultNode {
                 id: node.id.clone(),
+                is_milestone: node.is_milestone,
                 earliest_start,
                 latest_start: project_start, // Placeholder, will be calculated in backward pass
                 earliest_finish,
@@ -304,6 +302,7 @@ mod tests {
     fn build_network_node(id: &str, duration: f32, dependencies: &[&str]) -> NetworkNode {
         NetworkNode {
             id: id.to_string(),
+            is_milestone: false,
             duration,
             start_date: None,
             end_date: None,
@@ -629,6 +628,7 @@ mod tests {
         let network = vec![
             NetworkNode {
                 id: "WP0".to_string(),
+                is_milestone: false,
                 duration: 3.0,
                 start_date: Some(on_date(2026, 1, 5)),
                 end_date: Some(on_date(2026, 1, 8)),
@@ -636,6 +636,7 @@ mod tests {
             },
             NetworkNode {
                 id: "WP1".to_string(),
+                is_milestone: false,
                 duration: 4.0,
                 start_date: Some(on_date(2026, 1, 12)),
                 end_date: None,
@@ -643,6 +644,7 @@ mod tests {
             },
             NetworkNode {
                 id: "WP2".to_string(),
+                is_milestone: false,
                 duration: 4.0,
                 start_date: None,
                 end_date: None,

@@ -86,9 +86,9 @@ pub fn generate_gantt_markdown(result_nodes: &[ResultNode], project: &Project) -
 
         let crit_str = if node.is_critical() { "crit, " } else { "" };
 
-        if node.is_milestone() {
+        if node.is_milestone {
             lines.push(format!(
-                "    {label} :{crit_str}milestone, {id}, {start_str}, 0d",
+                "    {label} :milestone, {id}, {start_str}, 0d",
                 id = node.id,
             ));
         } else {
@@ -128,6 +128,7 @@ mod tests {
     ) -> ResultNode {
         ResultNode {
             id: id.to_string(),
+            is_milestone: false,
             earliest_start,
             latest_start: earliest_start,
             earliest_finish,
@@ -135,6 +136,16 @@ mod tests {
             free_float: 0.0,
             total_float,
         }
+    }
+
+    fn build_milestone_result_node(
+        id: &str,
+        earliest_start: chrono::NaiveDate,
+        total_float: f32,
+    ) -> ResultNode {
+        let mut result_node = build_result_node(id, earliest_start, earliest_start, total_float);
+        result_node.is_milestone = true;
+        result_node
     }
 
     #[test]
@@ -154,16 +165,35 @@ mod tests {
     }
 
     #[test]
-    fn generates_milestone_for_zero_duration() {
+    fn does_not_generate_milestone_for_zero_duration_if_not_marked_as_milestone() {
         let project = Project {
             name: "Test".to_string(),
-            work_packages: vec![build_issue("M", "Milestone")],
+            work_packages: vec![build_issue("T", "Zero Duration Task")],
         };
-        let nodes = vec![build_result_node("M", on_date(2026, 1, 5), on_date(2026, 1, 5), 0.0)];
+        let nodes = vec![build_result_node("T", on_date(2026, 1, 5), on_date(2026, 1, 5), 0.0)];
 
         let result = generate_gantt_markdown(&nodes, &project);
 
-        assert!(result.contains("M Milestone :crit, milestone, M, 2026-01-05, 0d"));
+        assert!(result.contains("T Zero Duration Task :crit, T, 2026-01-05, 2026-01-05"));
+    }
+
+    #[test]
+    fn generates_milestones() {
+        let mut milestone_issue = build_issue("M", "Milestone");
+        milestone_issue.estimate = Some(crate::domain::estimate::Estimate::Milestone);
+        let project = Project {
+            name: "Test".to_string(),
+            work_packages: vec![milestone_issue],
+        };
+
+        let mut result_node = build_result_node("M", on_date(2026, 1, 5), on_date(2026, 1, 5), 0.0);
+        result_node.is_milestone = true;
+
+        let nodes = vec![result_node];
+
+        let result = generate_gantt_markdown(&nodes, &project);
+
+        assert!(result.contains("M Milestone :milestone, M, 2026-01-05, 0d"));
     }
 
     #[test]
@@ -185,20 +215,6 @@ mod tests {
         assert!(result.contains("Task A :crit, A, 2026-01-01, 2026-01-04"));
         assert!(result.contains("Task B :B, 2026-01-01, 2026-01-03"));
         assert!(!result.contains("Task B :crit"));
-    }
-
-    #[test]
-    fn non_critical_milestone_is_not_marked_crit() {
-        let project = Project {
-            name: "Test".to_string(),
-            work_packages: vec![build_issue("M", "Gate")],
-        };
-        let nodes = vec![build_result_node("M", on_date(2026, 1, 5), on_date(2026, 1, 5), 3.0)];
-
-        let result = generate_gantt_markdown(&nodes, &project);
-
-        assert!(result.contains("M Gate :milestone, M, 2026-01-05, 0d"));
-        assert!(!result.contains("crit"));
     }
 
     #[test]
@@ -234,7 +250,7 @@ mod tests {
             build_result_node("A", on_date(2026, 1, 1), on_date(2026, 1, 6), 0.0),
             build_result_node("B", on_date(2026, 1, 1), on_date(2026, 1, 3), 3.0),
             build_result_node("C", on_date(2026, 1, 6), on_date(2026, 1, 10), 0.0),
-            build_result_node("FIN", on_date(2026, 1, 10), on_date(2026, 1, 10), 0.0),
+            build_milestone_result_node("FIN", on_date(2026, 1, 10), 0.0),
         ];
 
         let result = generate_gantt_markdown(&nodes, &project);
@@ -242,6 +258,6 @@ mod tests {
         assert!(result.contains("A Alpha :crit, A, 2026-01-01, 2026-01-06"));
         assert!(result.contains("B Beta :B, 2026-01-01, 2026-01-03"));
         assert!(result.contains("C Gamma :crit, C, 2026-01-06, 2026-01-10"));
-        assert!(result.contains("FIN Finish :crit, milestone, FIN, 2026-01-10, 0d"));
+        assert!(result.contains("FIN Finish :milestone, FIN, 2026-01-10, 0d"));
     }
 }

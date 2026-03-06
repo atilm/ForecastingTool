@@ -23,4 +23,5 @@ pub enum Estimate {
     StoryPoint(StoryPointEstimate),
     ThreePoint(ThreePointEstimate),
     Reference(ReferenceEstimate),
+    Milestone,
 }

@@ -76,6 +76,7 @@ enum EstimateRecord {
     Reference {
         report_file_path: String,
     },
+    Milestone,
 }
 
 pub fn load_project_from_yaml_file(path: &str) -> Result<Project, ProjectYamlError> {
@@ -191,7 +192,8 @@ fn estimate_from_record(record: EstimateRecord) -> Result<Estimate, ProjectYamlE
                 cached_estimate,
                 report_file_path,
             }))
-        }
+        },
+        EstimateRecord::Milestone => Ok(Estimate::Milestone),
     }
 }
 
@@ -241,6 +243,7 @@ fn estimate_to_record(estimate: Option<&Estimate>) -> Option<EstimateRecord> {
         }) => Some(EstimateRecord::Reference {
             report_file_path: report_file_path.clone(),
         }),
+        Estimate::Milestone => Some(EstimateRecord::Milestone),
     }
 }
 

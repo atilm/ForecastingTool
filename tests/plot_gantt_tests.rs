@@ -27,10 +27,7 @@ work_packages:
     summary: Milestone
     dependencies: [WP2]
     estimate:
-      type: three_point
-      optimistic: 0
-      most_likely: 0
-      pessimistic: 0
+      type: milestone
 "#;
 
     let input_file = assert_fs::NamedTempFile::new("project.yaml").unwrap();

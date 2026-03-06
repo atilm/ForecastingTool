@@ -44,6 +44,7 @@ pub fn build_network_nodes<R: ThreePointSampler + ?Sized>(
 
         nodes.push(NetworkNode {
             id,
+            is_milestone: issue.is_milestone(),
             duration,
             start_date,
             end_date,

@@ -34,9 +34,14 @@ impl Issue {
     pub fn story_point_value(&self) -> Option<f32> {
         match self.estimate.as_ref()? {
             Estimate::StoryPoint(StoryPointEstimate { estimate }) => *estimate,
+            Estimate::Milestone => None,
             Estimate::ThreePoint(_) => None,
             Estimate::Reference(_) => None,
         }
+    }
+
+    pub fn is_milestone(&self) -> bool {
+        matches!(self.estimate, Some(Estimate::Milestone))
     }
 }
 
@@ -57,5 +62,33 @@ mod tests {
         assert_eq!(issue.created_date, None);
         assert_eq!(issue.start_date, None);
         assert_eq!(issue.done_date, None);
+    }
+
+    #[test]
+    fn is_milestone_returns_true_for_milestone_estimate() {
+        let milestone_issue = Issue {
+            estimate: Some(Estimate::Milestone),
+            ..Issue::new()
+        };
+
+        let three_point_issue = Issue {
+            estimate: Some(Estimate::ThreePoint(crate::domain::estimate::ThreePointEstimate {
+                optimistic: Some(1.0),
+                most_likely: Some(2.0),
+                pessimistic: Some(3.0),
+            })),
+            ..Issue::new()
+        };
+
+        let story_point_issue = Issue {
+            estimate: Some(Estimate::StoryPoint(crate::domain::estimate::StoryPointEstimate {
+                estimate: Some(5.0),
+            })),
+            ..Issue::new()
+        };
+
+        assert!(milestone_issue.is_milestone());
+        assert!(!three_point_issue.is_milestone());
+        assert!(!story_point_issue.is_milestone());
     }
 }
