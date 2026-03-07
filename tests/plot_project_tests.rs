@@ -9,6 +9,7 @@ name: Demo
 work_packages:
   - id: WP1
     summary: Work package 1
+    status: done
     description: |
       This is
       work package 1.
@@ -18,12 +19,27 @@ work_packages:
       value: 5
   - id: WP2
     summary: Work package 2
+    status: inprogress
     dependencies: [WP1]
     estimate:
       type: three_point
       optimistic: 1
       most_likely: 5
       pessimistic: 10
+  - id: WP3
+    summary: Work package 3
+    status: todo
+    dependencies: [WP2]
+    estimate:
+      type: three_point
+      optimistic: 1
+      most_likely: 5
+      pessimistic: 10
+  - id: WP4
+    summary: Milestone
+    dependencies: [WP3]
+    estimate:
+      type: milestone
 "#;
 
     let input_file = assert_fs::NamedTempFile::new("project.yaml").unwrap();

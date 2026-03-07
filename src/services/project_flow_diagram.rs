@@ -2,8 +2,9 @@ use std::io;
 
 use thiserror::Error;
 
+use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
-use crate::services::project_yaml::{load_project_from_yaml_file, ProjectYamlError};
+use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
 
 #[derive(Error, Debug)]
 pub enum ProjectDiagramError {
@@ -29,28 +30,42 @@ pub fn generate_project_markdown(project: &Project) -> String {
     if descriptions.is_empty() {
         format!("# Project Dependencies Diagram\n```mermaid\n{diagram}\n```\n")
     } else {
-        format!(
-            "# Project Dependencies Diagram\n```mermaid\n{diagram}\n```\n\n{descriptions}\n"
-        )
+        format!("# Project Dependencies Diagram\n```mermaid\n{diagram}\n```\n\n{descriptions}\n")
     }
 }
 
 pub fn generate_flow_diagram(project: &Project) -> String {
     let mut lines = Vec::new();
     lines.push("flowchart TD".to_string());
+    lines.push("classDef class_done fill:#aae,stroke:#88a".to_string());
+    lines.push("classDef class_progress fill:#eaa,stroke:#a88".to_string());
 
     for issue in &project.work_packages {
-        let id = issue.issue_id.as_ref().map(|id| id.id.as_str()).unwrap_or("");
-        let name = issue
-            .summary
-            .as_deref()
-            .unwrap_or(id);
+        let id = issue
+            .issue_id
+            .as_ref()
+            .map(|id| id.id.as_str())
+            .unwrap_or("");
+        let name = issue.summary.as_deref().unwrap_or(id);
         let label = format!("{id}\n    {name}");
-        lines.push(format!("    {id}[{label}]"));
+        let style = match issue.status {
+            Some(IssueStatus::Done) => ":::class_done",
+            Some(IssueStatus::InProgress) => ":::class_progress",
+            _ => "",
+        };
+        if issue.is_milestone() {
+            lines.push(format!("    {id}{{{label}}}{style}"));
+        } else {
+            lines.push(format!("    {id}[{label}]{style}"));
+        }
     }
 
     for issue in &project.work_packages {
-        let id = issue.issue_id.as_ref().map(|id| id.id.as_str()).unwrap_or("");
+        let id = issue
+            .issue_id
+            .as_ref()
+            .map(|id| id.id.as_str())
+            .unwrap_or("");
         if let Some(deps) = issue.dependencies.as_ref() {
             for dep in deps {
                 lines.push(format!("    {} --> {id}", dep.id));
@@ -62,10 +77,13 @@ pub fn generate_flow_diagram(project: &Project) -> String {
         std::collections::BTreeMap::new();
     for issue in &project.work_packages {
         if let Some(name) = issue.subgraph.as_deref() {
-            subgraph_map
-                .entry(name.to_string())
-                .or_default()
-                .push(issue.issue_id.as_ref().map(|id| id.id.clone()).unwrap_or_default());
+            subgraph_map.entry(name.to_string()).or_default().push(
+                issue
+                    .issue_id
+                    .as_ref()
+                    .map(|id| id.id.clone())
+                    .unwrap_or_default(),
+            );
         }
     }
 
@@ -97,7 +115,11 @@ pub fn generate_markdown_descriptions(project: &Project) -> String {
             Some(text) if !text.trim().is_empty() => text.trim_end(),
             _ => continue,
         };
-        let id = issue.issue_id.as_ref().map(|id| id.id.as_str()).unwrap_or("");
+        let id = issue
+            .issue_id
+            .as_ref()
+            .map(|id| id.id.as_str())
+            .unwrap_or("");
         let name = issue.summary.as_deref().unwrap_or(id);
         blocks.push(format!("## {id}: {name}\n{description}"));
     }
@@ -110,56 +132,80 @@ mod tests {
     use super::*;
     use crate::services::project_yaml::deserialize_project_from_yaml_str;
 
-        const YAML_CONTENT: &str = concat!(
-                "name: My Project\n",
-                "work_packages:\n",
-                "  - id: WP1\n",
-                "    summary: Work package 1\n",
-                "    description: |\n",
-                "      This is\n",
-                "      work package 1.\n",
-                "    dependencies: null\n",
-                "    estimate:\n",
-                "      type: story_points\n",
-                "      value: 5\n",
-                "  - id: WP2\n",
-                "    summary: Work package 2\n",
-                "    subgraph: Midphase\n",
-                "    estimate:\n",
-                "      type: three_point\n",
-                "      optimistic: 1\n",
-                "      most_likely: 5\n",
-                "      pessimistic: 10\n",
-                "    dependencies: [WP1]\n",
-                "  - id: WP3\n",
-                "    summary: Work package 3\n",
-                "    description: |\n",
-                "      This is another\n",
-                "      work package 3.\n",
-                "    subgraph: Endphase\n",
-                "    estimate:\n",
-                "      type: three_point\n",
-                "      optimistic: 1\n",
-                "      most_likely: 5\n",
-                "      pessimistic: 10\n",
-                "    dependencies: [WP1]\n",
-                "  - id: WP4\n",
-                "    summary: Work package 4\n",
-                "    subgraph: Endphase\n",
-                "    estimate:\n",
-                "      type: three_point\n",
-                "      optimistic: 0\n",
-                "      most_likely: 0\n",
-                "      pessimistic: 0\n",
-                "    dependencies: [WP2, WP3]\n",
-        );
+    const YAML_CONTENT: &str = concat!(
+        "name: My Project\n",
+        "work_packages:\n",
+        "  - id: WP1\n",
+        "    summary: Work package 1\n",
+        "    status: done\n",
+        "    description: |\n",
+        "      This is\n",
+        "      work package 1.\n",
+        "    dependencies: null\n",
+        "    estimate:\n",
+        "      type: story_points\n",
+        "      value: 5\n",
+        "  - id: WP2\n",
+        "    summary: Work package 2\n",
+        "    status: inprogress\n",
+        "    subgraph: Midphase\n",
+        "    estimate:\n",
+        "      type: three_point\n",
+        "      optimistic: 1\n",
+        "      most_likely: 5\n",
+        "      pessimistic: 10\n",
+        "    dependencies: [WP1]\n",
+        "  - id: WP3\n",
+        "    summary: Work package 3\n",
+        "    description: |\n",
+        "      This is another\n",
+        "      work package 3.\n",
+        "    subgraph: Endphase\n",
+        "    estimate:\n",
+        "      type: three_point\n",
+        "      optimistic: 1\n",
+        "      most_likely: 5\n",
+        "      pessimistic: 10\n",
+        "    dependencies: [WP1]\n",
+        "  - id: WP4\n",
+        "    summary: Work package 4\n",
+        "    subgraph: Endphase\n",
+        "    estimate:\n",
+        "      type: milestone\n",
+        "    dependencies: [WP2, WP3]\n",
+    );
 
     #[test]
     fn generate_flow_diagram_matches_expected() {
         let project = deserialize_project_from_yaml_str(YAML_CONTENT).unwrap();
         let diagram = generate_flow_diagram(&project);
 
-        let expected = "flowchart TD\n    WP1[WP1\n    Work package 1]\n    WP2[WP2\n    Work package 2]\n    WP3[WP3\n    Work package 3]\n    WP4[WP4\n    Work package 4]\n    WP1 --> WP2\n    WP1 --> WP3\n    WP2 --> WP4\n    WP3 --> WP4\n\n    subgraph Endphase\n        WP3\n        WP4\n    end\n\n    subgraph Midphase\n        WP2\n    end\n";
+        let expected = concat!(
+            "flowchart TD\n",
+            "classDef class_done fill:#aae,stroke:#88a\n",
+            "classDef class_progress fill:#eaa,stroke:#a88\n",
+            "    WP1[WP1\n",
+            "    Work package 1]:::class_done\n",
+            "    WP2[WP2\n",
+            "    Work package 2]:::class_progress\n",
+            "    WP3[WP3\n",
+            "    Work package 3]\n",
+            "    WP4{WP4\n",
+            "    Work package 4}\n",
+            "    WP1 --> WP2\n",
+            "    WP1 --> WP3\n",
+            "    WP2 --> WP4\n",
+            "    WP3 --> WP4\n",
+            "\n",
+            "    subgraph Endphase\n",
+            "        WP3\n",
+            "        WP4\n",
+            "    end\n",
+            "\n",
+            "    subgraph Midphase\n",
+            "        WP2\n",
+            "    end\n",
+        );
         assert_eq!(diagram, expected);
     }
 
