@@ -10,7 +10,7 @@ use crate::domain::estimate::{
 use crate::domain::issue::{Issue, IssueId};
 use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
-use crate::services::simulation_types::SimulationReport;
+use crate::services::simulation_report_yaml::{load_simulation_report_from_file, ReportParseError};
 
 #[derive(Error, Debug)]
 pub enum ProjectYamlError {
@@ -32,14 +32,6 @@ pub enum ProjectYamlError {
         #[source]
         source: ReportParseError,
     },
-}
-
-#[derive(Error, Debug)]
-pub enum ReportParseError {
-    #[error("failed to read report file: {0}")]
-    Io(#[from] io::Error),
-    #[error("failed to parse report yaml: {0}")]
-    Parse(#[from] serde_yaml::Error),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -206,16 +198,6 @@ fn three_point_estimate_from_report_file(
         most_likely: Some(report.p50.days),
         pessimistic: Some(report.p100.days),
     })
-}
-
-fn load_simulation_report_from_file(path: &str) -> Result<SimulationReport, ReportParseError> {
-    let contents = std::fs::read_to_string(path)?;
-    parse_simulation_report_str(&contents)
-}
-
-fn parse_simulation_report_str(input: &str) -> Result<SimulationReport, ReportParseError> {
-    let report: SimulationReport = serde_yaml::from_str(input)?;
-    Ok(report)
 }
 
 fn estimate_to_record(estimate: Option<&Estimate>) -> Option<EstimateRecord> {

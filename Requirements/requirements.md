@@ -1,6 +1,5 @@
 # ToDos
 
-* [ ] Show status and milestones in dependency diagram
 * [ ] Improve error reporting in project_yaml.rs
 
 * [ ] If possible, make it easier to configure project simulations.
@@ -16,7 +15,6 @@
 * [ ] Modify the CLI to use subcommands
 * [ ] Write a readme
 * [ ] CI/CD
-* [ ] Compare current and legacy beta parameter calculation
 * [ ] Simulate in parallel
 * [ ] Use the anyhow crate
 
