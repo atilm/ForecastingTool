@@ -1,6 +1,6 @@
+use chrono::Local;
 use clap::{Parser, Subcommand};
 use clap_complete::Shell;
-use chrono::Local;
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -53,6 +53,18 @@ pub enum Commands {
         #[arg(short, long, default_value_t = default_start_date())]
         start_date: String,
     },
+    /// Plot a burndown chart using project and simulation result YAML files
+    PlotBurndown {
+        /// Project YAML file
+        #[arg(short, long)]
+        input: String,
+        /// Simulation result YAML file
+        #[arg(short, long)]
+        report: String,
+        /// Output PNG file
+        #[arg(short, long)]
+        output: String,
+    },
     /// Get project data from Jira and serialize to YAML
     GetProject {
         /// Path to Jira config YAML
@@ -102,8 +114,7 @@ pub enum Commands {
         calendar_dir: Option<String>,
     },
     /// Show the Git hash of the current build
-    GitHash {
-    },
+    GitHash {},
     /// Generate shell completion scripts
     Completions {
         /// Shell to generate completions for

@@ -1,14 +1,14 @@
-
-use forecasts::commands::base_commands::{CliArgs, Commands};
-use forecasts::commands::get_throughput_cmd::get_throughput_command;
-use forecasts::commands::get_project_cmd::get_project_command;
-use forecasts::commands::plot_throughput_cmd::plot_throughput_command;
-use forecasts::commands::plot_project_cmd::plot_project_command;
-use forecasts::commands::plot_gantt_cmd::plot_gantt_command;
-use forecasts::commands::simulate_n_cmd::simulate_n_command;
-use forecasts::commands::simulate_cmd::simulate_command;
 use clap::{CommandFactory, Parser};
 use clap_complete;
+use forecasts::commands::base_commands::{CliArgs, Commands};
+use forecasts::commands::get_project_cmd::get_project_command;
+use forecasts::commands::get_throughput_cmd::get_throughput_command;
+use forecasts::commands::plot_burndown_cmd::plot_burndown_command;
+use forecasts::commands::plot_gantt_cmd::plot_gantt_command;
+use forecasts::commands::plot_project_cmd::plot_project_command;
+use forecasts::commands::plot_throughput_cmd::plot_throughput_command;
+use forecasts::commands::simulate_cmd::simulate_command;
+use forecasts::commands::simulate_n_cmd::simulate_n_command;
 use std::io;
 
 fn main() {
@@ -25,6 +25,9 @@ fn main() {
         }
         cmd @ Commands::PlotGantt { .. } => {
             plot_gantt_command(cmd);
+        }
+        cmd @ Commands::PlotBurndown { .. } => {
+            plot_burndown_command(cmd);
         }
         cmd @ Commands::GetProject { .. } => {
             get_project_command(cmd);

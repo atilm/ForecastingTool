@@ -1,3 +1,5 @@
+pub(crate) mod burndown_plot;
+pub(crate) mod burndown_plot_rendering;
 pub(crate) mod data_converter;
 pub(crate) mod data_source;
 pub(crate) mod estimate_gantt;
