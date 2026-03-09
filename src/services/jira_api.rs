@@ -12,7 +12,6 @@ use crate::domain::estimate::{Estimate, StoryPointEstimate};
 use crate::domain::issue::Issue;
 use crate::domain::issue::IssueId;
 use crate::domain::issue_status::IssueStatus;
-use crate::domain::project::Project;
 use crate::services::data_source::{DataQuery, DataSource, DataSourceError};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -242,18 +241,6 @@ impl DataSource for JiraApiClient {
     fn get_issues(&self, query: DataQuery) -> Result<Vec<Issue>, DataSourceError> {
         match query {
             DataQuery::StringQuery(jql) => self.get_issues_by_jql(&jql),
-        }
-    }
-
-    fn get_project(&self, query: DataQuery) -> Result<Project, DataSourceError> {
-        match query {
-            DataQuery::StringQuery(jql) => {
-                let issues = self.get_issues_by_jql(&jql)?;
-                Ok(crate::domain::project::Project {
-                    name: self.jira_project.project_key.clone(),
-                    work_packages: issues,
-                })
-            }
         }
     }
 }

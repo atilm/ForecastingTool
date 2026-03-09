@@ -65,13 +65,6 @@ mod tests {
         fn get_issues(&self, _query: DataQuery) -> Result<Vec<Issue>, DataSourceError> {
             Ok(self.issues.clone())
         }
-
-        fn get_project(
-            &self,
-            _query: DataQuery,
-        ) -> Result<crate::domain::project::Project, DataSourceError> {
-            Err(DataSourceError::Other("not used".to_string()))
-        }
     }
 
     #[test]

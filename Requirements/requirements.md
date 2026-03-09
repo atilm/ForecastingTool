@@ -1,10 +1,9 @@
 # ToDos
 
+* [ ] cargo fmt mal separat ausführen, damit die KI nicht immer drüber stolpert
+* [ ] Increase the variance with story point estimations
 * [ ] Plot capacity in burn-down chart (perhaps background-transparency mapped to capacity)
 * [ ] Milestone tracking yaml and plot as output of simulation
-* [ ] When getting a project from Jira
-  * [ ] Sort issues: By actual end-date -> null is at end
-  * [ ] Set the dependencies of the first not-done issue to null
 * [ ] In burndown plot, filter done issues from forecast data and simplify plotting logic
 * [ ] Improve error reporting in project_yaml.rs
 

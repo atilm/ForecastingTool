@@ -14,6 +14,19 @@ async fn test_get_project_data() {
                     "created": "2026-01-12T10:13:04.983+0100",
                     "actualStartDate": "2026-01-22T10:57:00.000+0100",
                     "actualEndDate": "2026-01-26T08:42:00.000+0100",
+                    "description": "A description text.",
+                    "statusCategory": {
+                        "name": "In Progress"
+                    },
+                    "summary": "A second task"
+                },
+                "key": "ABC-456"
+            },
+            {
+                "fields": {
+                    "created": "2026-01-12T10:13:04.983+0100",
+                    "actualStartDate": "2026-01-22T10:57:00.000+0100",
+                    "actualEndDate": "2026-01-26T08:42:00.000+0100",
                     "estimate": 5,
                     "description": "A description text.",
                     "statusCategory": {
@@ -22,19 +35,6 @@ async fn test_get_project_data() {
                     "summary": "A first task"
                 },
                 "key": "ABC-123"
-            },
-            {
-                "fields": {
-                    "created": "2026-01-12T10:13:04.983+0100",
-                    "actualStartDate": "2026-01-22T10:57:00.000+0100",
-                    "actualEndDate": "2026-01-26T08:42:00.000+0100",
-                    "description": "A description text.",
-                    "statusCategory": {
-                        "name": "In Progress"
-                    },
-                    "summary": "A second task"
-                },
-                "key": "ABC-456"
             }
         ]
     });
@@ -59,11 +59,18 @@ async fn test_get_project_data() {
     assert!(output.contains("done_date: 2026-01-26"));
     assert!(output.contains("id: ABC-456"));
     assert!(output.contains("summary: A second task"));
-    assert!(output.contains("dependencies: null")); // First issue should have null dependencies
-    assert!(output.contains("dependencies: []")); // Second issue should have empty dependencies
+
+    let done_pos = output.find("id: ABC-123").unwrap();
+    let in_progress_pos = output.find("id: ABC-456").unwrap();
+    assert!(done_pos < in_progress_pos); // Done issue should be ordered first.
+
+    assert_eq!(output.matches("dependencies: null").count(), 2);
+    assert!(!output.contains("dependencies: []"));
 }
 
-async fn run_get_project(socket_addr: std::net::SocketAddr) -> Result<String, Box<dyn std::error::Error>> {
+async fn run_get_project(
+    socket_addr: std::net::SocketAddr,
+) -> Result<String, Box<dyn std::error::Error>> {
     let base_url = format!("http://{}", socket_addr);
     let config_yaml = format!(
         r#"

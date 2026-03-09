@@ -1,4 +1,4 @@
-use crate::domain::{issue::Issue, project::Project};
+use crate::domain::issue::Issue;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -22,5 +22,4 @@ pub enum DataQuery {
 /// Describes an interface for retrieving Epic and Issue information.
 pub trait DataSource {
     fn get_issues(&self, query: DataQuery) -> Result<Vec<Issue>, DataSourceError>;
-    fn get_project(&self, query: DataQuery) -> Result<Project, DataSourceError>;
 }

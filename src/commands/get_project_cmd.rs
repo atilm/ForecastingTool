@@ -1,6 +1,7 @@
 use crate::commands::base_commands::Commands;
-use crate::services::data_source::{DataQuery, DataSource};
+use crate::services::data_source::DataQuery;
 use crate::services::jira_api::{AuthData, JiraApiClient, JiraConfigParser};
+use crate::services::project_factory::ProjectFactory;
 use crate::services::project_yaml::serialize_project_to_yaml;
 
 pub fn get_project_command(cmd: Commands) {
@@ -30,24 +31,17 @@ pub fn get_project_command(cmd: Commands) {
             }
         };
 
-        let mut project = match api_client
-            .get_project(DataQuery::StringQuery(jira_project.project_query))
-        {
+        let project_factory = ProjectFactory::new(&api_client);
+        let project = match project_factory.create_project(
+            jira_project.project_key.clone(),
+            DataQuery::StringQuery(jira_project.project_query),
+        ) {
             Ok(project) => project,
             Err(e) => {
                 eprintln!("Failed to get project data: {e:?}");
                 return;
             }
         };
-
-        // Set the first issue with empty dependencies to have None dependencies to ensure correct YAML output
-        if let Some(issue) = project
-            .work_packages
-            .iter_mut()
-            .find(|issue| issue.dependencies.as_ref().map_or(false, |deps| deps.is_empty()))
-        {
-            issue.dependencies = None;
-        }
 
         let mut buffer = Vec::new();
         if let Err(e) = serialize_project_to_yaml(&mut buffer, &project) {
