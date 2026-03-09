@@ -10,9 +10,7 @@ use thiserror::Error;
 use crate::services::histogram::{HistogramError, write_histogram_png};
 use crate::services::percentiles;
 use crate::services::simulation_types::{SimulationOutput, SimulationPercentile, SimulationReport};
-use crate::services::team_calendar_yaml::{
-    TeamCalendarYamlError, load_team_calendar_if_provided,
-};
+use crate::services::team_calendar_yaml::{TeamCalendarYamlError, load_team_calendar_if_provided};
 #[derive(Error, Debug)]
 pub enum SimulationError {
     #[error("failed to read throughput file: {0}")]
@@ -147,10 +145,7 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
         work_packages: None,
     };
 
-    Ok(SimulationOutput {
-        report,
-        results,
-    })
+    Ok(SimulationOutput { report, results })
 }
 
 fn simulate_single_run<R: Rng + ?Sized>(
@@ -276,7 +271,7 @@ mod tests {
             input_path.to_str().unwrap(),
             7,
             4,
-            on_date(2026,1,1),
+            on_date(2026, 1, 1),
             histogram_path.to_str().unwrap(),
             None,
         )

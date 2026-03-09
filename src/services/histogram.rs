@@ -16,14 +16,8 @@ fn render_histogram_png(output_path: &str, results: &[f32]) -> Result<(), Histog
         return Ok(());
     }
 
-    let min_value = results
-        .iter()
-        .cloned()
-        .fold(f32::INFINITY, f32::min);
-    let max_value = results
-    .iter()
-    .cloned()
-    .fold(f32::NEG_INFINITY, f32::max);
+    let min_value = results.iter().cloned().fold(f32::INFINITY, f32::min);
+    let max_value = results.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
 
     let range = max_value - min_value;
     let square_root_of_n = (results.len() as f32).sqrt();
@@ -73,9 +67,11 @@ fn render_histogram_png(output_path: &str, results: &[f32]) -> Result<(), Histog
     let bar_color = RGBColor(30, 122, 204);
     let bar_style = ShapeStyle::from(&bar_color).filled();
     chart
-        .draw_series(counts.iter().map(|(value, count)| {
-            Rectangle::new([(*value, 0), (*value + 1, *count)], bar_style)
-        }))
+        .draw_series(
+            counts.iter().map(|(value, count)| {
+                Rectangle::new([(*value, 0), (*value + 1, *count)], bar_style)
+            }),
+        )
         .map_err(|e| HistogramError::Render(e.to_string()))?;
 
     root.present()

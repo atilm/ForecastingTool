@@ -1,6 +1,5 @@
 # ToDos
 
-* [ ] cargo fmt mal separat ausführen, damit die KI nicht immer drüber stolpert
 * [ ] Increase the variance with story point estimations
 * [ ] Plot capacity in burn-down chart (perhaps background-transparency mapped to capacity)
 * [ ] Milestone tracking yaml and plot as output of simulation

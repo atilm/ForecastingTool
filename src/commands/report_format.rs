@@ -49,7 +49,7 @@ mod tests {
 
     fn build_report() -> SimulationReport {
         let start_date = NaiveDate::from_ymd_opt(2026, 2, 1).unwrap();
-        
+
         SimulationReport {
             data_source: "input.yaml".to_string(),
             start_date,

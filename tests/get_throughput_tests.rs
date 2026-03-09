@@ -158,8 +158,9 @@ async fn get_issues_paginates_start_at() {
     assert!(output.contains("completed_issues: 1"));
 }
 
-
-async fn run_get_throughput(socket_addr: std::net::SocketAddr) -> Result<String, Box<dyn std::error::Error>> {
+async fn run_get_throughput(
+    socket_addr: std::net::SocketAddr,
+) -> Result<String, Box<dyn std::error::Error>> {
     let base_url = format!("http://{}", socket_addr);
     let config_yaml = format!(
         r#"

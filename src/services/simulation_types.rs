@@ -1,6 +1,6 @@
+use chrono::NaiveDate;
 use serde::Deserialize;
 use serde::Serialize;
-use chrono::NaiveDate;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct SimulationPercentile {

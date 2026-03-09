@@ -49,7 +49,7 @@ impl TeamCalendar {
 
         let capacity_sum: f32 = self.calendars.iter().map(|c| c.get_capacity(date)).sum();
         let max_capacity = self.calendars.len() as f32;
-        
+
         capacity_sum / max_capacity
     }
 

@@ -1,6 +1,6 @@
-use std::io::{self, Write};
 use crate::domain::throughput::Throughput;
 use serde::{Deserialize, Serialize};
+use std::io::{self, Write};
 use thiserror::Error;
 
 #[derive(Serialize)]
@@ -23,7 +23,10 @@ pub enum ThroughputYamlError {
     InvalidDate(String),
 }
 
-pub fn serialize_throughput_to_yaml<W: Write>(writer: &mut W, data: &[Throughput]) -> io::Result<()> {
+pub fn serialize_throughput_to_yaml<W: Write>(
+    writer: &mut W,
+    data: &[Throughput],
+) -> io::Result<()> {
     let records: Vec<ThroughputRecord> = data
         .iter()
         .map(|t| ThroughputRecord {
@@ -32,12 +35,14 @@ pub fn serialize_throughput_to_yaml<W: Write>(writer: &mut W, data: &[Throughput
         })
         .collect();
 
-    let yaml = serde_yaml::to_string(&records)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let yaml =
+        serde_yaml::to_string(&records).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     writer.write_all(yaml.as_bytes())
 }
 
-pub fn deserialize_throughput_from_yaml_str(input: &str) -> Result<Vec<Throughput>, ThroughputYamlError> {
+pub fn deserialize_throughput_from_yaml_str(
+    input: &str,
+) -> Result<Vec<Throughput>, ThroughputYamlError> {
     let records: Vec<ThroughputRecordInput> = serde_yaml::from_str(input)?;
     let mut result = Vec::with_capacity(records.len());
     for record in records {
@@ -88,7 +93,10 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].date, NaiveDate::from_ymd_opt(2026, 2, 9).unwrap());
         assert_eq!(result[0].completed_issues, 5);
-        assert_eq!(result[1].date, NaiveDate::from_ymd_opt(2026, 2, 10).unwrap());
+        assert_eq!(
+            result[1].date,
+            NaiveDate::from_ymd_opt(2026, 2, 10).unwrap()
+        );
         assert_eq!(result[1].completed_issues, 3);
     }
 }

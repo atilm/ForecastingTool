@@ -90,9 +90,9 @@ pub fn critical_path_method(
                 earliest_start,
                 latest_start: project_start, // Placeholder, will be calculated in backward pass
                 earliest_finish,
-                latest_finish: project_start, // Placeholder, will be calculated in backward pass 
-                free_float: 0.0, // Placeholder, will be calculated in backward pass
-                total_float: 0.0, // Placeholder, will be calculated in backward pass
+                latest_finish: project_start, // Placeholder, will be calculated in backward pass
+                free_float: 0.0,              // Placeholder, will be calculated in backward pass
+                total_float: 0.0,             // Placeholder, will be calculated in backward pass
             },
         );
     }
@@ -697,8 +697,7 @@ mod tests {
             build_network_node("WP1", 3.0, &["WP0"]), // Should take 6 days, because we work at half capacity. -> Finished on Tue. 20th
         ];
 
-        let result =
-            critical_path_method(network, project_start, Some(&calendar)).unwrap();
+        let result = critical_path_method(network, project_start, Some(&calendar)).unwrap();
 
         let wp0 = result.iter().find(|node| node.id == "WP0").unwrap();
         assert_eq!(wp0.earliest_start, project_start);

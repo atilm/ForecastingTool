@@ -113,9 +113,7 @@ mod tests {
 
     fn build_issue(id: &str, summary: &str) -> Issue {
         let mut issue = Issue::new();
-        issue.issue_id = Some(IssueId {
-            id: id.to_string(),
-        });
+        issue.issue_id = Some(IssueId { id: id.to_string() });
         issue.summary = Some(summary.to_string());
         issue
     }
@@ -154,7 +152,12 @@ mod tests {
             name: "TestProject".to_string(),
             work_packages: vec![build_issue("WP1", "Design")],
         };
-        let nodes = vec![build_result_node("WP1", on_date(2026, 1, 1), on_date(2026, 1, 6), 0.0)];
+        let nodes = vec![build_result_node(
+            "WP1",
+            on_date(2026, 1, 1),
+            on_date(2026, 1, 6),
+            0.0,
+        )];
 
         let result = generate_gantt_markdown(&nodes, &project);
 
@@ -170,7 +173,12 @@ mod tests {
             name: "Test".to_string(),
             work_packages: vec![build_issue("T", "Zero Duration Task")],
         };
-        let nodes = vec![build_result_node("T", on_date(2026, 1, 5), on_date(2026, 1, 5), 0.0)];
+        let nodes = vec![build_result_node(
+            "T",
+            on_date(2026, 1, 5),
+            on_date(2026, 1, 5),
+            0.0,
+        )];
 
         let result = generate_gantt_markdown(&nodes, &project);
 
@@ -200,10 +208,7 @@ mod tests {
     fn marks_critical_path_nodes() {
         let project = Project {
             name: "Test".to_string(),
-            work_packages: vec![
-                build_issue("A", "Task A"),
-                build_issue("B", "Task B"),
-            ],
+            work_packages: vec![build_issue("A", "Task A"), build_issue("B", "Task B")],
         };
         let nodes = vec![
             build_result_node("A", on_date(2026, 1, 1), on_date(2026, 1, 4), 0.0),
@@ -228,7 +233,12 @@ mod tests {
             name: "Test".to_string(),
             work_packages: vec![issue],
         };
-        let nodes = vec![build_result_node("X1", on_date(2026, 1, 1), on_date(2026, 1, 3), 0.0)];
+        let nodes = vec![build_result_node(
+            "X1",
+            on_date(2026, 1, 1),
+            on_date(2026, 1, 3),
+            0.0,
+        )];
 
         let result = generate_gantt_markdown(&nodes, &project);
 

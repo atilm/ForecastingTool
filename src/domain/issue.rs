@@ -72,18 +72,22 @@ mod tests {
         };
 
         let three_point_issue = Issue {
-            estimate: Some(Estimate::ThreePoint(crate::domain::estimate::ThreePointEstimate {
-                optimistic: Some(1.0),
-                most_likely: Some(2.0),
-                pessimistic: Some(3.0),
-            })),
+            estimate: Some(Estimate::ThreePoint(
+                crate::domain::estimate::ThreePointEstimate {
+                    optimistic: Some(1.0),
+                    most_likely: Some(2.0),
+                    pessimistic: Some(3.0),
+                },
+            )),
             ..Issue::new()
         };
 
         let story_point_issue = Issue {
-            estimate: Some(Estimate::StoryPoint(crate::domain::estimate::StoryPointEstimate {
-                estimate: Some(5.0),
-            })),
+            estimate: Some(Estimate::StoryPoint(
+                crate::domain::estimate::StoryPointEstimate {
+                    estimate: Some(5.0),
+                },
+            )),
             ..Issue::new()
         };
 

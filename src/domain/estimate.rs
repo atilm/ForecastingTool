@@ -11,7 +11,7 @@ pub struct ThreePointEstimate {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-/// Links to a simulation report file whose 0, 50 and 100 
+/// Links to a simulation report file whose 0, 50 and 100
 /// percentiles should be used as the estimate.
 pub struct ReferenceEstimate {
     pub report_file_path: String,

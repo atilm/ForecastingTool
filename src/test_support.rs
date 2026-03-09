@@ -3,12 +3,19 @@ use chrono::NaiveDate;
 use crate::domain::estimate::{Estimate, StoryPointEstimate, ThreePointEstimate};
 use crate::domain::issue::{Issue, IssueId};
 use crate::domain::issue_status::IssueStatus;
-use crate::services::project_simulation::beta_pert_sampler::{ThreePointSampler, ThreePointSamplerError};
+use crate::services::project_simulation::beta_pert_sampler::{
+    ThreePointSampler, ThreePointSamplerError,
+};
 
 // A mock ThreePointSampler that always returns the most likely value
 pub struct MockSampler;
 impl ThreePointSampler for MockSampler {
-    fn sample(&mut self, _optimistic: f32, most_likely: f32, _pessimistic: f32) -> Result<f32, ThreePointSamplerError> {
+    fn sample(
+        &mut self,
+        _optimistic: f32,
+        most_likely: f32,
+        _pessimistic: f32,
+    ) -> Result<f32, ThreePointSamplerError> {
         Ok(most_likely)
     }
 }
@@ -30,7 +37,13 @@ pub fn build_done_issue(id: &str, points: f32, start: NaiveDate, done: NaiveDate
     build_done_issue_with_deps(id, None, points, start, done)
 }
 
-pub fn build_done_issue_with_deps(id: &str, deps: Option<&[&str]>, points: f32, start: NaiveDate, done: NaiveDate) -> Issue {
+pub fn build_done_issue_with_deps(
+    id: &str,
+    deps: Option<&[&str]>,
+    points: f32,
+    start: NaiveDate,
+    done: NaiveDate,
+) -> Issue {
     let mut issue = Issue::new();
     issue.issue_id = Some(IssueId { id: id.to_string() });
     issue.status = Some(IssueStatus::Done);
@@ -50,10 +63,16 @@ pub fn build_done_issue_with_deps(id: &str, deps: Option<&[&str]>, points: f32, 
 }
 
 pub fn build_constant_three_point_issue(id: &str, days: f32, deps: &[&str]) -> Issue {
-    return  build_three_point_issue(id, days, days, days, deps);
+    return build_three_point_issue(id, days, days, days, deps);
 }
 
-pub fn build_three_point_issue(id: &str, optimistic: f32, most_likely: f32, pessimistic: f32, deps: &[&str]) -> Issue {
+pub fn build_three_point_issue(
+    id: &str,
+    optimistic: f32,
+    most_likely: f32,
+    pessimistic: f32,
+    deps: &[&str],
+) -> Issue {
     let mut issue = Issue::new();
     issue.issue_id = Some(IssueId { id: id.to_string() });
     issue.estimate = Some(Estimate::ThreePoint(ThreePointEstimate {
@@ -75,13 +94,23 @@ pub fn build_three_point_issue(id: &str, optimistic: f32, most_likely: f32, pess
     issue
 }
 
-pub fn build_in_progress_story_point_issue(id: &str, points: f32, start: NaiveDate, deps: &[&str]) -> Issue {
+pub fn build_in_progress_story_point_issue(
+    id: &str,
+    points: f32,
+    start: NaiveDate,
+    deps: &[&str],
+) -> Issue {
     let mut issue = build_story_point_issue_with_start_date(id, points, start, deps);
     issue.status = Some(IssueStatus::InProgress);
     issue
 }
 
-pub fn build_story_point_issue_with_start_date(id: &str, points: f32, start: NaiveDate, deps: &[&str]) -> Issue {
+pub fn build_story_point_issue_with_start_date(
+    id: &str,
+    points: f32,
+    start: NaiveDate,
+    deps: &[&str],
+) -> Issue {
     let mut issue = build_story_point_issue(id, points, deps);
     issue.start_date = Some(start);
     issue

@@ -112,7 +112,9 @@ mod tests {
         };
         let no_free_days_calendar = create_calendar_without_any_free_days();
 
-        let velocity = calculate_project_velocity(&project, &no_free_days_calendar).unwrap().unwrap();
+        let velocity = calculate_project_velocity(&project, &no_free_days_calendar)
+            .unwrap()
+            .unwrap();
         // The 30 issues span an inclusive period of 31 days (from first start_date to last done_date).
         assert!((velocity - 2.0 * 30.0 / 31.0).abs() < f32::EPSILON);
     }
@@ -133,7 +135,9 @@ mod tests {
 
         let no_free_days_calendar = create_calendar_without_any_free_days();
 
-        let velocity = calculate_project_velocity(&project, &no_free_days_calendar).unwrap().unwrap();
+        let velocity = calculate_project_velocity(&project, &no_free_days_calendar)
+            .unwrap()
+            .unwrap();
         // The 30 selected issues span an inclusive period of 31 days.
         let expected = 30.0 / 31.0;
         assert!((velocity - expected).abs() < f32::EPSILON);
@@ -174,7 +178,9 @@ mod tests {
             work_packages: issues,
         };
 
-        let velocity = calculate_project_velocity(&project, &half_capacity_calendar).unwrap().unwrap();
+        let velocity = calculate_project_velocity(&project, &half_capacity_calendar)
+            .unwrap()
+            .unwrap();
         let expected = 12.0 / 7.0 * 2.0; // 12 points over 7 working days with half capacity is double the velocity compared to full capacity
         assert!((velocity - expected).abs() < f32::EPSILON);
     }

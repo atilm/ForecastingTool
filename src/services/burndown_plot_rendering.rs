@@ -45,11 +45,23 @@ pub(super) fn render_burndown_plot_png(
         &data.done_points,
         data.start_date,
         RGBColor(130, 130, 130),
-        5
+        5,
     )?;
-    draw_points(&mut chart, &data.p15_points, data.start_date, forecast_band_color, 2)?;
+    draw_points(
+        &mut chart,
+        &data.p15_points,
+        data.start_date,
+        forecast_band_color,
+        2,
+    )?;
     draw_points(&mut chart, &data.p50_points, data.start_date, BLUE, 5)?;
-    draw_points(&mut chart, &data.p85_points, data.start_date, forecast_band_color, 2)?;
+    draw_points(
+        &mut chart,
+        &data.p85_points,
+        data.start_date,
+        forecast_band_color,
+        2,
+    )?;
 
     root.present()
         .map_err(|e| BurndownPlotError::Plot(e.to_string()))?;
@@ -59,7 +71,7 @@ pub(super) fn render_burndown_plot_png(
 fn draw_forecast_band(
     chart: &mut ChartContext<BitMapBackend<'_>, Cartesian2d<RangedCoordi32, RangedCoordf32>>,
     data: &BurndownData,
-    color: RGBColor
+    color: RGBColor,
 ) -> Result<(), BurndownPlotError> {
     if data.p15_points.is_empty() || data.p85_points.is_empty() {
         return Ok(());

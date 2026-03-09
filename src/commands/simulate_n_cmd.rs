@@ -1,7 +1,7 @@
 use crate::commands::base_commands::Commands;
+use crate::commands::date_parsing;
 use crate::commands::report_format::format_simulation_report;
 use crate::services::throughput_simulation::simulate_from_throughput_file;
-use crate::commands::date_parsing;
 
 pub fn simulate_n_command(cmd: Commands) {
     if let Commands::SimulateN {

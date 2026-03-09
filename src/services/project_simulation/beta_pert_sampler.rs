@@ -12,7 +12,12 @@ pub enum ThreePointSamplerError {
 }
 
 pub trait ThreePointSampler {
-    fn sample(&mut self, optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ThreePointSamplerError>;
+    fn sample(
+        &mut self,
+        optimistic: f32,
+        most_likely: f32,
+        pessimistic: f32,
+    ) -> Result<f32, ThreePointSamplerError>;
 }
 
 pub struct BetaPertSampler<R: Rng> {
@@ -26,7 +31,12 @@ impl<R: Rng> BetaPertSampler<R> {
 }
 
 impl<R: Rng> ThreePointSampler for BetaPertSampler<R> {
-    fn sample(&mut self, optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ThreePointSamplerError> {
+    fn sample(
+        &mut self,
+        optimistic: f32,
+        most_likely: f32,
+        pessimistic: f32,
+    ) -> Result<f32, ThreePointSamplerError> {
         if pessimistic < optimistic {
             return Err(ThreePointSamplerError::PessimisticLessThanOptimistic);
         }
@@ -49,13 +59,22 @@ impl<R: Rng> ThreePointSampler for BetaPertSampler<R> {
 pub struct PertExpectedValueSampler;
 
 impl ThreePointSampler for PertExpectedValueSampler {
-    fn sample(&mut self, optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ThreePointSamplerError> {
+    fn sample(
+        &mut self,
+        optimistic: f32,
+        most_likely: f32,
+        pessimistic: f32,
+    ) -> Result<f32, ThreePointSamplerError> {
         pert_expected_value(optimistic, most_likely, pessimistic)
     }
 }
 
 /// Calculates the PERT expected value: (optimistic + 4 * most_likely + pessimistic) / 6
-pub fn pert_expected_value(optimistic: f32, most_likely: f32, pessimistic: f32) -> Result<f32, ThreePointSamplerError> {
+pub fn pert_expected_value(
+    optimistic: f32,
+    most_likely: f32,
+    pessimistic: f32,
+) -> Result<f32, ThreePointSamplerError> {
     if pessimistic < optimistic {
         return Err(ThreePointSamplerError::PessimisticLessThanOptimistic);
     }
@@ -97,7 +116,10 @@ mod tests {
     #[test]
     fn expected_value_rejects_pessimistic_less_than_optimistic() {
         let result = pert_expected_value(10.0, 5.0, 2.0);
-        assert_eq!(result, Err(ThreePointSamplerError::PessimisticLessThanOptimistic));
+        assert_eq!(
+            result,
+            Err(ThreePointSamplerError::PessimisticLessThanOptimistic)
+        );
     }
 
     #[test]

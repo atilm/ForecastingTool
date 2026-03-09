@@ -1,5 +1,5 @@
 use crate::domain::throughput::Throughput;
-use crate::services::throughput_yaml::{deserialize_throughput_from_yaml_str, ThroughputYamlError};
+use crate::services::throughput_yaml::{ThroughputYamlError, deserialize_throughput_from_yaml_str};
 use plotters::prelude::*;
 use thiserror::Error;
 
@@ -28,10 +28,7 @@ pub fn plot_throughput_from_yaml_file(
     Ok(())
 }
 
-fn write_plot_png(
-    output_path: &str,
-    throughput: &[Throughput],
-) -> Result<(), ThroughputPlotError> {
+fn write_plot_png(output_path: &str, throughput: &[Throughput]) -> Result<(), ThroughputPlotError> {
     render_plot_png(output_path, throughput)
 }
 
@@ -90,7 +87,10 @@ fn render_plot_png(
     chart
         .draw_series(throughput.iter().enumerate().map(|(idx, item)| {
             Rectangle::new(
-                [(idx as i32, 0), (idx as i32 + 1, item.completed_issues as i32)],
+                [
+                    (idx as i32, 0),
+                    (idx as i32 + 1, item.completed_issues as i32),
+                ],
                 bar_style.clone(),
             )
         }))

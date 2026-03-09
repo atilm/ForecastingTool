@@ -1,5 +1,7 @@
+use crate::domain::estimate::{
+    Estimate, ReferenceEstimate, StoryPointEstimate, ThreePointEstimate,
+};
 use crate::services::project_simulation::beta_pert_sampler::ThreePointSampler;
-use crate::domain::estimate::{Estimate, ReferenceEstimate, StoryPointEstimate, ThreePointEstimate};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -28,10 +30,7 @@ pub(crate) fn sample_duration_days<R: ThreePointSampler + ?Sized>(
     let sampled = sampler
         .sample(optimistic, most_likely, pessimistic)
         .map_err(|_| {
-            SamplingError::InvalidEstimate(format!(
-                "Sampling failed: {}",
-                issue_id.to_string()
-            ))
+            SamplingError::InvalidEstimate(format!("Sampling failed: {}", issue_id.to_string()))
         })?;
 
     if !sampled.is_finite() {
@@ -83,15 +82,15 @@ fn to_story_point_triplet(
 fn to_three_point_triplet(
     estimate: &ThreePointEstimate,
 ) -> Result<(f32, f32, f32, bool), SamplingError> {
-    let optimistic = estimate.optimistic.ok_or_else(|| {
-        SamplingError::InvalidEstimate("missing optimistic value".to_string())
-    })?;
-    let most_likely = estimate.most_likely.ok_or_else(|| {
-        SamplingError::InvalidEstimate("missing most likely value".to_string())
-    })?;
-    let pessimistic = estimate.pessimistic.ok_or_else(|| {
-        SamplingError::InvalidEstimate("missing pessimistic value".to_string())
-    })?;
+    let optimistic = estimate
+        .optimistic
+        .ok_or_else(|| SamplingError::InvalidEstimate("missing optimistic value".to_string()))?;
+    let most_likely = estimate
+        .most_likely
+        .ok_or_else(|| SamplingError::InvalidEstimate("missing most likely value".to_string()))?;
+    let pessimistic = estimate
+        .pessimistic
+        .ok_or_else(|| SamplingError::InvalidEstimate("missing pessimistic value".to_string()))?;
     let is_story_point_estimate = false;
     Ok((
         optimistic,

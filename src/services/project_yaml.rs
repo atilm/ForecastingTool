@@ -10,7 +10,7 @@ use crate::domain::estimate::{
 use crate::domain::issue::{Issue, IssueId};
 use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
-use crate::services::simulation_report_yaml::{load_simulation_report_from_file, ReportParseError};
+use crate::services::simulation_report_yaml::{ReportParseError, load_simulation_report_from_file};
 
 #[derive(Error, Debug)]
 pub enum ProjectYamlError {
@@ -92,7 +92,10 @@ pub fn deserialize_project_from_yaml_str(input: &str) -> Result<Project, Project
         });
         issue.summary = issue_record.summary;
         issue.description = issue_record.description;
-        issue.estimate = issue_record.estimate.map(estimate_from_record).transpose()?;
+        issue.estimate = issue_record
+            .estimate
+            .map(estimate_from_record)
+            .transpose()?;
         issue.status = parse_status(issue_record.status.as_deref())?;
         issue.created_date = parse_date_opt(issue_record.created_date.as_deref())?;
         issue.start_date = parse_date_opt(issue_record.start_date.as_deref())?;
@@ -184,7 +187,7 @@ fn estimate_from_record(record: EstimateRecord) -> Result<Estimate, ProjectYamlE
                 cached_estimate,
                 report_file_path,
             }))
-        },
+        }
         EstimateRecord::Milestone => Ok(Estimate::Milestone),
     }
 }

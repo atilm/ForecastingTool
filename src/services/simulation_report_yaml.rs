@@ -1,4 +1,4 @@
-use crate ::services::simulation_types::SimulationReport;
+use crate::services::simulation_types::SimulationReport;
 use std::io;
 use thiserror::Error;
 
