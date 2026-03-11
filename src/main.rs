@@ -6,6 +6,7 @@ use forecasts::commands::get_throughput_cmd::get_throughput_command;
 use forecasts::commands::plot_burndown_cmd::plot_burndown_command;
 use forecasts::commands::plot_gantt_cmd::plot_gantt_command;
 use forecasts::commands::plot_project_cmd::plot_project_command;
+use forecasts::commands::plot_simulation_gantt_cmd::plot_simulation_gantt_command;
 use forecasts::commands::plot_throughput_cmd::plot_throughput_command;
 use forecasts::commands::simulate_cmd::simulate_command;
 use forecasts::commands::simulate_n_cmd::simulate_n_command;
@@ -25,6 +26,9 @@ fn main() {
         }
         cmd @ Commands::PlotGantt { .. } => {
             plot_gantt_command(cmd);
+        }
+        cmd @ Commands::PlotSimulationGantt { .. } => {
+            plot_simulation_gantt_command(cmd);
         }
         cmd @ Commands::PlotBurndown { .. } => {
             plot_burndown_command(cmd);

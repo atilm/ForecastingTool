@@ -5,6 +5,7 @@ pub mod get_throughput_cmd;
 pub mod plot_burndown_cmd;
 pub mod plot_gantt_cmd;
 pub mod plot_project_cmd;
+pub mod plot_simulation_gantt_cmd;
 pub mod plot_throughput_cmd;
 pub mod report_format;
 pub mod simulate_cmd;

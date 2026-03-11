@@ -53,6 +53,18 @@ pub enum Commands {
         #[arg(short, long, default_value_t = default_start_date())]
         start_date: String,
     },
+    /// Plot a simulation Gantt diagram from a project YAML and a simulation report YAML
+    PlotSimulationGantt {
+        /// Project YAML file
+        #[arg(short, long)]
+        input: String,
+        /// Simulation report YAML file
+        #[arg(short, long)]
+        report: String,
+        /// Output Markdown file
+        #[arg(short, long)]
+        output: String,
+    },
     /// Plot a burndown chart using project and simulation result YAML files
     PlotBurndown {
         /// Project YAML file
