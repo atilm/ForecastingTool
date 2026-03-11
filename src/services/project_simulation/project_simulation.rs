@@ -4,6 +4,7 @@ use thiserror::Error;
 
 use crate::domain::calendar::TeamCalendar;
 
+use crate::services::project_simulation::network_nodes::SortedNetworkNodes;
 use crate::services::project_simulation::network_nodes::build_network_nodes;
 
 use chrono::NaiveDate;
@@ -117,8 +118,9 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
 
     for _ in 0..iterations {
         let network_nodes = build_network_nodes(&project, velocity, sampler)?;
+        let sorted_nodes = SortedNetworkNodes::new(network_nodes)?;
 
-        let result_nodes = critical_path_method(network_nodes, start_date, calendar_option)?;
+        let result_nodes = critical_path_method(sorted_nodes, start_date, calendar_option)?;
 
         let project_end_date = result_nodes
             .iter()
@@ -254,7 +256,7 @@ mod tests {
         let error = simulate_project(&project, 10, on_date(2026, 1, 1), calendar).unwrap_err();
         assert!(matches!(
             error,
-            ProjectSimulationError::CriticalPathMethod(CriticalPathMethodError::CycleDetected)
+            ProjectSimulationError::NetworkNodes(NetworkNodesError::CycleDetected)
         ));
     }
 

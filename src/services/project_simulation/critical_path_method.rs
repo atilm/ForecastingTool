@@ -1,34 +1,17 @@
 use std::collections::HashMap;
 
 use chrono::NaiveDate;
-use petgraph::algo::toposort;
-use petgraph::graph::DiGraph;
+use crate::services::project_simulation::network_nodes::SortedNetworkNodes;
 use thiserror::Error;
 
 use crate::domain::calendar::TeamCalendar;
 
 #[derive(Error, Debug)]
 pub enum CriticalPathMethodError {
-    #[error("The network contains duplicate node IDs: {0}")]
-    DuplicateNodeId(String),
-    #[error("The network contains a cycle, which is not allowed in a project schedule.")]
-    CycleDetected,
-    #[error("A node has a dependency on a non-existent node: {0}")]
-    MissingDependency(String),
     #[error(
         "The provided calendar does not have enough capacity to complete the task within a reasonable time frame."
     )]
     InsufficientCalendarCapacity,
-}
-
-#[derive(Debug)]
-pub struct NetworkNode {
-    pub id: String,
-    pub is_milestone: bool,
-    pub duration: f32,
-    pub start_date: Option<NaiveDate>,
-    pub end_date: Option<NaiveDate>,
-    pub dependencies: Vec<String>,
 }
 
 pub struct ResultNode {
@@ -50,12 +33,12 @@ impl ResultNode {
 }
 
 pub fn critical_path_method(
-    network: Vec<NetworkNode>,
+    network: SortedNetworkNodes,
     project_start: NaiveDate,
     calendar: Option<&TeamCalendar>,
 ) -> Result<Vec<ResultNode>, CriticalPathMethodError> {
-    let nodes_count = network.len();
-    let sorted_nodes = topological_sort(network)?;
+    let sorted_nodes = network.take();
+    let nodes_count = sorted_nodes.len();
 
     let mut earliest_finish_dates: HashMap<String, chrono::NaiveDate> =
         HashMap::with_capacity(nodes_count);
@@ -250,50 +233,9 @@ fn start_date_from_capacity_days(
     Err(CriticalPathMethodError::InsufficientCalendarCapacity)
 }
 
-fn topological_sort(
-    network: Vec<NetworkNode>,
-) -> Result<Vec<NetworkNode>, CriticalPathMethodError> {
-    let mut graph: DiGraph<String, ()> = DiGraph::new();
-    let mut nodes_by_index = HashMap::new();
-    let mut index_by_id = HashMap::new();
-
-    // Add nodes to graph
-    for node in network {
-        let graph_node_index = graph.add_node(node.id.clone());
-
-        if index_by_id.contains_key(&node.id) {
-            return Err(CriticalPathMethodError::DuplicateNodeId(node.id.clone()));
-        }
-
-        index_by_id.insert(node.id.clone(), graph_node_index);
-        nodes_by_index.insert(graph_node_index, node);
-    }
-
-    // Add edges to graph based on dependencies
-    for (graph_node_index, node) in &nodes_by_index {
-        for dependency in &node.dependencies {
-            let dependency_index = index_by_id
-                .get(dependency)
-                .ok_or_else(|| CriticalPathMethodError::MissingDependency(dependency.clone()))?;
-            graph.add_edge(*dependency_index, *graph_node_index, ());
-        }
-    }
-
-    // Perform topological sort
-    let sorted_indices =
-        toposort(&graph, None).map_err(|_| CriticalPathMethodError::CycleDetected)?;
-
-    // Create sorted vector of nodes based on sorted indices
-    let sorted_nodes: Vec<NetworkNode> = sorted_indices
-        .iter()
-        .map(|index| nodes_by_index.remove(index).unwrap())
-        .collect();
-
-    Ok(sorted_nodes)
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::services::project_simulation::network_nodes::NetworkNode;
     use crate::test_support::on_date;
 
     use super::*;
@@ -311,22 +253,9 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_node_ids_are_detected() {
-        let network = vec![
-            build_network_node("WP1", 1.0, &[]),
-            build_network_node("WP1", 1.0, &[]), // Duplicate ID
-        ];
-        let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
-        let result = critical_path_method(network, project_start, None);
-        assert!(matches!(
-            result,
-            Err(CriticalPathMethodError::DuplicateNodeId(_))
-        ));
-    }
-
-    #[test]
     fn empty_input_leads_to_empty_output() {
         let network = vec![];
+        let network = SortedNetworkNodes::new(network).unwrap();
         let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
         let result = critical_path_method(network, project_start, None).unwrap();
         assert!(result.is_empty());
@@ -353,6 +282,7 @@ mod tests {
             build_network_node("WP2", 1.0, &["WP0", "WP1"]),
             build_network_node("WP0", 1.0, &[]),
         ];
+        let network = SortedNetworkNodes::new(network).unwrap();
         let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
         let result = critical_path_method(network, project_start, None).unwrap();
         let expected_order = vec!["WP0", "WP1", "WP2", "WP3", "FIN"];
@@ -572,6 +502,7 @@ mod tests {
                     )
                 })
                 .collect();
+            let network = SortedNetworkNodes::new(network).unwrap();
 
             let result = critical_path_method(network, base, None).unwrap();
 
@@ -651,6 +582,7 @@ mod tests {
                 dependencies: vec!["WP1".to_string()],
             },
         ];
+        let network = SortedNetworkNodes::new(network).unwrap();
         // Project start does not have any effect in this case
         let project_start = NaiveDate::from_ymd_opt(2026, 6, 6).unwrap();
         let result = critical_path_method(network, project_start, None).unwrap();
@@ -696,6 +628,7 @@ mod tests {
             build_network_node("WP0", 5.0, &[]), // Should be finished after 5 days on Sat. 10th.
             build_network_node("WP1", 3.0, &["WP0"]), // Should take 6 days, because we work at half capacity. -> Finished on Tue. 20th
         ];
+        let network = SortedNetworkNodes::new(network).unwrap();
 
         let result = critical_path_method(network, project_start, Some(&calendar)).unwrap();
 
@@ -734,7 +667,7 @@ mod tests {
             build_network_node("WP2", 5.0, &["WP1"]),
             build_network_node("WP3", 5.0, &["WP2"]),
         ];
-
+        let network = SortedNetworkNodes::new(network).unwrap();
         let result = critical_path_method(network, project_start, Some(&calendar)).unwrap();
 
         // WP0: Mon 5 Jan - Fri 9 Jan (next working day: Mon 12 Jan)
@@ -780,32 +713,5 @@ mod tests {
                 node.id,
             );
         }
-    }
-
-    #[test]
-    fn missing_dependency_is_detected() {
-        let network = vec![
-            build_network_node("WP0", 1.0, &["WP1"]), // WP1 does not exist
-        ];
-        let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
-        let result = critical_path_method(network, project_start, None);
-        assert!(matches!(
-            result,
-            Err(CriticalPathMethodError::MissingDependency(_))
-        ));
-    }
-
-    #[test]
-    fn cycle_detection_works() {
-        let network = vec![
-            build_network_node("WP0", 1.0, &["WP1"]),
-            build_network_node("WP1", 1.0, &["WP0"]),
-        ];
-        let project_start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
-        let result = critical_path_method(network, project_start, None);
-        assert!(matches!(
-            result,
-            Err(CriticalPathMethodError::CycleDetected)
-        ));
     }
 }

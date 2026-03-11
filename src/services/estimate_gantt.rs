@@ -9,6 +9,7 @@ use crate::services::project_simulation::critical_path_method::ResultNode;
 use crate::services::project_simulation::critical_path_method::critical_path_method;
 use crate::services::project_simulation::network_nodes::NetworkNodesError;
 use crate::services::project_simulation::network_nodes::build_network_nodes;
+use crate::services::project_simulation::network_nodes::SortedNetworkNodes;
 use crate::services::project_simulation::velocity_calculation::VelocityCalculationError;
 use crate::services::project_simulation::velocity_calculation::calculate_project_velocity;
 use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
@@ -47,7 +48,8 @@ pub fn write_pert_gantt_markdown(
     let mut expected_value_sampler = PertExpectedValueSampler;
 
     let network_nodes = build_network_nodes(&project, velocity, &mut expected_value_sampler)?;
-    let result_nodes = critical_path_method(network_nodes, start_date, Some(&calendar))?;
+    let sorted_nodes = SortedNetworkNodes::new(network_nodes)?;
+    let result_nodes = critical_path_method(sorted_nodes, start_date, Some(&calendar))?;
 
     let markdown = generate_gantt_markdown(&result_nodes, &project);
 
