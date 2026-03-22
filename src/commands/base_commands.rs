@@ -76,6 +76,9 @@ pub enum Commands {
         /// Output PNG file
         #[arg(short, long)]
         output: String,
+        /// Optional path to a calendar directory
+        #[arg(short, long)]
+        calendar_dir: Option<String>,
     },
     /// Get project data from Jira and serialize to YAML
     GetProject {
@@ -178,6 +181,28 @@ mod tests {
             assert_eq!(start_date, default_start_date());
         } else {
             panic!("expected simulate-n command");
+        }
+    }
+
+    #[test]
+    fn plot_burndown_accepts_optional_calendar_dir() {
+        let args = CliArgs::parse_from([
+            "forecasts",
+            "plot-burndown",
+            "-i",
+            "input.yaml",
+            "-r",
+            "report.yaml",
+            "-o",
+            "output.png",
+            "--calendar-dir",
+            "calendars",
+        ]);
+
+        if let Commands::PlotBurndown { calendar_dir, .. } = args.command {
+            assert_eq!(calendar_dir.as_deref(), Some("calendars"));
+        } else {
+            panic!("expected plot-burndown command");
         }
     }
 }

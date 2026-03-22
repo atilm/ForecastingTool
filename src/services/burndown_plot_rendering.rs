@@ -2,7 +2,7 @@ use chrono::{Duration, NaiveDate};
 use plotters::coord::types::{RangedCoordf32, RangedCoordi32};
 use plotters::prelude::*;
 
-use crate::services::burndown_plot::{BurndownData, BurndownPlotError, ChartPoint};
+use crate::services::burndown_plot::{BurndownData, BurndownPlotError, CapacityRange, ChartPoint};
 
 pub(super) fn render_burndown_plot_png(
     output_path: &str,
@@ -23,6 +23,8 @@ pub(super) fn render_burndown_plot_png(
         .y_label_area_size(80)
         .build_cartesian_2d(0..(x_max + 1), 0.0_f32..y_max)
         .map_err(|e| BurndownPlotError::Plot(e.to_string()))?;
+
+    draw_capacity_ranges(&mut chart, data, y_max, RGBColor(255, 140, 0))?;
 
     chart
         .configure_mesh()
@@ -66,6 +68,37 @@ pub(super) fn render_burndown_plot_png(
     root.present()
         .map_err(|e| BurndownPlotError::Plot(e.to_string()))?;
     Ok(())
+}
+
+fn draw_capacity_ranges(
+    chart: &mut ChartContext<BitMapBackend<'_>, Cartesian2d<RangedCoordi32, RangedCoordf32>>,
+    data: &BurndownData,
+    y_max: f32,
+    color: RGBColor,
+) -> Result<(), BurndownPlotError> {
+    if data.capacity_ranges.is_empty() {
+        return Ok(());
+    }
+
+    chart
+        .draw_series(data.capacity_ranges.iter().map(|range| {
+            Rectangle::new(
+                [
+                    ((range.start_date - data.start_date).num_days() as i32, 0.0),
+                    (
+                        ((range.end_date - data.start_date).num_days() + 1) as i32,
+                        y_max,
+                    ),
+                ],
+                color.mix(background_opacity(range)).filled(),
+            )
+        }))
+        .map_err(|e| BurndownPlotError::Plot(e.to_string()))?;
+    Ok(())
+}
+
+fn background_opacity(range: &CapacityRange) -> f64 {
+    (1.0_f32 - range.capacity.clamp(0.0, 1.0)) as f64
 }
 
 fn draw_forecast_band(

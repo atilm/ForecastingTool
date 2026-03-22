@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use chrono::NaiveDate;
+use chrono::{Duration, NaiveDate};
 use thiserror::Error;
 
 use crate::domain::estimate::{Estimate, StoryPointEstimate};
@@ -11,6 +11,7 @@ use crate::services::burndown_plot_rendering::render_burndown_plot_png;
 use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
 use crate::services::simulation_report_yaml::{ReportParseError, load_simulation_report_from_file};
 use crate::services::simulation_types::{SimulationReport, WorkPackageSimulation};
+use crate::services::team_calendar_yaml::{TeamCalendarYamlError, load_team_calendar_if_provided};
 
 #[derive(Error, Debug)]
 pub enum BurndownPlotError {
@@ -26,6 +27,8 @@ pub enum BurndownPlotError {
     MissingDoneDate { id: String },
     #[error("simulation report has no work package data")]
     MissingSimulationWorkPackages,
+    #[error("failed to parse team calendar yaml: {0}")]
+    ParseCalendar(#[from] TeamCalendarYamlError),
     #[error("simulation report has no entry for issue '{id}'")]
     MissingSimulationForIssue { id: String },
     #[error("issue '{id}' has unsupported estimate type for burndown")]
@@ -54,11 +57,19 @@ pub(crate) struct ChartPoint {
     pub(crate) remaining: f32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct CapacityRange {
+    pub(crate) start_date: NaiveDate,
+    pub(crate) end_date: NaiveDate,
+    pub(crate) capacity: f32,
+}
+
 #[derive(Debug)]
 pub(crate) struct BurndownData {
     pub(crate) start_date: NaiveDate,
     pub(crate) end_date: NaiveDate,
     pub(crate) total_points: f32,
+    pub(crate) capacity_ranges: Vec<CapacityRange>,
     pub(crate) done_points: Vec<ChartPoint>,
     pub(crate) p15_points: Vec<ChartPoint>,
     pub(crate) p50_points: Vec<ChartPoint>,
@@ -69,16 +80,19 @@ pub fn plot_burndown_from_yaml_files(
     project_path: &str,
     report_path: &str,
     output_path: &str,
+    calendar_path: Option<&str>,
 ) -> Result<(), BurndownPlotError> {
     let project = load_project_from_yaml_file(project_path)?;
     let report = load_simulation_report_from_file(report_path)?;
-    let data = build_burndown_data(&project, &report)?;
+    let calendar = load_team_calendar_if_provided(calendar_path)?;
+    let data = build_burndown_data(&project, &report, calendar_path.map(|_| &calendar))?;
     render_burndown_plot_png(output_path, &data)
 }
 
 fn build_burndown_data(
     project: &Project,
     report: &SimulationReport,
+    calendar: Option<&crate::domain::calendar::TeamCalendar>,
 ) -> Result<BurndownData, BurndownPlotError> {
     let simulation_by_id = simulation_map(report)?;
 
@@ -131,6 +145,10 @@ fn build_burndown_data(
     let total_points = done_issues.iter().map(|item| item.points).sum::<f32>()
         + forecast_issues.iter().map(|item| item.points).sum::<f32>();
 
+    let capacity_ranges = calendar
+        .map(|team_calendar| build_capacity_ranges(start_date, end_date, team_calendar))
+        .unwrap_or_default();
+
     let done_events: Vec<(NaiveDate, f32)> = done_issues
         .iter()
         .map(|item| (item.done_date, item.points))
@@ -145,11 +163,72 @@ fn build_burndown_data(
         start_date,
         end_date,
         total_points,
+        capacity_ranges,
         done_points,
         p15_points,
         p50_points,
         p85_points,
     })
+}
+
+fn build_capacity_ranges(
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+    calendar: &crate::domain::calendar::TeamCalendar,
+) -> Vec<CapacityRange> {
+    let mut ranges = Vec::new();
+    let mut current_date = start_date;
+    let mut active_start = None;
+    let mut active_capacity = 1.0;
+    let mut active_end = start_date;
+
+    while current_date <= end_date {
+        let capacity = calendar.get_capacity(current_date);
+        if capacity < 1.0 {
+            match active_start {
+                Some(_) if same_capacity(active_capacity, capacity) => {
+                    active_end = current_date;
+                }
+                Some(start_date) => {
+                    ranges.push(CapacityRange {
+                        start_date,
+                        end_date: active_end,
+                        capacity: active_capacity,
+                    });
+                    active_start = Some(current_date);
+                    active_capacity = capacity;
+                    active_end = current_date;
+                }
+                None => {
+                    active_start = Some(current_date);
+                    active_capacity = capacity;
+                    active_end = current_date;
+                }
+            }
+        } else if let Some(start_date) = active_start.take() {
+            ranges.push(CapacityRange {
+                start_date,
+                end_date: active_end,
+                capacity: active_capacity,
+            });
+        }
+
+        current_date += Duration::days(1);
+    }
+
+    if let Some(start_date) = active_start {
+        ranges.push(CapacityRange {
+            start_date,
+            end_date: active_end,
+            capacity: active_capacity,
+        });
+    }
+
+    ranges
+}
+
+fn same_capacity(left: f32, right: f32) -> bool {
+    (left - right).abs() < 0.000_1
 }
 
 fn build_done_points(done_issues: &[DoneIssue], total_points: f32) -> Vec<ChartPoint> {

@@ -1,5 +1,6 @@
 use super::*;
 
+use crate::domain::calendar::{Calendar, FreeDateRange, TeamCalendar};
 use crate::domain::estimate::ThreePointEstimate;
 use crate::domain::issue::IssueId;
 use crate::services::simulation_types::{SimulationPercentile, WorkPackagePercentiles};
@@ -82,8 +83,9 @@ fn build_data_converts_none_estimate_to_one_story_point() {
         on_date(2026, 3, 4),
     )]));
 
-    let data = build_burndown_data(&project, &report).unwrap();
+    let data = build_burndown_data(&project, &report, None).unwrap();
     assert_eq!(data.total_points, 2.0);
+    assert!(data.capacity_ranges.is_empty());
     assert_eq!(data.done_points[0].remaining, 1.0);
     assert_eq!(data.p50_points[0].remaining, 0.0);
 }
@@ -108,7 +110,7 @@ fn build_data_rejects_non_story_point_estimates() {
     };
     let report = base_report(Some(vec![]));
 
-    let error = build_burndown_data(&project, &report).unwrap_err();
+    let error = build_burndown_data(&project, &report, None).unwrap_err();
     assert!(matches!(
         error,
         BurndownPlotError::UnsupportedEstimateType { .. }
@@ -146,7 +148,7 @@ fn build_data_requires_done_date_for_done_issues() {
         on_date(2026, 3, 4),
     )]));
 
-    let error = build_burndown_data(&project, &report).unwrap_err();
+    let error = build_burndown_data(&project, &report, None).unwrap_err();
     assert!(matches!(error, BurndownPlotError::MissingDoneDate { .. }));
 }
 
@@ -172,7 +174,7 @@ fn build_data_requires_at_least_one_done_issue() {
         on_date(2026, 3, 4),
     )]));
 
-    let error = build_burndown_data(&project, &report).unwrap_err();
+    let error = build_burndown_data(&project, &report, None).unwrap_err();
     assert!(matches!(error, BurndownPlotError::NoDoneIssues));
 }
 
@@ -203,11 +205,78 @@ fn build_data_requires_simulation_for_not_done_issue() {
     };
     let report = base_report(Some(vec![]));
 
-    let error = build_burndown_data(&project, &report).unwrap_err();
+    let error = build_burndown_data(&project, &report, None).unwrap_err();
     assert!(matches!(
         error,
         BurndownPlotError::MissingSimulationForIssue { .. }
     ));
+}
+
+#[test]
+fn build_data_collects_low_capacity_ranges_from_calendar() {
+    let mut done = Issue::new();
+    done.issue_id = Some(IssueId {
+        id: "DONE-1".to_string(),
+    });
+    done.status = Some(IssueStatus::Done);
+    done.done_date = Some(on_date(2026, 3, 1));
+    done.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
+        estimate: Some(2.0),
+    }));
+
+    let mut todo = Issue::new();
+    todo.issue_id = Some(IssueId {
+        id: "TODO-1".to_string(),
+    });
+    todo.status = Some(IssueStatus::ToDo);
+    todo.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
+        estimate: Some(3.0),
+    }));
+
+    let project = Project {
+        name: "Demo".to_string(),
+        work_packages: vec![done, todo],
+    };
+    let report = base_report(Some(vec![simulation_for(
+        "TODO-1",
+        on_date(2026, 3, 3),
+        on_date(2026, 3, 4),
+        on_date(2026, 3, 6),
+    )]));
+
+    let calendar = TeamCalendar {
+        calendars: vec![
+            Calendar {
+                free_weekdays: vec![chrono::Weekday::Tue],
+                free_date_ranges: vec![],
+            },
+            Calendar {
+                free_weekdays: vec![],
+                free_date_ranges: vec![FreeDateRange {
+                    start_date: on_date(2026, 3, 5),
+                    end_date: on_date(2026, 3, 6),
+                }],
+            },
+        ],
+    };
+
+    let data = build_burndown_data(&project, &report, Some(&calendar)).unwrap();
+
+    assert_eq!(
+        data.capacity_ranges,
+        vec![
+            CapacityRange {
+                start_date: on_date(2026, 3, 3),
+                end_date: on_date(2026, 3, 3),
+                capacity: 0.5,
+            },
+            CapacityRange {
+                start_date: on_date(2026, 3, 5),
+                end_date: on_date(2026, 3, 6),
+                capacity: 0.5,
+            },
+        ]
+    );
 }
 
 #[test]
@@ -277,6 +346,7 @@ work_packages:
         project_file.path().to_str().unwrap(),
         report_file.path().to_str().unwrap(),
         output_file.path().to_str().unwrap(),
+        None,
     )
     .unwrap();
 

@@ -1,11 +1,9 @@
 # ToDos
 
-* [ ] Increase the variance with story point estimations
-* [ ] Plot capacity in burn-down chart (perhaps background-transparency mapped to capacity)
+* [x] ~~Plot capacity in burn-down chart (perhaps background-transparency mapped to capacity)~~
 * [ ] Milestone tracking yaml and plot as output of simulation
 * [ ] In burndown plot, filter done issues from forecast data and simplify plotting logic
 * [ ] Improve error reporting in project_yaml.rs
-* [ ] Return of the simulation-result gantt-chart?
 
 * [ ] If possible, make it easier to configure project simulations.
   * [x] ~~Add explicit milestones~~

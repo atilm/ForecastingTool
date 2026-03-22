@@ -136,8 +136,6 @@ fn fibonacci_bounds(value: f32) -> (f32, f32) {
 
     (value, value)
 }
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
