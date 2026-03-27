@@ -213,7 +213,7 @@ fn build_data_requires_simulation_for_not_done_issue() {
 }
 
 #[test]
-fn build_data_collects_low_capacity_ranges_from_calendar() {
+fn build_data_collects_low_capacity_ranges_from_calendar_ignoring_free_weekdays() {
     let mut done = Issue::new();
     done.issue_id = Some(IssueId {
         id: "DONE-1".to_string(),
@@ -265,11 +265,6 @@ fn build_data_collects_low_capacity_ranges_from_calendar() {
     assert_eq!(
         data.capacity_ranges,
         vec![
-            CapacityRange {
-                start_date: on_date(2026, 3, 3),
-                end_date: on_date(2026, 3, 3),
-                capacity: 0.5,
-            },
             CapacityRange {
                 start_date: on_date(2026, 3, 5),
                 end_date: on_date(2026, 3, 6),
