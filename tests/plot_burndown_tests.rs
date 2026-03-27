@@ -94,7 +94,8 @@ work_packages:
 
     let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
     cmd.args(&[
-        "plot-burndown",
+      "plot",
+      "burndown",
         "-i",
         &project_arg,
         "-r",
@@ -189,7 +190,8 @@ work_packages:
 
     let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
     cmd.args(&[
-        "plot-burndown",
+      "plot",
+      "burndown",
         "-i",
         &project_arg,
         "-r",

@@ -118,7 +118,8 @@ work_packages:
 
     let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
     cmd.args(&[
-        "plot-simulation-gantt",
+      "plot",
+      "simulation-gantt",
         "-i",
         project_file.path().to_str().unwrap(),
         "-r",

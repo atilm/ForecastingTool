@@ -14,7 +14,7 @@ fn plot_throughput_creates_png() {
     let output_arg = output_file.path().to_str().unwrap().to_string();
 
     let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
-    cmd.args(&["plot-throughput", "-i", &input_arg, "-o", &output_arg]);
+    cmd.args(&["plot", "throughput", "-i", &input_arg, "-o", &output_arg]);
 
     cmd.assert()
         .success()

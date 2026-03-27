@@ -101,7 +101,7 @@ actual_end_date_field_id: actualEndDate
     let output_arg = output_path.to_str().unwrap().to_string();
     task::spawn_blocking(move || {
         let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
-        cmd.args(&["get-project", "-c", &config_arg, "-o", &output_arg]);
+        cmd.args(&["get", "project", "-c", &config_arg, "-o", &output_arg]);
 
         cmd.assert()
             .success()

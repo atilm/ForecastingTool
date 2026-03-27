@@ -2,7 +2,6 @@
 
 * [x] ~~Plot capacity in burn-down chart (perhaps background-transparency mapped to capacity)~~
 * [ ] Milestone tracking yaml and plot as output of simulation
-* [ ] In burndown plot, filter done issues from forecast data and simplify plotting logic
 * [ ] Improve error reporting in project_yaml.rs
 
 * [ ] If possible, make it easier to configure project simulations.
@@ -15,7 +14,8 @@
     * [ ] Use multiple calendars to simulate increase of team size (e.g. 2 files to 3 files to increase velocity by factor 1.5)
     * [ ] Simulate master project file with three-point estimations and references
 
-* [ ] Modify the CLI to use subcommands
+* [x] ~~Modify the CLI to use subcommands~~
+* [ ] Group services by command in directories
 * [ ] Write a readme
 * [ ] CI/CD
 * [ ] Simulate in parallel

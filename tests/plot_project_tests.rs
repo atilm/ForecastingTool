@@ -50,7 +50,7 @@ work_packages:
     let output_arg = output_file.path().to_str().unwrap().to_string();
 
     let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
-    cmd.args(&["plot-project", "-i", &input_arg, "-o", &output_arg]);
+    cmd.args(&["plot", "project", "-i", &input_arg, "-o", &output_arg]);
 
     cmd.assert()
         .success()

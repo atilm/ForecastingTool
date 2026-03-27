@@ -31,14 +31,15 @@ fn simulate_by_throughput() {
 
     let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
     cmd.args(&[
-        "simulate-n",
+      "simulate",
+      "throughput",
         "-f",
         &throughput_arg,
         "-o",
         &output_arg,
-        "-i",
+      "-n",
         &iterations_arg,
-        "-n",
+      "-k",
         &number_of_issues_arg,
         "-s",
         &start_date_arg,
@@ -100,14 +101,15 @@ fn simulate_by_throughput_parses_calendar_dir() {
 
     let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
     cmd.args(&[
-        "simulate-n",
+      "simulate",
+      "throughput",
         "-f",
         throughput_file.path().to_str().unwrap(),
         "-o",
         output_file.path().to_str().unwrap(),
-        "-i",
+      "-n",
         "1",
-        "-n",
+      "-k",
         "2",
         "-s",
         "2026-02-16",
