@@ -183,7 +183,7 @@ fn build_capacity_ranges(
     let mut active_end = start_date;
 
     while current_date <= end_date {
-        let capacity = calendar.get_capacity(current_date);
+        let capacity = calendar.get_capacity_from_free_ranges_only(current_date);
         if capacity < 1.0 {
             match active_start {
                 Some(_) if same_capacity(active_capacity, capacity) => {

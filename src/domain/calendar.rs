@@ -20,6 +20,10 @@ impl Calendar {
             return 0.0;
         }
 
+        self.get_capacity_from_free_ranges_only(date)
+    }
+
+    pub fn get_capacity_from_free_ranges_only(&self, date: NaiveDate) -> f32 {
         for free_date_range in &self.free_date_ranges {
             if date >= free_date_range.start_date && date <= free_date_range.end_date {
                 return 0.0;
@@ -43,17 +47,29 @@ impl TeamCalendar {
     }
 
     pub fn get_capacity(&self, date: NaiveDate) -> f32 {
+        self.get_capacity_from_calendars(date, |c, d| c.get_capacity(d))
+    }
+
+    pub fn get_capacity_from_free_ranges_only(&self, date: NaiveDate) -> f32 {
+        self.get_capacity_from_calendars(date, |c, d| c.get_capacity_from_free_ranges_only(d))
+    }
+
+    fn get_capacity_from_calendars(
+        &self,
+        date: NaiveDate,
+        capacity_fn: fn(&Calendar, NaiveDate) -> f32,
+    ) -> f32 {
         if self.calendars.is_empty() {
             return self.get_default_capacity(date);
         }
 
-        let capacity_sum: f32 = self.calendars.iter().map(|c| c.get_capacity(date)).sum();
+        let capacity_sum: f32 = self.calendars.iter().map(|c| capacity_fn(c, date)).sum();
         let max_capacity = self.calendars.len() as f32;
 
         capacity_sum / max_capacity
     }
 
-    pub fn get_default_capacity(&self, date: NaiveDate) -> f32 {
+    fn get_default_capacity(&self, date: NaiveDate) -> f32 {
         if date.weekday() == Weekday::Sat || date.weekday() == Weekday::Sun {
             return 0.0;
         }
@@ -173,6 +189,46 @@ mod tests {
 
         for (date, expected_capacity) in test_cases {
             let capacity = team_calendar.get_capacity(date);
+            assert_eq!(
+                capacity, expected_capacity,
+                "Expected capacity of {} on {}, but got {}",
+                expected_capacity, date, capacity
+            );
+        }
+    }
+
+    #[test]
+    fn a_team_calendar_can_return_capacity_ignoring_free_weekdays() {
+        let mut team_calendar = TeamCalendar::new();
+
+        let calendar_1 = Calendar {
+            free_weekdays: vec![Weekday::Sat, Weekday::Sun],
+            free_date_ranges: vec![FreeDateRange {
+                start_date: NaiveDate::from_ymd_opt(2026, 3, 26).unwrap(), // Tuesday
+                end_date: NaiveDate::from_ymd_opt(2026, 3, 28).unwrap(),   // Sunday
+            }],
+        };
+
+        let calendar_2 = Calendar {
+            free_weekdays: vec![Weekday::Sat, Weekday::Sun],
+            free_date_ranges: vec![FreeDateRange {
+                start_date: NaiveDate::from_ymd_opt(2026, 3, 27).unwrap(), // Monday
+                end_date: NaiveDate::from_ymd_opt(2026, 3, 27).unwrap(),   // Thursday
+            }],
+        };
+
+        team_calendar.calendars.push(calendar_1);
+        team_calendar.calendars.push(calendar_2);
+
+        let test_cases = vec![
+            (NaiveDate::from_ymd_opt(2026, 3, 26).unwrap(), 0.5), // Thursday
+            (NaiveDate::from_ymd_opt(2026, 3, 27).unwrap(), 0.0), // Friday
+            (NaiveDate::from_ymd_opt(2026, 3, 28).unwrap(), 0.5), // Saturday
+            (NaiveDate::from_ymd_opt(2026, 3, 29).unwrap(), 1.0), // Sunday
+        ];
+
+        for (date, expected_capacity) in test_cases {
+            let capacity = team_calendar.get_capacity_from_free_ranges_only(date);
             assert_eq!(
                 capacity, expected_capacity,
                 "Expected capacity of {} on {}, but got {}",
