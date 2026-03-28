@@ -1,7 +1,7 @@
 use crate::domain::calendar::TeamCalendar;
 use crate::domain::throughput::Throughput;
 use crate::services::throughput_yaml::{ThroughputYamlError, deserialize_throughput_from_yaml_str};
-use crate::services::util::dates::data_source_name;
+use crate::services::util::data_source_name;
 use chrono::NaiveDate;
 use rand::Rng;
 use rand::seq::SliceRandom;

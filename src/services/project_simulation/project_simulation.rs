@@ -24,7 +24,7 @@ use crate::services::simulation_types::{
 };
 use crate::services::team_calendar_yaml::TeamCalendarYamlError;
 use crate::services::team_calendar_yaml::load_team_calendar_if_provided;
-use crate::services::util::dates::data_source_name;
+use crate::services::util::data_source_name;
 
 use crate::services::project_simulation::critical_path_method::CriticalPathMethodError;
 use crate::services::project_simulation::critical_path_method::critical_path_method;
