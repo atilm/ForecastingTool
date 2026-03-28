@@ -2,7 +2,7 @@ use crate::commands::base_commands::GetThroughputArgs;
 use crate::services::data_converter::DataConverter;
 use crate::services::data_source::DataQuery;
 use crate::services::jira_api::{AuthData, JiraApiClient, JiraConfigParser};
-use crate::services::throughput_yaml::serialize_throughput_to_yaml;
+use crate::services::parsing::throughput_yaml::serialize_throughput_to_yaml;
 
 pub fn get_throughput_command(args: GetThroughputArgs) {
     println!("This is the get_throughput command");

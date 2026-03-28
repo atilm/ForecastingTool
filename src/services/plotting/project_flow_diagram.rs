@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
-use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
+use crate::services::parsing::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
 
 #[derive(Error, Debug)]
 pub enum ProjectDiagramError {
@@ -130,7 +130,7 @@ pub fn generate_markdown_descriptions(project: &Project) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::project_yaml::deserialize_project_from_yaml_str;
+    use crate::services::parsing::project_yaml::deserialize_project_from_yaml_str;
 
     const YAML_CONTENT: &str = concat!(
         "name: My Project\n",

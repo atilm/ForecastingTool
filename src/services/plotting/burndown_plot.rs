@@ -8,10 +8,10 @@ use crate::domain::issue::Issue;
 use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
 use crate::services::plotting::burndown_plot_rendering::render_burndown_plot_png;
-use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
-use crate::services::simulation_report_yaml::{ReportParseError, load_simulation_report_from_file};
+use crate::services::parsing::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
+use crate::services::parsing::simulation_report_yaml::{ReportParseError, load_simulation_report_from_file};
 use crate::services::simulation_types::{SimulationReport, WorkPackageSimulation};
-use crate::services::team_calendar_yaml::{TeamCalendarYamlError, load_team_calendar_if_provided};
+use crate::services::parsing::team_calendar_yaml::{TeamCalendarYamlError, load_team_calendar_if_provided};
 
 #[derive(Error, Debug)]
 pub enum BurndownPlotError {

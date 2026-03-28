@@ -12,8 +12,8 @@ use crate::services::project_simulation::network_nodes::build_network_nodes;
 use crate::services::project_simulation::network_nodes::SortedNetworkNodes;
 use crate::services::project_simulation::velocity_calculation::VelocityCalculationError;
 use crate::services::project_simulation::velocity_calculation::calculate_project_velocity;
-use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
-use crate::services::team_calendar_yaml::{TeamCalendarYamlError, load_team_calendar_if_provided};
+use crate::services::parsing::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
+use crate::services::parsing::team_calendar_yaml::{TeamCalendarYamlError, load_team_calendar_if_provided};
 use chrono::NaiveDate;
 
 #[derive(Error, Debug)]

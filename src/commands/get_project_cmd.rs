@@ -2,7 +2,7 @@ use crate::commands::base_commands::GetProjectArgs;
 use crate::services::data_source::DataQuery;
 use crate::services::jira_api::{AuthData, JiraApiClient, JiraConfigParser};
 use crate::services::project_factory::ProjectFactory;
-use crate::services::project_yaml::serialize_project_to_yaml;
+use crate::services::parsing::project_yaml::serialize_project_to_yaml;
 
 pub fn get_project_command(args: GetProjectArgs) {
     let GetProjectArgs { config, output } = args;

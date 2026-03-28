@@ -1,6 +1,6 @@
 use crate::domain::calendar::TeamCalendar;
 use crate::domain::throughput::Throughput;
-use crate::services::throughput_yaml::{ThroughputYamlError, deserialize_throughput_from_yaml_str};
+use crate::services::parsing::throughput_yaml::{ThroughputYamlError, deserialize_throughput_from_yaml_str};
 use crate::services::util::data_source_name;
 use chrono::NaiveDate;
 use rand::Rng;
@@ -10,7 +10,7 @@ use thiserror::Error;
 use crate::services::plotting::histogram::{HistogramError, write_histogram_png};
 use crate::services::percentiles;
 use crate::services::simulation_types::{SimulationOutput, SimulationPercentile, SimulationReport};
-use crate::services::team_calendar_yaml::{TeamCalendarYamlError, load_team_calendar_if_provided};
+use crate::services::parsing::team_calendar_yaml::{TeamCalendarYamlError, load_team_calendar_if_provided};
 #[derive(Error, Debug)]
 pub enum SimulationError {
     #[error("failed to read throughput file: {0}")]

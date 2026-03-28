@@ -5,8 +5,8 @@ use chrono::NaiveDate;
 use thiserror::Error;
 
 use crate::domain::project::Project;
-use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
-use crate::services::simulation_report_yaml::{ReportParseError, load_simulation_report_from_file};
+use crate::services::parsing::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
+use crate::services::parsing::simulation_report_yaml::{ReportParseError, load_simulation_report_from_file};
 use crate::services::simulation_types::{SimulationReport, WorkPackageSimulation};
 
 #[derive(Error, Debug)]
