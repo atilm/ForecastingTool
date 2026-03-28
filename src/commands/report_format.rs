@@ -1,4 +1,4 @@
-use crate::services::simulation_types::SimulationReport;
+use crate::services::project_simulation::simulation_types::SimulationReport;
 
 pub fn format_simulation_report(report: &SimulationReport) -> String {
     let velocity = match report.velocity {
@@ -31,7 +31,7 @@ pub fn format_simulation_report(report: &SimulationReport) -> String {
 
 fn format_percentile_row(
     label: &str,
-    percentile: &crate::services::simulation_types::SimulationPercentile,
+    percentile: &crate::services::project_simulation::simulation_types::SimulationPercentile,
 ) -> String {
     format!(
         "{label} | {days} | {date}",
@@ -44,7 +44,7 @@ fn format_percentile_row(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::simulation_types::SimulationPercentile;
+    use crate::services::project_simulation::simulation_types::SimulationPercentile;
     use chrono::NaiveDate;
 
     fn build_report() -> SimulationReport {

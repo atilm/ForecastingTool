@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::domain::project::Project;
 use crate::services::parsing::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
 use crate::services::parsing::simulation_report_yaml::{ReportParseError, load_simulation_report_from_file};
-use crate::services::simulation_types::{SimulationReport, WorkPackageSimulation};
+use crate::services::project_simulation::simulation_types::{SimulationReport, WorkPackageSimulation};
 
 #[derive(Error, Debug)]
 pub enum SimulationGanttError {
@@ -121,7 +121,7 @@ fn compute_start_date(
 mod tests {
     use super::*;
     use crate::domain::issue::{Issue, IssueId};
-    use crate::services::simulation_types::{
+    use crate::services::project_simulation::simulation_types::{
         SimulationPercentile, WorkPackagePercentiles, WorkPackageSimulation,
     };
     use chrono::NaiveDate;

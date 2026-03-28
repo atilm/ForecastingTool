@@ -1,6 +1,6 @@
 use crate::commands::base_commands::SimulateThroughputArgs;
 use crate::commands::report_format::format_simulation_report;
-use crate::services::throughput_simulation::simulate_from_throughput_file;
+use crate::services::project_simulation::throughput_simulation::simulate_from_throughput_file;
 
 pub fn simulate_n_command(args: SimulateThroughputArgs) {
     let SimulateThroughputArgs {

@@ -3,7 +3,7 @@ use super::*;
 use crate::domain::calendar::{Calendar, FreeDateRange, TeamCalendar};
 use crate::domain::estimate::ThreePointEstimate;
 use crate::domain::issue::IssueId;
-use crate::services::simulation_types::{SimulationPercentile, WorkPackagePercentiles};
+use crate::services::project_simulation::simulation_types::{SimulationPercentile, WorkPackagePercentiles};
 
 use assert_fs::prelude::*;
 use chrono::NaiveDate;

@@ -11,14 +11,14 @@ use chrono::NaiveDate;
 
 use crate::domain::project::Project;
 use crate::services::plotting::histogram::HistogramError;
-use crate::services::percentiles;
+use crate::services::project_simulation::percentiles;
 use crate::services::project_simulation::beta_pert_sampler::BetaPertSampler;
 use crate::services::project_simulation::beta_pert_sampler::ThreePointSampler;
 use crate::services::project_simulation::sample_duration::SamplingError;
 use crate::services::project_simulation::velocity_calculation::VelocityCalculationError;
 use crate::services::project_simulation::velocity_calculation::calculate_project_velocity;
 use crate::services::parsing::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
-use crate::services::simulation_types::{
+use crate::services::project_simulation::simulation_types::{
     SimulationOutput, SimulationPercentile, SimulationReport, WorkPackagePercentiles,
     WorkPackageSimulation,
 };

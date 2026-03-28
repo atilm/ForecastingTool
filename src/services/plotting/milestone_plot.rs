@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::services::simulation_types::{
+use crate::services::project_simulation::simulation_types::{
     SimulationOutput, SimulationReport, WorkPackageSimulation,
 };
 use plotters::prelude::*;
@@ -146,7 +146,7 @@ fn render_milestone_plot_png(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::simulation_types::{
+    use crate::services::project_simulation::simulation_types::{
         SimulationPercentile, SimulationReport, WorkPackagePercentiles,
     };
     use assert_fs::prelude::*;

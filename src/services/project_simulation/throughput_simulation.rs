@@ -8,8 +8,8 @@ use rand::seq::SliceRandom;
 use thiserror::Error;
 
 use crate::services::plotting::histogram::{HistogramError, write_histogram_png};
-use crate::services::percentiles;
-use crate::services::simulation_types::{SimulationOutput, SimulationPercentile, SimulationReport};
+use crate::services::project_simulation::percentiles;
+use crate::services::project_simulation::simulation_types::{SimulationOutput, SimulationPercentile, SimulationReport};
 use crate::services::parsing::team_calendar_yaml::{TeamCalendarYamlError, load_team_calendar_if_provided};
 #[derive(Error, Debug)]
 pub enum SimulationError {
