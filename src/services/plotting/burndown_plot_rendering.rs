@@ -2,7 +2,7 @@ use chrono::{Duration, NaiveDate};
 use plotters::coord::types::{RangedCoordf32, RangedCoordi32};
 use plotters::prelude::*;
 
-use crate::services::burndown_plot::{BurndownData, BurndownPlotError, CapacityRange, ChartPoint};
+use crate::services::plotting::burndown_plot::{BurndownData, BurndownPlotError, CapacityRange, ChartPoint};
 
 pub(super) fn render_burndown_plot_png(
     output_path: &str,

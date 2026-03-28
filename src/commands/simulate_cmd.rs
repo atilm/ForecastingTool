@@ -1,7 +1,7 @@
 use crate::commands::base_commands::SimulateProjectArgs;
 use crate::commands::report_format::format_simulation_report;
-use crate::services::histogram::write_histogram_png;
-use crate::services::mileston_plot::write_milestone_plot_png;
+use crate::services::plotting::histogram::write_histogram_png;
+use crate::services::plotting::milestone_plot::write_milestone_plot_png;
 use crate::services::project_simulation::project_simulation::simulate_project_from_yaml_file;
 
 pub fn simulate_command(args: SimulateProjectArgs) {

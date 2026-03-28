@@ -10,7 +10,7 @@ use crate::services::project_simulation::network_nodes::build_network_nodes;
 use chrono::NaiveDate;
 
 use crate::domain::project::Project;
-use crate::services::histogram::HistogramError;
+use crate::services::plotting::histogram::HistogramError;
 use crate::services::percentiles;
 use crate::services::project_simulation::beta_pert_sampler::BetaPertSampler;
 use crate::services::project_simulation::beta_pert_sampler::ThreePointSampler;

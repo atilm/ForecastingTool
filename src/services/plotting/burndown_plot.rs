@@ -7,7 +7,7 @@ use crate::domain::estimate::{Estimate, StoryPointEstimate};
 use crate::domain::issue::Issue;
 use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
-use crate::services::burndown_plot_rendering::render_burndown_plot_png;
+use crate::services::plotting::burndown_plot_rendering::render_burndown_plot_png;
 use crate::services::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
 use crate::services::simulation_report_yaml::{ReportParseError, load_simulation_report_from_file};
 use crate::services::simulation_types::{SimulationReport, WorkPackageSimulation};

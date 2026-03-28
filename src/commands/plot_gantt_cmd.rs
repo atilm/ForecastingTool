@@ -1,5 +1,5 @@
 use crate::commands::base_commands::PlotGanttArgs;
-use crate::services::estimate_gantt::write_pert_gantt_markdown;
+use crate::services::plotting::estimate_gantt::write_pert_gantt_markdown;
 
 pub fn plot_gantt_command(args: PlotGanttArgs) {
     let PlotGanttArgs {

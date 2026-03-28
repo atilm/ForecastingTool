@@ -1,5 +1,5 @@
 use crate::commands::base_commands::PlotThroughputArgs;
-use crate::services::throughput_plot::plot_throughput_from_yaml_file;
+use crate::services::plotting::throughput_plot::plot_throughput_from_yaml_file;
 
 pub fn plot_throughput_command(args: PlotThroughputArgs) {
     let PlotThroughputArgs { input, output } = args;

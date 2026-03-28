@@ -1,5 +1,5 @@
 use crate::commands::base_commands::PlotSimulationGanttArgs;
-use crate::services::simulation_gantt::write_simulation_gantt_markdown;
+use crate::services::plotting::simulation_gantt::write_simulation_gantt_markdown;
 
 pub fn plot_simulation_gantt_command(args: PlotSimulationGanttArgs) {
     let PlotSimulationGanttArgs {

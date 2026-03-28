@@ -1,5 +1,5 @@
 use crate::commands::base_commands::PlotBurndownArgs;
-use crate::services::burndown_plot::plot_burndown_from_yaml_files;
+use crate::services::plotting::burndown_plot::plot_burndown_from_yaml_files;
 
 pub fn plot_burndown_command(args: PlotBurndownArgs) {
     let PlotBurndownArgs {
