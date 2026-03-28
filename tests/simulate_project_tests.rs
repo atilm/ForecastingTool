@@ -79,7 +79,7 @@ work_packages:
     let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
     cmd.args(&[
         "simulate",
-      "project",
+        "project",
         "-i",
         &input_arg,
         "-o",
@@ -153,7 +153,7 @@ free_date_ranges:
     let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
     cmd.args(&[
         "simulate",
-      "project",
+        "project",
         "-i",
         &input_arg,
         "-o",

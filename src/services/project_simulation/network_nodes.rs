@@ -5,8 +5,8 @@ use crate::services::project_simulation::sample_duration::sample_duration_days;
 use chrono::NaiveDate;
 use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
-use thiserror::Error;
 use std::collections::HashMap;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum NetworkNodesError {
@@ -37,7 +37,7 @@ pub struct NetworkNode {
 pub struct SortedNetworkNodes(Vec<NetworkNode>);
 
 impl SortedNetworkNodes {
-    pub fn new(nodes: Vec<NetworkNode>) -> Result<Self , NetworkNodesError> {
+    pub fn new(nodes: Vec<NetworkNode>) -> Result<Self, NetworkNodesError> {
         let sorted_nodes = topological_sort(nodes)?;
         Ok(SortedNetworkNodes(sorted_nodes))
     }
@@ -87,9 +87,7 @@ pub fn build_network_nodes<R: ThreePointSampler + ?Sized>(
     Ok(nodes)
 }
 
-fn topological_sort(
-    network: Vec<NetworkNode>,
-) -> Result<Vec<NetworkNode>, NetworkNodesError> {
+fn topological_sort(network: Vec<NetworkNode>) -> Result<Vec<NetworkNode>, NetworkNodesError> {
     let mut graph: DiGraph<String, ()> = DiGraph::new();
     let mut nodes_by_index = HashMap::new();
     let mut index_by_id = HashMap::new();
@@ -117,8 +115,7 @@ fn topological_sort(
     }
 
     // Perform topological sort
-    let sorted_indices =
-        toposort(&graph, None).map_err(|_| NetworkNodesError::CycleDetected)?;
+    let sorted_indices = toposort(&graph, None).map_err(|_| NetworkNodesError::CycleDetected)?;
 
     // Create sorted vector of nodes based on sorted indices
     let sorted_nodes: Vec<NetworkNode> = sorted_indices
@@ -128,7 +125,6 @@ fn topological_sort(
 
     Ok(sorted_nodes)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -152,10 +148,7 @@ mod tests {
             build_network_node("WP1", 1.0, &[]), // Duplicate ID
         ];
         let result = SortedNetworkNodes::new(network);
-        assert!(matches!(
-            result,
-            Err(NetworkNodesError::DuplicateNodeId(_))
-        ));
+        assert!(matches!(result, Err(NetworkNodesError::DuplicateNodeId(_))));
     }
 
     #[test]
@@ -177,9 +170,6 @@ mod tests {
             build_network_node("WP1", 1.0, &["WP0"]),
         ];
         let result = SortedNetworkNodes::new(network);
-        assert!(matches!(
-            result,
-            Err(NetworkNodesError::CycleDetected)
-        ));
+        assert!(matches!(result, Err(NetworkNodesError::CycleDetected)));
     }
 }

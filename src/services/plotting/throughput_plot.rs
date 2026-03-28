@@ -1,5 +1,7 @@
 use crate::domain::throughput::Throughput;
-use crate::services::parsing::throughput_yaml::{ThroughputYamlError, deserialize_throughput_from_yaml_str};
+use crate::services::parsing::throughput_yaml::{
+    ThroughputYamlError, deserialize_throughput_from_yaml_str,
+};
 use plotters::prelude::*;
 use thiserror::Error;
 

@@ -3,7 +3,9 @@ use super::*;
 use crate::domain::calendar::{Calendar, FreeDateRange, TeamCalendar};
 use crate::domain::estimate::ThreePointEstimate;
 use crate::domain::issue::IssueId;
-use crate::services::project_simulation::simulation_types::{SimulationPercentile, WorkPackagePercentiles};
+use crate::services::project_simulation::simulation_types::{
+    SimulationPercentile, WorkPackagePercentiles,
+};
 
 use assert_fs::prelude::*;
 use chrono::NaiveDate;
@@ -264,13 +266,11 @@ fn build_data_collects_low_capacity_ranges_from_calendar_ignoring_free_weekdays(
 
     assert_eq!(
         data.capacity_ranges,
-        vec![
-            CapacityRange {
-                start_date: on_date(2026, 3, 5),
-                end_date: on_date(2026, 3, 6),
-                capacity: 0.5,
-            },
-        ]
+        vec![CapacityRange {
+            start_date: on_date(2026, 3, 5),
+            end_date: on_date(2026, 3, 6),
+            capacity: 0.5,
+        },]
     );
 }
 

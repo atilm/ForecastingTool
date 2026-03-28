@@ -6,8 +6,12 @@ use thiserror::Error;
 
 use crate::domain::project::Project;
 use crate::services::parsing::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
-use crate::services::parsing::simulation_report_yaml::{ReportParseError, load_simulation_report_from_file};
-use crate::services::project_simulation::simulation_types::{SimulationReport, WorkPackageSimulation};
+use crate::services::parsing::simulation_report_yaml::{
+    ReportParseError, load_simulation_report_from_file,
+};
+use crate::services::project_simulation::simulation_types::{
+    SimulationReport, WorkPackageSimulation,
+};
 
 #[derive(Error, Debug)]
 pub enum SimulationGanttError {
@@ -48,8 +52,9 @@ pub fn generate_simulation_gantt_markdown(project: &Project, report: &Simulation
         .map(|wp| (wp.id.as_str(), wp))
         .collect();
 
-    let dep_start_date =
-        |wp_sim: &WorkPackageSimulation| -> NaiveDate { compute_start_date(wp_sim, project, &wp_sim_by_id, report.start_date) };
+    let dep_start_date = |wp_sim: &WorkPackageSimulation| -> NaiveDate {
+        compute_start_date(wp_sim, project, &wp_sim_by_id, report.start_date)
+    };
 
     let work_packages = report.work_packages.as_deref().unwrap_or(&[]);
 
@@ -147,10 +152,7 @@ mod tests {
         }
     }
 
-    fn build_report(
-        start: &str,
-        work_packages: Vec<WorkPackageSimulation>,
-    ) -> SimulationReport {
+    fn build_report(start: &str, work_packages: Vec<WorkPackageSimulation>) -> SimulationReport {
         SimulationReport {
             data_source: "test".to_string(),
             start_date: date(start),
@@ -195,10 +197,7 @@ mod tests {
                 percentiles: wp_percentiles("2026-01-10"),
             }],
         );
-        let project = build_project(
-            "Demo",
-            vec![build_issue("WP1", "Design", None)],
-        );
+        let project = build_project("Demo", vec![build_issue("WP1", "Design", None)]);
 
         let md = generate_simulation_gantt_markdown(&project, &report);
 
@@ -316,10 +315,7 @@ mod tests {
                 percentiles: wp_percentiles("2026-01-10"),
             }],
         );
-        let project = build_project(
-            "MyProject",
-            vec![build_issue("WP1", "My Summary", None)],
-        );
+        let project = build_project("MyProject", vec![build_issue("WP1", "My Summary", None)]);
 
         let md = generate_simulation_gantt_markdown(&project, &report);
 

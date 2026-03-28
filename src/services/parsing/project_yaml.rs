@@ -10,7 +10,9 @@ use crate::domain::estimate::{
 use crate::domain::issue::{Issue, IssueId};
 use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
-use crate::services::parsing::simulation_report_yaml::{ReportParseError, load_simulation_report_from_file};
+use crate::services::parsing::simulation_report_yaml::{
+    ReportParseError, load_simulation_report_from_file,
+};
 
 #[derive(Error, Debug)]
 pub enum ProjectYamlError {

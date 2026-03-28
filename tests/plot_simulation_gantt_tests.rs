@@ -118,8 +118,8 @@ work_packages:
 
     let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
     cmd.args(&[
-      "plot",
-      "simulation-gantt",
+        "plot",
+        "simulation-gantt",
         "-i",
         project_file.path().to_str().unwrap(),
         "-r",
@@ -128,9 +128,9 @@ work_packages:
         output_file.path().to_str().unwrap(),
     ]);
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Simulation Gantt diagram written to"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Simulation Gantt diagram written to",
+    ));
 
     let output = fs::read_to_string(output_file.path()).unwrap();
 

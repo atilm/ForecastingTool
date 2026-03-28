@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use chrono::NaiveDate;
 use crate::services::project_simulation::network_nodes::SortedNetworkNodes;
+use chrono::NaiveDate;
 use thiserror::Error;
 
 use crate::domain::calendar::TeamCalendar;

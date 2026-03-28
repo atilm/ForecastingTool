@@ -102,7 +102,7 @@ fn to_three_point_triplet(
 
 fn fibonacci_bounds(value: f32) -> (f32, f32) {
     let series = [
-        0.0, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 20.0, 40.0, 100.0, 200.0, 400.0
+        0.0, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 20.0, 40.0, 100.0, 200.0, 400.0,
     ];
 
     let lower_than_one = (series[0] + series[1]) / 2.0;
@@ -120,7 +120,7 @@ fn fibonacci_bounds(value: f32) -> (f32, f32) {
         let lower_limit = (window[1] + window[2]) / 2.0;
         let upper_limit = (window[2] + window[3]) / 2.0;
         if value > lower_limit && value <= upper_limit {
-            return (window[0], window[4]);  
+            return (window[0], window[4]);
         }
     }
 
@@ -162,11 +162,28 @@ mod tests {
         ];
 
         for (input, expected) in test_cases {
-            let (lower, most_likely, upper, is_story_point_estimate) =
-                to_story_point_triplet(&StoryPointEstimate { estimate: Some(input) }, "test-issue").unwrap();
-            assert_eq!(lower, expected.0, "Lower bound does not match expected value for input {}", input);
-            assert_eq!(most_likely, input, "Most likely value should match the input for input {}", input);
-            assert_eq!(upper, expected.2, "Upper bound does not match expected value for input {}", input);
+            let (lower, most_likely, upper, is_story_point_estimate) = to_story_point_triplet(
+                &StoryPointEstimate {
+                    estimate: Some(input),
+                },
+                "test-issue",
+            )
+            .unwrap();
+            assert_eq!(
+                lower, expected.0,
+                "Lower bound does not match expected value for input {}",
+                input
+            );
+            assert_eq!(
+                most_likely, input,
+                "Most likely value should match the input for input {}",
+                input
+            );
+            assert_eq!(
+                upper, expected.2,
+                "Upper bound does not match expected value for input {}",
+                input
+            );
             assert!(is_story_point_estimate);
         }
     }
