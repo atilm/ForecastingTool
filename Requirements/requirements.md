@@ -1,6 +1,7 @@
 # ToDos
 
 * [ ] Status InProgress or Done and no start date should trigger an error
+* [ ] Start-Date or End-Date set and non-matching status should also be an error
 * [ ] Projects should either be all-story-points or no story-points
 * [ ] Show InProgress Status in Gantt Diagram
 * [.] I would like to be able to see InProgress tasks in the Gantt diagram with their actual start date and their currently estimated end date

@@ -4,6 +4,7 @@ use std::io;
 use chrono::NaiveDate;
 use thiserror::Error;
 
+use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
 use crate::services::parsing::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
 use crate::services::parsing::simulation_report_yaml::{
@@ -21,6 +22,13 @@ pub enum SimulationGanttError {
     ReportLoad(#[from] ReportParseError),
     #[error("failed to write output: {0}")]
     Io(#[from] io::Error),
+    #[error(
+        "work package '{issue_id}' has status '{status:?}' but no start_date; set start_date as YYYY-MM-DD"
+    )]
+    MissingStartDateForStatus {
+        issue_id: String,
+        status: IssueStatus,
+    },
 }
 
 /// Loads a project YAML and a simulation report YAML, then writes a Mermaid
@@ -32,7 +40,7 @@ pub fn write_simulation_gantt_markdown(
 ) -> Result<(), SimulationGanttError> {
     let project = load_project_from_yaml_file(project_path, &None)?;
     let report = load_simulation_report_from_file(report_path)?;
-    let markdown = generate_simulation_gantt_markdown(&project, &report);
+    let markdown = generate_simulation_gantt_markdown(&project, &report)?;
     std::fs::write(output_path, markdown)?;
     Ok(())
 }
@@ -40,10 +48,18 @@ pub fn write_simulation_gantt_markdown(
 /// Generates a Mermaid Gantt diagram from a project and a simulation report.
 ///
 /// Each `WorkPackageSimulation` in the report becomes a task. The start date
-/// is the latest p85 end_date among the work package's dependencies (or the
-/// report's start_date if there are none), and the end date is the work
-/// package's own p85 end_date. Milestones are rendered as Mermaid milestones.
-pub fn generate_simulation_gantt_markdown(project: &Project, report: &SimulationReport) -> String {
+/// is resolved as follows:
+/// - if the corresponding issue status is Done or InProgress, issue.start_date
+///   is used and must be set
+/// - otherwise, the latest p85 end_date among dependencies is used
+/// - if no dependencies are available in the report, report.start_date is used
+///
+/// The end date is always the work package's own p85 end_date. Milestones are
+/// rendered as Mermaid milestones.
+pub fn generate_simulation_gantt_markdown(
+    project: &Project,
+    report: &SimulationReport,
+) -> Result<String, SimulationGanttError> {
     let wp_sim_by_id: HashMap<&str, &WorkPackageSimulation> = report
         .work_packages
         .as_deref()
@@ -51,10 +67,6 @@ pub fn generate_simulation_gantt_markdown(project: &Project, report: &Simulation
         .iter()
         .map(|wp| (wp.id.as_str(), wp))
         .collect();
-
-    let dep_start_date = |wp_sim: &WorkPackageSimulation| -> NaiveDate {
-        compute_start_date(wp_sim, project, &wp_sim_by_id, report.start_date)
-    };
 
     let work_packages = report.work_packages.as_deref().unwrap_or(&[]);
 
@@ -78,7 +90,7 @@ pub fn generate_simulation_gantt_markdown(project: &Project, report: &Simulation
         let id = wp_sim.id.as_str();
         let summary = summary_by_id.get(id).copied().unwrap_or(id);
         let label = format!("{} {}", id, summary);
-        let start = dep_start_date(wp_sim);
+        let start = compute_start_date(wp_sim, project, &wp_sim_by_id, report.start_date)?;
         let end = wp_sim.percentiles.p85.end_date;
 
         if wp_sim.is_milestone {
@@ -96,7 +108,7 @@ pub fn generate_simulation_gantt_markdown(project: &Project, report: &Simulation
     }
 
     lines.push("```".to_string());
-    lines.join("\n")
+    Ok(lines.join("\n"))
 }
 
 fn compute_start_date(
@@ -104,28 +116,45 @@ fn compute_start_date(
     project: &Project,
     wp_sim_by_id: &HashMap<&str, &WorkPackageSimulation>,
     default_date: NaiveDate,
-) -> NaiveDate {
-    let deps = project
+) -> Result<NaiveDate, SimulationGanttError> {
+    let issue = project
         .work_packages
         .iter()
-        .find(|wp| wp.issue_id.as_ref().map(|id| id.id.as_str()) == Some(wp_sim.id.as_str()))
-        .and_then(|wp| wp.dependencies.as_deref());
+        .find(|wp| wp.issue_id.as_ref().map(|id| id.id.as_str()) == Some(wp_sim.id.as_str()));
+
+    if let Some(issue) = issue {
+        if let Some(status) = issue.status.as_ref() {
+            if matches!(status, IssueStatus::Done | IssueStatus::InProgress) {
+                let start_date = issue.start_date.ok_or_else(|| {
+                    SimulationGanttError::MissingStartDateForStatus {
+                        issue_id: wp_sim.id.clone(),
+                        status: status.clone(),
+                    }
+                })?;
+                return Ok(start_date);
+            }
+        }
+    }
+
+    let deps = issue.and_then(|wp| wp.dependencies.as_deref());
 
     let Some(deps) = deps else {
-        return default_date;
+        return Ok(default_date);
     };
 
-    deps.iter()
+    Ok(deps
+        .iter()
         .filter_map(|dep_id| wp_sim_by_id.get(dep_id.id.as_str()))
         .map(|dep_wp| dep_wp.percentiles.p85.end_date)
         .max()
-        .unwrap_or(default_date)
+        .unwrap_or(default_date))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::issue::{Issue, IssueId};
+    use crate::domain::issue_status::IssueStatus;
     use crate::services::project_simulation::simulation_types::{
         SimulationPercentile, WorkPackagePercentiles, WorkPackageSimulation,
     };
@@ -187,6 +216,19 @@ mod tests {
         }
     }
 
+    fn build_issue_with_status(
+        id: &str,
+        summary: &str,
+        deps: Option<Vec<&str>>,
+        status: Option<IssueStatus>,
+        start_date: Option<&str>,
+    ) -> Issue {
+        let mut issue = build_issue(id, summary, deps);
+        issue.status = status;
+        issue.start_date = start_date.map(date);
+        issue
+    }
+
     #[test]
     fn work_package_without_deps_uses_report_start_date() {
         let report = build_report(
@@ -199,7 +241,7 @@ mod tests {
         );
         let project = build_project("Demo", vec![build_issue("WP1", "Design", None)]);
 
-        let md = generate_simulation_gantt_markdown(&project, &report);
+        let md = generate_simulation_gantt_markdown(&project, &report).unwrap();
 
         assert!(md.contains("WP1 Design"));
         assert!(md.contains(":WP1, 2026-01-01, 2026-01-10"));
@@ -230,7 +272,7 @@ mod tests {
             ],
         );
 
-        let md = generate_simulation_gantt_markdown(&project, &report);
+        let md = generate_simulation_gantt_markdown(&project, &report).unwrap();
 
         // WP2 should start at WP1's p85 end_date (2026-01-10)
         assert!(md.contains(":WP2, 2026-01-10, 2026-01-20"));
@@ -267,7 +309,7 @@ mod tests {
             ],
         );
 
-        let md = generate_simulation_gantt_markdown(&project, &report);
+        let md = generate_simulation_gantt_markdown(&project, &report).unwrap();
 
         // WP3 depends on WP1 (ends 2026-01-05) and WP2 (ends 2026-01-15)
         // Start should be max = 2026-01-15
@@ -299,7 +341,7 @@ mod tests {
             ],
         );
 
-        let md = generate_simulation_gantt_markdown(&project, &report);
+        let md = generate_simulation_gantt_markdown(&project, &report).unwrap();
 
         assert!(md.contains(":milestone, MS1, 2026-01-10, 0d"));
         assert!(!md.contains(":MS1, "));
@@ -317,7 +359,7 @@ mod tests {
         );
         let project = build_project("MyProject", vec![build_issue("WP1", "My Summary", None)]);
 
-        let md = generate_simulation_gantt_markdown(&project, &report);
+        let md = generate_simulation_gantt_markdown(&project, &report).unwrap();
 
         assert!(md.contains("WP1 My Summary"));
         assert!(md.contains("# MyProject Simulation Gantt Diagram"));
@@ -341,9 +383,93 @@ mod tests {
             ],
         );
 
-        let md = generate_simulation_gantt_markdown(&project, &report);
+        let md = generate_simulation_gantt_markdown(&project, &report).unwrap();
 
         // WP1 not in report, so start falls back to report start_date
         assert!(md.contains(":WP2, 2026-01-01, 2026-01-20"));
+    }
+
+    #[test]
+    fn done_or_in_progress_issue_without_start_date_returns_error() {
+        let report = build_report(
+            "2026-01-01",
+            vec![WorkPackageSimulation {
+                id: "WP1".to_string(),
+                is_milestone: false,
+                percentiles: wp_percentiles("2026-01-10"),
+            }],
+        );
+
+        let project = build_project(
+            "Demo",
+            vec![build_issue_with_status(
+                "WP1",
+                "In progress task",
+                None,
+                Some(IssueStatus::InProgress),
+                None,
+            )],
+        );
+
+        let err = generate_simulation_gantt_markdown(&project, &report).unwrap_err();
+
+        match err {
+            SimulationGanttError::MissingStartDateForStatus { issue_id, status } => {
+                assert_eq!(issue_id, "WP1");
+                assert_eq!(status, IssueStatus::InProgress);
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    #[test]
+    fn in_progress_issue_uses_explicit_start_date_over_dependency_based_start() {
+        let report = build_report(
+            "2026-01-01",
+            vec![
+                WorkPackageSimulation {
+                    id: "WP1".to_string(),
+                    is_milestone: false,
+                    percentiles: wp_percentiles("2026-01-20"),
+                },
+                WorkPackageSimulation {
+                    id: "WP2".to_string(),
+                    is_milestone: false,
+                    percentiles: wp_percentiles("2026-01-25"),
+                },
+                WorkPackageSimulation {
+                    id: "WP3".to_string(),
+                    is_milestone: false,
+                    percentiles: wp_percentiles("2026-01-30"),
+                },
+            ],
+        );
+
+        let project = build_project(
+            "Demo",
+            vec![
+                build_issue_with_status(
+                    "WP1",
+                    "Dependency",
+                    Some(vec![]),
+                    Some(IssueStatus::Done),
+                    Some("2026-01-10"),
+                ),
+                build_issue_with_status(
+                    "WP2",
+                    "Already started",
+                    Some(vec!["WP1"]),
+                    Some(IssueStatus::InProgress),
+                    Some("2026-01-21"),
+                ),
+                build_issue("WP3", "Todo", Some(vec!["WP2"])),
+            ],
+        );
+
+        let md = generate_simulation_gantt_markdown(&project, &report).unwrap();
+
+        assert!(md.contains(":WP1, 2026-01-10, 2026-01-20"));
+        assert!(md.contains(":WP2, 2026-01-21, 2026-01-25"));
+        assert!(md.contains(":WP3, 2026-01-25, 2026-01-30"));
     }
 }
