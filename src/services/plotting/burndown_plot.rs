@@ -88,7 +88,7 @@ pub fn plot_burndown_from_yaml_files(
     output_path: &str,
     calendar_path: Option<&str>,
 ) -> Result<(), BurndownPlotError> {
-    let project = load_project_from_yaml_file(project_path)?;
+    let project = load_project_from_yaml_file(project_path, &None)?;
     let report = load_simulation_report_from_file(report_path)?;
     let calendar = load_team_calendar_if_provided(calendar_path)?;
     let data = build_burndown_data(&project, &report, calendar_path.map(|_| &calendar))?;

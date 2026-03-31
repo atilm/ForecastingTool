@@ -42,7 +42,7 @@ pub fn write_pert_gantt_markdown(
     start_date: NaiveDate,
     calendar_path: Option<&str>,
 ) -> Result<(), EstimateGanttError> {
-    let project = load_project_from_yaml_file(input_path)?;
+    let project = load_project_from_yaml_file(input_path, &Some(start_date))?;
     let calendar = load_team_calendar_if_provided(calendar_path)?;
 
     let velocity = calculate_project_velocity(&project, &calendar)?;

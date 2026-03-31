@@ -30,7 +30,7 @@ pub fn write_simulation_gantt_markdown(
     report_path: &str,
     output_path: &str,
 ) -> Result<(), SimulationGanttError> {
-    let project = load_project_from_yaml_file(project_path)?;
+    let project = load_project_from_yaml_file(project_path, &None)?;
     let report = load_simulation_report_from_file(report_path)?;
     let markdown = generate_simulation_gantt_markdown(&project, &report);
     std::fs::write(output_path, markdown)?;

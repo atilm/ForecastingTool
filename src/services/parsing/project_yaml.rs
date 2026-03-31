@@ -73,12 +73,18 @@ enum EstimateRecord {
     Milestone,
 }
 
-pub fn load_project_from_yaml_file(path: &str) -> Result<Project, ProjectYamlError> {
+pub fn load_project_from_yaml_file(
+    path: &str,
+    project_start_date: &Option<NaiveDate>,
+) -> Result<Project, ProjectYamlError> {
     let contents = std::fs::read_to_string(path)?;
-    deserialize_project_from_yaml_str(&contents)
+    deserialize_project_from_yaml_str(&contents, project_start_date)
 }
 
-pub fn deserialize_project_from_yaml_str(input: &str) -> Result<Project, ProjectYamlError> {
+pub fn deserialize_project_from_yaml_str(
+    input: &str,
+    project_start_date: &Option<NaiveDate>,
+) -> Result<Project, ProjectYamlError> {
     let record: ProjectRecord = serde_yaml::from_str(input)?;
     let mut work_packages = Vec::with_capacity(record.work_packages.len());
     let mut previous_id: Option<String> = None;
@@ -90,14 +96,11 @@ pub fn deserialize_project_from_yaml_str(input: &str) -> Result<Project, Project
 
         let mut issue = Issue::new();
         issue.issue_id = Some(IssueId {
-            id: issue_record.id,
+            id: issue_record.id.clone(),
         });
+        issue.estimate = estimate_from_record(&issue_record, project_start_date)?;
         issue.summary = issue_record.summary;
         issue.description = issue_record.description;
-        issue.estimate = issue_record
-            .estimate
-            .map(estimate_from_record)
-            .transpose()?;
         issue.status = parse_status(issue_record.status.as_deref())?;
         issue.created_date = parse_date_opt(issue_record.created_date.as_deref())?;
         issue.start_date = parse_date_opt(issue_record.start_date.as_deref())?;
@@ -162,46 +165,78 @@ fn issue_to_record(issue: &Issue) -> IssueRecord {
     }
 }
 
-fn estimate_from_record(record: EstimateRecord) -> Result<Estimate, ProjectYamlError> {
-    match record {
-        EstimateRecord::StoryPoints { value } => Ok(Estimate::StoryPoint(StoryPointEstimate {
-            estimate: Some(value),
-        })),
+fn estimate_from_record(
+    record: &IssueRecord,
+    project_start_date: &Option<NaiveDate>,
+) -> Result<Option<Estimate>, ProjectYamlError> {
+    if record.estimate.is_none() {
+        return Ok(None);
+    }
+
+    let estimate_record = record.estimate.as_ref().unwrap();
+
+    match estimate_record {
+        EstimateRecord::StoryPoints { value } => {
+            Ok(Some(Estimate::StoryPoint(StoryPointEstimate {
+                estimate: Some(*value),
+            })))
+        }
         EstimateRecord::ThreePoint {
             optimistic,
             most_likely,
             pessimistic,
-        } => Ok(Estimate::ThreePoint(ThreePointEstimate {
-            optimistic: Some(optimistic),
-            most_likely: Some(most_likely),
-            pessimistic: Some(pessimistic),
-        })),
+        } => Ok(Some(Estimate::ThreePoint(ThreePointEstimate {
+            optimistic: Some(*optimistic),
+            most_likely: Some(*most_likely),
+            pessimistic: Some(*pessimistic),
+        }))),
         EstimateRecord::Reference { report_file_path } => {
+            let start_date = parse_date_opt(record.start_date.as_deref())?;
             let cached_estimate = Some(
-                three_point_estimate_from_report_file(&report_file_path).map_err(|source| {
-                    ProjectYamlError::ReferenceEstimateLoad {
-                        path: report_file_path.clone(),
-                        source,
-                    }
+                three_point_estimate_from_report_file(
+                    &report_file_path,
+                    &start_date,
+                    project_start_date,
+                )
+                .map_err(|source| ProjectYamlError::ReferenceEstimateLoad {
+                    path: report_file_path.clone(),
+                    source,
                 })?,
             );
-            Ok(Estimate::Reference(ReferenceEstimate {
+            Ok(Some(Estimate::Reference(ReferenceEstimate {
                 cached_estimate,
-                report_file_path,
-            }))
+                report_file_path: report_file_path.to_string(),
+            })))
         }
-        EstimateRecord::Milestone => Ok(Estimate::Milestone),
+        EstimateRecord::Milestone => Ok(Some(Estimate::Milestone)),
     }
 }
 
 fn three_point_estimate_from_report_file(
     path: &str,
+    issue_start_date: &Option<NaiveDate>,
+    project_start_date: &Option<NaiveDate>,
 ) -> Result<ThreePointEstimate, ReportParseError> {
     let report = load_simulation_report_from_file(path)?;
+
+    let current_date =
+        project_start_date.unwrap_or_else(|| chrono::Local::now().naive_local().date());
+
+    let past_days = if let Some(start_date) = issue_start_date {
+        let past_days = (current_date - *start_date).num_days();
+        if past_days < 0 {
+            0.0f32
+        } else {
+            past_days as f32
+        }
+    } else {
+        0.0f32
+    };
+
     Ok(ThreePointEstimate {
-        optimistic: Some(report.p0.days),
-        most_likely: Some(report.p50.days),
-        pessimistic: Some(report.p100.days),
+        optimistic: Some(past_days + report.p0.days),
+        most_likely: Some(past_days + report.p50.days),
+        pessimistic: Some(past_days + report.p100.days),
     })
 }
 
@@ -326,7 +361,7 @@ work_packages:
     dependencies: [ABC-0]
 "#;
 
-        let project = deserialize_project_from_yaml_str(yaml).unwrap();
+        let project = deserialize_project_from_yaml_str(yaml, &None).unwrap();
         let issue = &project.work_packages[0];
         assert_eq!(project.name, "Demo");
         assert_eq!(issue.issue_id.as_ref().unwrap().id, "ABC-1");
@@ -353,7 +388,7 @@ work_packages:
       pessimistic: 8
 "#;
 
-        let project = deserialize_project_from_yaml_str(yaml).unwrap();
+        let project = deserialize_project_from_yaml_str(yaml, &None).unwrap();
         let issue = &project.work_packages[0];
         assert!(matches!(
             issue.estimate,
@@ -374,7 +409,7 @@ work_packages:
     start_date: 2026-99-01
 "#;
 
-        let error = deserialize_project_from_yaml_str(yaml).unwrap_err();
+        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
         assert!(matches!(error, ProjectYamlError::InvalidDate(_)));
     }
 
@@ -387,7 +422,7 @@ work_packages:
     status: Blocked
 "#;
 
-        let error = deserialize_project_from_yaml_str(yaml).unwrap_err();
+        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
         assert!(matches!(error, ProjectYamlError::InvalidStatus(_)));
     }
 
@@ -402,7 +437,7 @@ work_packages:
       report_file_path: /definitely/missing/report.yaml
 "#;
 
-        let error = deserialize_project_from_yaml_str(yaml).unwrap_err();
+        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
         match error {
             ProjectYamlError::ReferenceEstimateLoad { path, source } => {
                 assert_eq!(path, "/definitely/missing/report.yaml");
@@ -420,7 +455,7 @@ work_packages:
   - id: ""
 "#;
 
-        let error = deserialize_project_from_yaml_str(yaml).unwrap_err();
+        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
         assert!(matches!(error, ProjectYamlError::MissingIssueId));
     }
 
@@ -435,7 +470,7 @@ work_packages:
     dependencies: []
 "#;
 
-        let project = deserialize_project_from_yaml_str(yaml).unwrap();
+        let project = deserialize_project_from_yaml_str(yaml, &None).unwrap();
         let issue = &project.work_packages[1];
         assert_eq!(issue.dependencies.as_ref().unwrap().len(), 1);
         assert_eq!(issue.dependencies.as_ref().unwrap()[0].id, "ABC-1");
@@ -450,7 +485,7 @@ work_packages:
     dependencies: []
 "#;
 
-        let error = deserialize_project_from_yaml_str(yaml).unwrap_err();
+        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
         assert!(matches!(error, ProjectYamlError::MissingPreviousDependency));
     }
 
@@ -501,35 +536,81 @@ iterations: 10
 simulated_items: 3
 p0:
   days: 1
-  start_date: "2026-01-01"
   end_date: "2026-01-02"
 p15:
-    days: 1.5
-    start_date: "2026-01-01"
-    end_date: "2026-01-03"
+  days: 1.5
+  end_date: "2026-01-03"
 p50:
   days: 2
-  start_date: "2026-01-01"
   end_date: "2026-01-03"
 p85:
   days: 3
-  start_date: "2026-01-01"
   end_date: "2026-01-04"
 p100:
   days: 4
-  start_date: "2026-01-01"
   end_date: "2026-01-05"
 "#;
 
         let report_file = assert_fs::NamedTempFile::new("report.yaml").unwrap();
         fs::write(report_file.path(), report_yaml).unwrap();
 
-        let estimate =
-            three_point_estimate_from_report_file(report_file.path().to_str().unwrap()).unwrap();
+        let estimate = three_point_estimate_from_report_file(
+            report_file.path().to_str().unwrap(),
+            &None,
+            &None,
+        )
+        .unwrap();
 
         assert_eq!(estimate.optimistic, Some(1.0));
         assert_eq!(estimate.most_likely, Some(2.0));
         assert_eq!(estimate.pessimistic, Some(4.0));
+    }
+
+    #[test]
+    fn parse_report_file_to_three_point_estimate_with_issue_start_date() {
+        // Arrange
+        let report_yaml = r#"
+data_source: "unit"
+start_date: "2026-01-01"
+velocity: 1
+iterations: 10
+simulated_items: 3
+p0:
+  days: 15
+  end_date: "2026-01-02"
+p15:
+  days: 20
+  end_date: "2026-01-03"
+p50:
+  days: 25
+  end_date: "2026-01-03"
+p85:
+  days: 30
+  end_date: "2026-01-04"
+p100:
+  days: 60
+  end_date: "2026-01-05"
+"#;
+
+        let report_file = assert_fs::NamedTempFile::new("report.yaml").unwrap();
+        fs::write(report_file.path(), report_yaml).unwrap();
+
+        // 5 days have already passed since the issue start date, so they should be added to the estimate remaining days
+        let current_date = Some(NaiveDate::from_ymd_opt(2026, 1, 10).unwrap());
+        let issue_start_date = Some(NaiveDate::from_ymd_opt(2026, 1, 5).unwrap());
+
+        // Act
+        let estimate = three_point_estimate_from_report_file(
+            report_file.path().to_str().unwrap(),
+            &issue_start_date,
+            &current_date,
+        )
+        .unwrap();
+
+        // Assert
+        assert_eq!(estimate.optimistic, Some(20.0)); // p0 + 5
+        assert_eq!(estimate.most_likely, Some(30.0)); // p50 + 5
+        assert_eq!(estimate.pessimistic, Some(65.0)); // p100 + 5
     }
 
     #[test]
@@ -557,8 +638,12 @@ p100:
         let report_file = assert_fs::NamedTempFile::new("report.yaml").unwrap();
         fs::write(report_file.path(), report_yaml).unwrap();
 
-        let error = three_point_estimate_from_report_file(report_file.path().to_str().unwrap())
-            .unwrap_err();
+        let error = three_point_estimate_from_report_file(
+            report_file.path().to_str().unwrap(),
+            &None,
+            &None,
+        )
+        .unwrap_err();
 
         // Invalid dates are rejected during YAML deserialization of `NaiveDate`.
         assert!(matches!(error, ReportParseError::Parse(_)));
@@ -574,8 +659,12 @@ start_date: "2026-01-01"
         let report_file = assert_fs::NamedTempFile::new("report.yaml").unwrap();
         fs::write(report_file.path(), report_yaml).unwrap();
 
-        let error = three_point_estimate_from_report_file(report_file.path().to_str().unwrap())
-            .unwrap_err();
+        let error = three_point_estimate_from_report_file(
+            report_file.path().to_str().unwrap(),
+            &None,
+            &None,
+        )
+        .unwrap_err();
 
         assert!(matches!(error, ReportParseError::Parse(_)));
     }

@@ -18,7 +18,7 @@ pub fn write_project_diagram_markdown(
     input_path: &str,
     output_path: &str,
 ) -> Result<(), ProjectDiagramError> {
-    let project = load_project_from_yaml_file(input_path)?;
+    let project = load_project_from_yaml_file(input_path, &None)?;
     let markdown = generate_project_markdown(&project);
     std::fs::write(output_path, markdown)?;
     Ok(())
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn generate_flow_diagram_matches_expected() {
-        let project = deserialize_project_from_yaml_str(YAML_CONTENT).unwrap();
+        let project = deserialize_project_from_yaml_str(YAML_CONTENT, &None).unwrap();
         let diagram = generate_flow_diagram(&project);
 
         let expected = concat!(
@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn generate_markdown_descriptions_includes_issue_text() {
-        let project = deserialize_project_from_yaml_str(YAML_CONTENT).unwrap();
+        let project = deserialize_project_from_yaml_str(YAML_CONTENT, &None).unwrap();
         let descriptions = generate_markdown_descriptions(&project);
 
         let expected = "## WP1: Work package 1\nThis is\nwork package 1.\n\n## WP3: Work package 3\nThis is another\nwork package 3.";

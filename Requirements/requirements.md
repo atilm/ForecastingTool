@@ -1,5 +1,17 @@
 # ToDos
 
+* [ ] Status InProgress or Done and no start date should trigger an error
+* [ ] Projects should either be all-story-points or no story-points
+* [ ] Show InProgress Status in Gantt Diagram
+* [.] I would like to be able to see InProgress tasks in the Gantt diagram with their actual start date and their currently estimated end date
+  * Problem at the moment: report files of sub-projects contain only the remaining number of days
+  * ~~This leads to the master simulation being wrong, when a start-date for InProgress tasks is specified~~
+    * START-DATES ARE ALSO SPECIFIED IMPLICITLY THROUGH DEPENDENCIES!
+      * -> When using references the end date is the START DATE UNDTIL TODAY + THE SIMULATED REMAINING TIME
+      * in project_yaml.rs estimate_from_record could perform this conversion
+  * [ ] Also done issues are not handled correctly in simulation_gantt.rs compute_start_date -> a set start date of the record is ignored
+    * In the gantt, the end-date is then before the start-date
+* [ ] Output errors to stderr
 * [x] ~~Plot capacity in burn-down chart (perhaps background-transparency mapped to capacity)~~
 * [ ] Milestone tracking yaml and plot as output of simulation
 * [ ] Improve error reporting in project_yaml.rs
@@ -15,7 +27,7 @@
     * [ ] Simulate master project file with three-point estimations and references
 
 * [x] ~~Modify the CLI to use subcommands~~
-* [ ] Group services by command in directories
+* [.] Group services by command in directories
 * [ ] Write a readme
 * [ ] CI/CD
 * [ ] Simulate in parallel
