@@ -4,6 +4,7 @@ use std::io;
 use chrono::NaiveDate;
 use thiserror::Error;
 
+use crate::domain::issue::Issue;
 use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
 use crate::services::parsing::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
@@ -92,6 +93,14 @@ pub fn generate_simulation_gantt_markdown(
         let label = format!("{} {}", id, summary);
         let start = compute_start_date(wp_sim, project, &wp_sim_by_id, report.start_date)?;
         let end = wp_sim.percentiles.p85.end_date;
+        let status = get_issue_by_simulation(wp_sim, project)
+            .and_then(|issue| issue.status.as_ref());
+        
+        let status_prefix = match status {
+            Some(IssueStatus::Done) => "done, ",
+            Some(IssueStatus::InProgress) => "active, ",
+            _ => "",
+        };
 
         if wp_sim.is_milestone {
             lines.push(format!(
@@ -100,7 +109,7 @@ pub fn generate_simulation_gantt_markdown(
             ));
         } else {
             lines.push(format!(
-                "    {label} :{id}, {start}, {end}",
+                "    {label} :{status_prefix}{id}, {start}, {end}",
                 start = start.format("%Y-%m-%d"),
                 end = end.format("%Y-%m-%d"),
             ));
@@ -117,10 +126,7 @@ fn compute_start_date(
     wp_sim_by_id: &HashMap<&str, &WorkPackageSimulation>,
     default_date: NaiveDate,
 ) -> Result<NaiveDate, SimulationGanttError> {
-    let issue = project
-        .work_packages
-        .iter()
-        .find(|wp| wp.issue_id.as_ref().map(|id| id.id.as_str()) == Some(wp_sim.id.as_str()));
+    let issue = get_issue_by_simulation(wp_sim, project);
 
     if let Some(issue) = issue {
         if let Some(status) = issue.status.as_ref() {
@@ -148,6 +154,16 @@ fn compute_start_date(
         .map(|dep_wp| dep_wp.percentiles.p85.end_date)
         .max()
         .unwrap_or(default_date))
+}
+
+fn get_issue_by_simulation<'a>(
+    wp_sim: &WorkPackageSimulation,
+    project: &'a Project,
+) -> Option<&'a Issue> {
+    project
+        .work_packages
+        .iter()
+        .find(|wp| wp.issue_id.as_ref().map(|id| id.id.as_str()) == Some(wp_sim.id.as_str()))
 }
 
 #[cfg(test)]
@@ -468,8 +484,8 @@ mod tests {
 
         let md = generate_simulation_gantt_markdown(&project, &report).unwrap();
 
-        assert!(md.contains(":WP1, 2026-01-10, 2026-01-20"));
-        assert!(md.contains(":WP2, 2026-01-21, 2026-01-25"));
+        assert!(md.contains(":done, WP1, 2026-01-10, 2026-01-20"));
+        assert!(md.contains(":active, WP2, 2026-01-21, 2026-01-25"));
         assert!(md.contains(":WP3, 2026-01-25, 2026-01-30"));
     }
 }
