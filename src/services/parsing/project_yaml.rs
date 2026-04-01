@@ -10,7 +10,7 @@ use crate::domain::estimate::{
 use crate::domain::issue::{Issue, IssueId};
 use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
-use crate::domain::validation::project_validation::{ProjectValidationError, validate_project};
+use crate::domain::validation::project_validation::{ValidationErrors, validate_project};
 use crate::services::parsing::simulation_report_yaml::{
     ReportParseError, load_simulation_report_from_file,
 };
@@ -35,8 +35,8 @@ pub enum ProjectYamlError {
         #[source]
         source: ReportParseError,
     },
-    #[error("project validation failed")]
-    Validation(Vec<ProjectValidationError>),
+    #[error("{0}")]
+    Validation(#[from] ValidationErrors),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -128,7 +128,7 @@ pub fn deserialize_project_from_yaml_str(
         work_packages,
     };
 
-    validate_project(&project).map_err(ProjectYamlError::Validation)?;
+    validate_project(&project)?;
 
     Ok(project)
 }
@@ -313,6 +313,7 @@ mod tests {
     use super::*;
     use crate::domain::estimate::Estimate;
     use crate::domain::issue::IssueId;
+    use crate::domain::validation::project_validation::ProjectValidationError;
     use std::fs;
 
     #[test]

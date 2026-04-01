@@ -12,10 +12,26 @@ use forecasts::commands::plot_simulation_gantt_cmd::plot_simulation_gantt_comman
 use forecasts::commands::plot_throughput_cmd::plot_throughput_command;
 use forecasts::commands::simulate_cmd::simulate_command;
 use forecasts::commands::simulate_n_cmd::simulate_n_command;
+use forecasts::commands::CommandResult;
 use std::io;
 
 fn main() {
     let args = CliArgs::parse();
+
+    match run_command(args) {
+        Ok(lines) => {
+            for line in lines {
+                println!("{line}");
+            }
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn run_command(args: CliArgs) -> CommandResult {
     match args.command {
         Commands::Get { command } => match command {
             GetCommands::Throughput(args) => get_throughput_command(args),
@@ -33,9 +49,7 @@ fn main() {
             SimulateCommands::Throughput(args) => simulate_n_command(args),
         },
         Commands::Util { command } => match command {
-            UtilCommands::GitHash => {
-                println!("Git Hash: {}", env!("GIT_HASH"));
-            }
+            UtilCommands::GitHash => Ok(vec![format!("Git Hash: {}", env!("GIT_HASH"))]),
             UtilCommands::Completions(args) => {
                 let mut cmd = CliArgs::command();
                 clap_complete::generate(
@@ -44,6 +58,7 @@ fn main() {
                     env!("CARGO_PKG_NAME"),
                     &mut io::stdout(),
                 );
+                Ok(Vec::new())
             }
         },
     }

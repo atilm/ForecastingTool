@@ -1,57 +1,30 @@
 use crate::commands::base_commands::GetThroughputArgs;
+use crate::commands::{CommandError, CommandResult};
 use crate::services::data_converter::DataConverter;
 use crate::services::data_source::DataQuery;
 use crate::services::jira_api::{AuthData, JiraApiClient, JiraConfigParser};
 use crate::services::parsing::throughput_yaml::serialize_throughput_to_yaml;
 
-pub fn get_throughput_command(args: GetThroughputArgs) {
-    println!("This is the get_throughput command");
+pub fn get_throughput_command(args: GetThroughputArgs) -> CommandResult {
     let GetThroughputArgs { config, output } = args;
     let config_parser = JiraConfigParser;
-    let jira_project = match config_parser.parse(&config) {
-        Ok(cfg) => cfg,
-        Err(e) => {
-            eprintln!("Failed to parse Jira config: {e:?}");
-            return;
-        }
-    };
+    let jira_project = config_parser
+        .parse(&config)
+        .map_err(CommandError::ParseJiraConfig)?;
 
-    // Load auth from env
-    let auth = match AuthData::from_env() {
-        Ok(auth) => auth,
-        Err(e) => {
-            eprintln!("Failed to load Jira auth: {e:?}");
-            return;
-        }
-    };
-    // Create JiraApiClient
-    let api_client = match JiraApiClient::new(jira_project.clone(), auth) {
-        Ok(client) => client,
-        Err(e) => {
-            eprintln!("Failed to create JiraApiClient: {e:?}");
-            return;
-        }
-    };
+    let auth = AuthData::from_env().map_err(CommandError::LoadJiraAuth)?;
+    let api_client = JiraApiClient::new(jira_project.clone(), auth)
+        .map_err(CommandError::CreateJiraApiClient)?;
+
     let data_converter = DataConverter::new(Box::new(api_client));
-    // Fetch throughput data
-    let throughput = match data_converter
+    let throughput = data_converter
         .get_throughput_data(DataQuery::StringQuery(jira_project.throughput_query))
-    {
-        Ok(data) => data,
-        Err(e) => {
-            eprintln!("Failed to get throughput data: {e:?}");
-            return;
-        }
-    };
-    // Serialize to YAML
+        .map_err(CommandError::GetThroughputData)?;
+
     let mut buffer = Vec::new();
-    if let Err(e) = serialize_throughput_to_yaml(&mut buffer, &throughput) {
-        eprintln!("Failed to serialize throughput to YAML: {e:?}");
-        return;
-    }
-    if let Err(e) = std::fs::write(&output, buffer) {
-        eprintln!("Failed to write output file: {e:?}");
-    } else {
-        println!("Throughput data written to {output}");
-    }
+    serialize_throughput_to_yaml(&mut buffer, &throughput)
+        .map_err(CommandError::SerializeThroughput)?;
+    std::fs::write(&output, buffer).map_err(CommandError::WriteOutput)?;
+
+    Ok(vec![format!("Throughput data written to {output}")])
 }

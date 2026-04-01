@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fmt;
+use std::ops::Deref;
 
 use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
@@ -20,7 +21,7 @@ impl fmt::Display for DateType {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum ProjectValidationError {
     #[error("Duplicate issue id: {0}")]
     DuplicateIssueId(String),
@@ -40,7 +41,33 @@ pub enum ProjectValidationError {
     },
 }
 
-pub fn validate_project(project: &Project) -> Result<(), Vec<ProjectValidationError>> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidationErrors(pub Vec<ProjectValidationError>);
+
+impl fmt::Display for ValidationErrors {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "project has {} validation error(s):", self.0.len())?;
+        for (index, error) in self.0.iter().enumerate() {
+            write!(f, "  - {error}")?;
+            if index + 1 < self.0.len() {
+                writeln!(f)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for ValidationErrors {}
+
+impl Deref for ValidationErrors {
+    type Target = [ProjectValidationError];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+pub fn validate_project(project: &Project) -> Result<(), ValidationErrors> {
     let mut errors = Vec::new();
     let mut seen_ids: HashSet<&str> = HashSet::new();
 
@@ -80,7 +107,7 @@ pub fn validate_project(project: &Project) -> Result<(), Vec<ProjectValidationEr
     if errors.is_empty() {
         Ok(())
     } else {
-        Err(errors)
+        Err(ValidationErrors(errors))
     }
 }
 
