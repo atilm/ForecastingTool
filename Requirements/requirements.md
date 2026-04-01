@@ -1,17 +1,6 @@
 # ToDos
 
-* [ ] Is there a way to implement validation error output at one place only and reuse it automatically?
-* [ ] Project Validation
-  * [ ] No duplicate IDs
-  * [ ] Referenced Ids are missing
-  * [ ] (Circular dependencies)
-  * [ ] Status Done -> start_date and end_date must be set
-  * [ ] Status In Progress -> start_date must be set
-  * [ ] start_date set -> status must be In Progress or Done
-  * [ ] end_date set -> status must be Done
 * [ ] Info Message, when a standard / explicit calendar is applied and when not
-* [ ] Output errors to stderr
-* [ ] Improve error reporting in project_yaml.rs
 * [ ] Milestone tracking yaml and plot as output of simulation
 
 * [ ] Write a readme
