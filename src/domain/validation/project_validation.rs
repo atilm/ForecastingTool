@@ -3,7 +3,6 @@ use std::fmt;
 use std::ops::Deref;
 
 use crate::domain::issue_status::IssueStatus;
-use crate::domain::issue::Issue;
 use crate::domain::project::Project;
 use thiserror::Error;
 
@@ -70,47 +69,10 @@ impl Deref for ValidationErrors {
 
 pub fn validate_project(project: &Project) -> Result<(), ValidationErrors> {
     let mut errors = Vec::new();
-    let mut seen_ids: HashSet<&str> = HashSet::new();
-
-    for issue in &project.work_packages {
-        let Some(issue_id) = issue.issue_id.as_ref() else {
-            continue;
-        };
-
-        if !seen_ids.insert(&issue_id.id) {
-            errors.push(ProjectValidationError::DuplicateIssueId(
-                issue_id.id.clone(),
-            ));
-        }
-
-        let id = issue
-            .issue_id
-            .as_ref()
-            .map(|value| value.id.clone())
-            .unwrap_or_default();
-
-        if let Some(dependencies) = issue.dependencies.as_ref() {
-            for dependency in dependencies {
-                if !seen_ids.contains(dependency.id.as_str()) {
-                    errors.push(ProjectValidationError::NonExistingDependency(format!(
-                        "{} -> {}",
-                        id, dependency.id
-                    )));
-                }
-            }
-        }
-
-        if let Some(status) = issue.status.clone() {
-            validate_status_dates(
-                &id,
-                &status,
-                issue.start_date.is_some(),
-                issue.done_date.is_some(),
-                &mut errors,
-            );
-        }
-    }
-
+    let all_ids = collect_all_issue_ids(project);
+    validate_no_duplicate_ids(project, &mut errors);
+    validate_dependency_references(project, &all_ids, &mut errors);
+    validate_issue_statuses(project, &mut errors);
     if errors.is_empty() {
         Ok(())
     } else {
@@ -118,6 +80,63 @@ pub fn validate_project(project: &Project) -> Result<(), ValidationErrors> {
     }
 }
 
+fn collect_all_issue_ids<'a>(project: &'a Project) -> HashSet<&'a str> {
+    project
+        .work_packages
+        .iter()
+        .filter_map(|issue| issue.issue_id.as_ref())
+        .map(|id| id.id.as_str())
+        .collect()
+}
+
+fn validate_no_duplicate_ids(project: &Project, errors: &mut Vec<ProjectValidationError>) {
+    let mut seen: HashSet<&str> = HashSet::new();
+    for issue in &project.work_packages {
+        let Some(issue_id) = issue.issue_id.as_ref() else {
+            continue;
+        };
+        if !seen.insert(issue_id.id.as_str()) {
+            errors.push(ProjectValidationError::DuplicateIssueId(issue_id.id.clone()));
+        }
+    }
+}
+
+fn validate_dependency_references(
+    project: &Project,
+    all_ids: &HashSet<&str>,
+    errors: &mut Vec<ProjectValidationError>,
+) {
+    for issue in &project.work_packages {
+        let id = issue
+            .issue_id
+            .as_ref()
+            .map(|value| value.id.as_str())
+            .unwrap_or("");
+        if let Some(dependencies) = issue.dependencies.as_ref() {
+            for dependency in dependencies {
+                if !all_ids.contains(dependency.id.as_str()) {
+                    errors.push(ProjectValidationError::NonExistingDependency(format!(
+                        "{} -> {}",
+                        id, dependency.id
+                    )));
+                }
+            }
+        }
+    }
+}
+
+fn validate_issue_statuses(project: &Project, errors: &mut Vec<ProjectValidationError>) {
+    for issue in &project.work_packages {
+        let id = issue
+            .issue_id
+            .as_ref()
+            .map(|value| value.id.clone())
+            .unwrap_or_default();
+        if let Some(status) = &issue.status {
+            validate_status_dates(&id, status, issue.start_date.is_some(), issue.done_date.is_some(), errors);
+        }
+    }
+}
 
 fn validate_status_dates(
     id: &str,
