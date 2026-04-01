@@ -1,35 +1,26 @@
 # ToDos
 
-* [ ] Status InProgress or Done and no start date should trigger an error
-* [ ] Start-Date or End-Date set and non-matching status should also be an error
-* [ ] Projects should either be all-story-points or no story-points
-* [x] ~~Show InProgress Status in Gantt Diagram~~
-* [x] I would like to be able to see InProgress tasks in the Gantt diagram with their actual start date and their currently estimated end date
-  * Problem at the moment: report files of sub-projects contain only the remaining number of days
-  * ~~This leads to the master simulation being wrong, when a start-date for InProgress tasks is specified~~
-    * START-DATES ARE ALSO SPECIFIED IMPLICITLY THROUGH DEPENDENCIES!
-      * -> When using references the end date is the START DATE UNDTIL TODAY + THE SIMULATED REMAINING TIME
-      * in project_yaml.rs estimate_from_record could perform this conversion
-  * [x] Also done issues are not handled correctly in simulation_gantt.rs compute_start_date -> a set start date of the record is ignored
-    * In the gantt, the end-date is then before the start-date
+* [ ] Is there a way to implement validation error output at one place only and reuse it automatically?
+* [ ] Project Validation
+  * [ ] No duplicate IDs
+  * [ ] Referenced Ids are missing
+  * [ ] (Circular dependencies)
+  * [ ] Status Done -> start_date and end_date must be set
+  * [ ] Status In Progress -> start_date must be set
+  * [ ] start_date set -> status must be In Progress or Done
+  * [ ] end_date set -> status must be Done
+* [ ] Info Message, when a standard / explicit calendar is applied and when not
 * [ ] Output errors to stderr
-* [x] ~~Plot capacity in burn-down chart (perhaps background-transparency mapped to capacity)~~
-* [ ] Milestone tracking yaml and plot as output of simulation
 * [ ] Improve error reporting in project_yaml.rs
+* [ ] Milestone tracking yaml and plot as output of simulation
 
-* [ ] If possible, make it easier to configure project simulations.
-  * [x] ~~Add explicit milestones~~
-  * [x] ~~Add simulation steps with fixed duration~~ -> Done by three-point estimates with equal values
-  * [ ] Cases
-    * [ ] Simulate subproject based on story-points
-    * [ ] Simulate subproject based on throughput
-    * [ ] Simulate subproject based on three-point estimations
-    * [ ] Use multiple calendars to simulate increase of team size (e.g. 2 files to 3 files to increase velocity by factor 1.5)
-    * [ ] Simulate master project file with three-point estimations and references
-
-* [x] ~~Modify the CLI to use subcommands~~
-* [.] Group services by command in directories
 * [ ] Write a readme
+    * [ ] Cases
+      * [ ] Simulate subproject based on story-points
+      * [ ] Simulate subproject based on throughput
+      * [ ] Simulate subproject based on three-point estimations
+      * [ ] Use multiple calendars to simulate increase of team size (e.g. 2 files to 3 files to increase velocity by factor 1.5)
+      * [ ] Simulate master project file with three-point estimations and references
 * [ ] CI/CD
 * [ ] Simulate in parallel
 * [ ] Use the anyhow crate

@@ -10,6 +10,7 @@ use crate::domain::estimate::{
 use crate::domain::issue::{Issue, IssueId};
 use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
+use crate::domain::validation::project_validation::{ProjectValidationError, validate_project};
 use crate::services::parsing::simulation_report_yaml::{
     ReportParseError, load_simulation_report_from_file,
 };
@@ -34,6 +35,8 @@ pub enum ProjectYamlError {
         #[source]
         source: ReportParseError,
     },
+    #[error("project validation failed")]
+    Validation(Vec<ProjectValidationError>),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -120,10 +123,14 @@ pub fn deserialize_project_from_yaml_str(
         work_packages.push(issue);
     }
 
-    Ok(Project {
+    let project = Project {
         name: record.name,
         work_packages,
-    })
+    };
+
+    validate_project(&project).map_err(ProjectYamlError::Validation)?;
+
+    Ok(project)
 }
 
 pub fn serialize_project_to_yaml<W: Write>(writer: &mut W, project: &Project) -> io::Result<()> {
@@ -358,7 +365,7 @@ work_packages:
     status: Done
     start_date: 2026-01-02
     done_date: 2026-01-05
-    dependencies: [ABC-0]
+    dependencies: null
 "#;
 
         let project = deserialize_project_from_yaml_str(yaml, &None).unwrap();
@@ -366,7 +373,7 @@ work_packages:
         assert_eq!(project.name, "Demo");
         assert_eq!(issue.issue_id.as_ref().unwrap().id, "ABC-1");
         assert!(matches!(issue.status, Some(IssueStatus::Done)));
-        assert_eq!(issue.dependencies.as_ref().unwrap().len(), 1);
+        assert!(issue.dependencies.is_none());
         assert!(matches!(
             issue.estimate,
             Some(Estimate::StoryPoint(StoryPointEstimate {
@@ -487,6 +494,42 @@ work_packages:
 
         let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
         assert!(matches!(error, ProjectYamlError::MissingPreviousDependency));
+    }
+
+    #[test]
+    fn deserialize_project_reports_validation_errors() {
+        let yaml = r#"
+name: Demo
+work_packages:
+  - id: ABC-1
+    status: inprogress
+  - id: ABC-2
+    dependencies: [ABC-404]
+"#;
+
+        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
+        match error {
+            ProjectYamlError::Validation(errors) => {
+                assert!(errors.iter().any(|value| {
+                    matches!(
+                        value,
+                        ProjectValidationError::InvalidIssueStatus {
+                            id,
+                            status: IssueStatus::InProgress,
+                            date_type: crate::domain::validation::project_validation::DateType::StartDate
+                        } if id == "ABC-1"
+                    )
+                }));
+                assert!(errors.iter().any(|value| {
+                    matches!(
+                        value,
+                        ProjectValidationError::NonExistingDependency(link)
+                        if link == "ABC-2 -> ABC-404"
+                    )
+                }));
+            }
+            _ => panic!("expected project validation errors"),
+        }
     }
 
     #[test]

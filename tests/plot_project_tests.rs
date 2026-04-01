@@ -10,6 +10,8 @@ work_packages:
   - id: WP1
     summary: Work package 1
     status: done
+    start_date: 2026-01-01
+    done_date: 2026-01-05
     description: |
       This is
       work package 1.
@@ -20,6 +22,7 @@ work_packages:
   - id: WP2
     summary: Work package 2
     status: inprogress
+    start_date: 2026-01-06
     dependencies: [WP1]
     estimate:
       type: three_point

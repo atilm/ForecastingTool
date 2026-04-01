@@ -281,6 +281,7 @@ name: Demo
 work_packages:
   - id: DONE-1
     status: Done
+    start_date: 2026-02-25
     done_date: 2026-03-01
     estimate:
       type: story_points

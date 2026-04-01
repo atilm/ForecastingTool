@@ -9,6 +9,7 @@ name: Demo
 work_packages:
   - id: DONE-1
     status: Done
+    start_date: 2026-02-25
     done_date: 2026-03-01
     estimate:
       type: story_points
@@ -17,6 +18,7 @@ work_packages:
     status: ToDo
   - id: INP-1
     status: InProgress
+    start_date: 2026-03-02
     estimate:
       type: story_points
       value: 2
@@ -119,6 +121,7 @@ name: Demo
 work_packages:
   - id: DONE-1
     status: Done
+    start_date: 2026-02-25
     done_date: 2026-03-01
     estimate:
       type: story_points
