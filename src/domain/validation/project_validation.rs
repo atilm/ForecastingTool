@@ -3,20 +3,21 @@ use std::fmt;
 use std::ops::Deref;
 
 use crate::domain::issue_status::IssueStatus;
+use crate::domain::issue::Issue;
 use crate::domain::project::Project;
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DateType {
     StartDate,
-    EndDate,
+    DoneDate,
 }
 
 impl fmt::Display for DateType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DateType::StartDate => write!(f, "start_date"),
-            DateType::EndDate => write!(f, "done_date"),
+            DateType::DoneDate => write!(f, "done_date"),
         }
     }
 }
@@ -77,11 +78,11 @@ pub fn validate_project(project: &Project) -> Result<(), ValidationErrors> {
         };
 
         if !seen_ids.insert(&issue_id.id) {
-            errors.push(ProjectValidationError::DuplicateIssueId(issue_id.id.clone()));
+            errors.push(ProjectValidationError::DuplicateIssueId(
+                issue_id.id.clone(),
+            ));
         }
-    }
 
-    for issue in &project.work_packages {
         let id = issue
             .issue_id
             .as_ref()
@@ -100,7 +101,13 @@ pub fn validate_project(project: &Project) -> Result<(), ValidationErrors> {
         }
 
         if let Some(status) = issue.status.clone() {
-            validate_status_dates(&id, &status, issue.start_date.is_some(), issue.done_date.is_some(), &mut errors);
+            validate_status_dates(
+                &id,
+                &status,
+                issue.start_date.is_some(),
+                issue.done_date.is_some(),
+                &mut errors,
+            );
         }
     }
 
@@ -110,6 +117,7 @@ pub fn validate_project(project: &Project) -> Result<(), ValidationErrors> {
         Err(ValidationErrors(errors))
     }
 }
+
 
 fn validate_status_dates(
     id: &str,
@@ -131,7 +139,7 @@ fn validate_status_dates(
                 errors.push(ProjectValidationError::UnexpectedIssueDate {
                     id: id.to_string(),
                     status: IssueStatus::ToDo,
-                    date_type: DateType::EndDate,
+                    date_type: DateType::DoneDate,
                 });
             }
         }
@@ -147,7 +155,7 @@ fn validate_status_dates(
                 errors.push(ProjectValidationError::UnexpectedIssueDate {
                     id: id.to_string(),
                     status: IssueStatus::InProgress,
-                    date_type: DateType::EndDate,
+                    date_type: DateType::DoneDate,
                 });
             }
         }
@@ -163,7 +171,7 @@ fn validate_status_dates(
                 errors.push(ProjectValidationError::InvalidIssueStatus {
                     id: id.to_string(),
                     status: IssueStatus::Done,
-                    date_type: DateType::EndDate,
+                    date_type: DateType::DoneDate,
                 });
             }
         }
@@ -208,9 +216,9 @@ mod tests {
         };
 
         let errors = validate_project(&project).unwrap_err();
-        assert!(errors
-            .iter()
-            .any(|error| matches!(error, ProjectValidationError::DuplicateIssueId(id) if id == "ABC-1")));
+        assert!(errors.iter().any(
+            |error| matches!(error, ProjectValidationError::DuplicateIssueId(id) if id == "ABC-1")
+        ));
     }
 
     #[test]
@@ -237,6 +245,10 @@ mod tests {
         todo.status = Some(IssueStatus::ToDo);
         todo.start_date = NaiveDate::from_ymd_opt(2026, 1, 1);
 
+        let mut todo_2 = make_issue("TODO-2");
+        todo_2.status = Some(IssueStatus::ToDo);
+        todo_2.done_date = NaiveDate::from_ymd_opt(2026, 1, 1);
+
         let mut in_progress = make_issue("IP-1");
         in_progress.status = Some(IssueStatus::InProgress);
 
@@ -246,7 +258,7 @@ mod tests {
 
         let project = Project {
             name: "Demo".to_string(),
-            work_packages: vec![todo, in_progress, done],
+            work_packages: vec![todo, todo_2, in_progress, done],
         };
 
         let errors = validate_project(&project).unwrap_err();
@@ -259,6 +271,16 @@ mod tests {
                     status: IssueStatus::ToDo,
                     date_type: DateType::StartDate
                 } if id == "TODO-1"
+            )
+        }));
+        assert!(errors.iter().any(|error| {
+            matches!(
+                error,
+                ProjectValidationError::UnexpectedIssueDate {
+                    id,
+                    status: IssueStatus::ToDo,
+                    date_type: DateType::DoneDate
+                } if id == "TODO-2"
             )
         }));
         assert!(errors.iter().any(|error| {
@@ -277,7 +299,7 @@ mod tests {
                 ProjectValidationError::InvalidIssueStatus {
                     id,
                     status: IssueStatus::Done,
-                    date_type: DateType::EndDate
+                    date_type: DateType::DoneDate
                 } if id == "DONE-1"
             )
         }));
