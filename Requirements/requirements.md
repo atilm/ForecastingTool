@@ -1,7 +1,9 @@
 # ToDos
 
+* [x] ~Allow ToDo tasks with set start date to set start-dates manually~
 * [ ] Info Message, when a standard / explicit calendar is applied and when not
-* [ ] Milestone tracking yaml and plot as output of simulation
+* [ ] When simulation is started with option -m, then the milestone percentiles are recorded in a file
+    * [ ] Another plot command will plot a milestone tracking graph with error bars (perhaps this is a python command with matplotlib output...)
 
 * [ ] Write a readme
     * [ ] Cases

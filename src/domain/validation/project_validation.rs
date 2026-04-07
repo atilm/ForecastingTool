@@ -147,13 +147,6 @@ fn validate_status_dates(
 ) {
     match status {
         IssueStatus::ToDo => {
-            if has_start_date {
-                errors.push(ProjectValidationError::UnexpectedIssueDate {
-                    id: id.to_string(),
-                    status: IssueStatus::ToDo,
-                    date_type: DateType::StartDate,
-                });
-            }
             if has_done_date {
                 errors.push(ProjectValidationError::UnexpectedIssueDate {
                     id: id.to_string(),
@@ -212,6 +205,10 @@ mod tests {
 
     #[test]
     fn validate_project_accepts_valid_project() {
+        let mut todo = make_issue("ABC-0");
+        todo.status = Some(IssueStatus::ToDo);
+        todo.start_date = NaiveDate::from_ymd_opt(2026, 1, 1);
+
         let mut issue = make_issue("ABC-1");
         issue.status = Some(IssueStatus::Done);
         issue.start_date = NaiveDate::from_ymd_opt(2026, 1, 1);
@@ -219,7 +216,7 @@ mod tests {
 
         let project = Project {
             name: "Demo".to_string(),
-            work_packages: vec![issue],
+            work_packages: vec![todo, issue],
         };
 
         assert!(validate_project(&project).is_ok());
@@ -282,7 +279,7 @@ mod tests {
 
         let errors = validate_project(&project).unwrap_err();
 
-        assert!(errors.iter().any(|error| {
+        assert!(!errors.iter().any(|error| {
             matches!(
                 error,
                 ProjectValidationError::UnexpectedIssueDate {
