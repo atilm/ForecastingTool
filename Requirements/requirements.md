@@ -1,7 +1,7 @@
 # ToDos
 
-* [x] ~Allow ToDo tasks with set start date to set start-dates manually~
-* [ ] Info Message, when a standard / explicit calendar is applied and when not
+* [x] ~~Allow ToDo tasks with set start date to set start-dates manually~~
+* [x] ~~Info Message, when a standard / explicit calendar is applied and when not~~
 * [ ] When simulation is started with option -m, then the milestone percentiles are recorded in a file
     * [ ] Another plot command will plot a milestone tracking graph with error bars (perhaps this is a python command with matplotlib output...)
 
@@ -14,6 +14,7 @@
       * [ ] Simulate master project file with three-point estimations and references
 * [ ] CI/CD
 * [ ] Simulate in parallel
+* [ ] Use a logging framework to have configurable verbosity and logging sinks
 * [ ] Use the anyhow crate
 
 # Requirements Specification
@@ -59,7 +60,7 @@
       * [x] ~~different percentiles: 0, 50, 85, 100~~
       * [x] ~~durations in days~~
       * [x] ~~end dates~~
-    * [x]~ `stdout`~
+    * [x]~~ `stdout`~~
       * [x] ~~info from yaml report, plus~~
       * [x] ~~start and completion dates~~
     * [x] ~~Dependency diagram (mermaid)~~
@@ -70,7 +71,7 @@
         * [x] ~~Display duration 0 entries as milestones in Gantt diagram~~
     * [x] ~~Histogram (`png`)~~
     * [x]~~ Plot box plot diagram of milestone finish percentiles (labels are not aligned yet)~~
-    * [ ] Burn down chart (`png`)
+    * [x] ~~Burn down chart (`png`)~~
   * [ ] Extra tool to update the project Readme
     * [ ] List of risks
     * [ ] Essential Gantt chart

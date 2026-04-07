@@ -52,8 +52,10 @@ pub fn load_team_calendar_if_provided(
     calendar_path: Option<&str>,
 ) -> Result<TeamCalendar, TeamCalendarYamlError> {
     if let Some(path) = calendar_path {
+        println!("Loading team calendar from directory: {}", path);
         Ok(load_team_calendar_from_yaml_dir(path)?)
     } else {
+        println!("No team calendar path provided, creating default calendar with free weekends");
         Ok(TeamCalendar::new())
     }
 }

@@ -111,8 +111,10 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     let mut samples_by_id: HashMap<String, Vec<WorkItemSample>> = HashMap::new();
     let mut project_end_dates = Vec::with_capacity(iterations);
     let calendar_option = if project.has_story_points() {
+        println!("Project contains story points, using calendar the calendar.");
         Some(calendar)
     } else {
+        println!("Project does not contain story points, ignoring calendar.");
         None
     };
 
