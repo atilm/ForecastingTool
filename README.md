@@ -1,8 +1,11 @@
 # ForecastingTool
 
 [![CI](https://github.com/atilm/ForecastingTool/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/atilm/ForecastingTool/actions/workflows/ci.yml)
+[![Docs](https://github.com/atilm/ForecastingTool/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/atilm/ForecastingTool/actions/workflows/docs.yml)
 
 A project estimation and forecasting tool using monte carlo simulations
+
+User documentation: https://atilm.github.io/ForecastingTool/
 
 ## Simulation by story points
 

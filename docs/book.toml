@@ -1,0 +1,13 @@
+[book]
+title = "ForecastingTool User Guide"
+authors = ["ForecastingTool Contributors"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "light"
+git-repository-url = "https://github.com/atilm/ForecastingTool"
+site-url = "/ForecastingTool/"
