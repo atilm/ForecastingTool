@@ -1,4 +1,7 @@
 # ForecastingTool
+
+[![CI](https://github.com/atilm/ForecastingTool/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/atilm/ForecastingTool/actions/workflows/ci.yml)
+
 A project estimation and forecasting tool using monte carlo simulations
 
 ## Simulation by story points
@@ -17,3 +20,7 @@ Structure your `project.yaml` like this:
 forecasts util completions bash > ~/.local/share/bash-completion/completions/forecasts
 source ~/.local/share/bash-completion/completions/forecasts
 ```
+
+## Publishing releases
+
+To publish a release, push a tag like git tag v1.0.0 && git push origin v1.0.0.
