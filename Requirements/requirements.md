@@ -2,6 +2,13 @@
 
 * [x] ~~Allow ToDo tasks with set start date to set start-dates manually~~
 * [x] ~~Info Message, when a standard / explicit calendar is applied and when not~~
+
+* [ ] Output error messages in RED
+
+* [.] When referencing simulations from subprojects, sample durations from a complete histogram written to a file.
+      Deducing a theoretical PERT distribution from the p0,p50,p100 percentiles does not always yield the same results
+      as the detailed simulation itself.
+
 * [ ] When simulation is started with option -m, then the milestone percentiles are recorded in a file
     * [ ] Another plot command will plot a milestone tracking graph with error bars (perhaps this is a python command with matplotlib output...)
 

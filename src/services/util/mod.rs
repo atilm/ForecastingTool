@@ -1,3 +1,5 @@
+pub(crate) mod histogram;
+
 /// This function extracts the file name from a given path.
 /// If the path does not contain a valid file name, it returns the original path as a string.
 pub fn data_source_name(path: &str) -> String {
