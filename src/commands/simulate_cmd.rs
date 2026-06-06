@@ -1,9 +1,11 @@
 use crate::commands::base_commands::SimulateProjectArgs;
 use crate::commands::report_format::format_simulation_report;
 use crate::commands::{CommandError, CommandResult};
+use crate::services::parsing::histogram_yaml::serialize_histogram_to_yaml_file;
 use crate::services::plotting::histogram::write_histogram_png;
 use crate::services::plotting::milestone_plot::write_milestone_plot_png;
 use crate::services::project_simulation::project_simulation::simulate_project_from_yaml_file;
+use crate::services::util::histogram::Histogram;
 
 pub fn simulate_command(args: SimulateProjectArgs) -> CommandResult {
     let SimulateProjectArgs {
@@ -18,11 +20,25 @@ pub fn simulate_command(args: SimulateProjectArgs) -> CommandResult {
         .map_err(CommandError::SimulateProject)?;
 
     let histogram_path = format!("{output}.png");
+    let histogram_yaml_path = format!("{output}.histogram.yaml");
     let mut messages = Vec::new();
 
-    match write_histogram_png(&histogram_path, &simulation.results) {
-        Ok(()) => messages.push(format!("Simulation histogram written to {histogram_path}")),
-        Err(error) => messages.push(format!("Warning: failed to write simulation histogram: {error}")),
+    match Histogram::create(&simulation.results) {
+        Ok(histogram) => {
+            match serialize_histogram_to_yaml_file(&histogram_yaml_path, &histogram) {
+                Ok(()) => messages.push(format!("Simulation histogram written to {histogram_yaml_path}")),
+                Err(error) => {
+                    messages.push(format!("Warning: failed to write simulation histogram yaml: {error}"))
+                }
+            }
+
+            match write_histogram_png(&histogram_path, &histogram) {
+                Ok(()) => messages.push(format!("Simulation histogram written to {histogram_path}")),
+                Err(error) => messages
+                    .push(format!("Warning: failed to write simulation histogram png: {error}")),
+            }
+        }
+        Err(error) => messages.push(format!("Warning: failed to build simulation histogram: {error}")),
     }
 
     let milestone_plot_path = format!("{output}.milestones.png");

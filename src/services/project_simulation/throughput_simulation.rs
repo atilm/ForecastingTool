@@ -3,7 +3,11 @@ use crate::domain::throughput::Throughput;
 use crate::services::parsing::throughput_yaml::{
     ThroughputYamlError, deserialize_throughput_from_yaml_str,
 };
+use crate::services::parsing::histogram_yaml::HistogramYamlError;
+use crate::services::parsing::histogram_yaml::serialize_histogram_to_yaml_file;
 use crate::services::util::data_source_name;
+use crate::services::util::histogram::Histogram;
+use crate::services::util::histogram::HistogramError as BuildHistogramError;
 use chrono::NaiveDate;
 use rand::Rng;
 use rand::seq::SliceRandom;
@@ -12,7 +16,7 @@ use thiserror::Error;
 use crate::services::parsing::team_calendar_yaml::{
     TeamCalendarYamlError, load_team_calendar_if_provided,
 };
-use crate::services::plotting::histogram::{HistogramError, write_histogram_png};
+use crate::services::plotting::histogram::{HistogramError as PlotHistogramError, write_histogram_png};
 use crate::services::project_simulation::percentiles;
 use crate::services::project_simulation::simulation_types::{
     SimulationOutput, SimulationPercentile, SimulationReport,
@@ -33,8 +37,12 @@ pub enum SimulationError {
     ZeroThroughput,
     #[error("failed to read team calendar yaml: {0}")]
     ReadCalendar(#[from] TeamCalendarYamlError),
+    #[error("failed to build histogram: {0}")]
+    BuildHistogram(#[from] BuildHistogramError),
+    #[error("failed to serialize histogram yaml: {0}")]
+    HistogramYaml(#[from] HistogramYamlError),
     #[error("failed to render histogram: {0}")]
-    Histogram(#[from] HistogramError),
+    Histogram(#[from] PlotHistogramError),
 }
 
 pub(crate) fn simulate_from_throughput_file(
@@ -58,7 +66,11 @@ pub(crate) fn simulate_from_throughput_file(
         &calendar,
     )?;
     simulation.report.data_source = data_source_name(throughput_path);
-    write_histogram_png(histogram_path, &simulation.results)?;
+    let histogram = Histogram::create(&simulation.results)?;
+    let histogram_yaml_path = std::path::Path::new(histogram_path).with_extension("yaml");
+    let histogram_yaml_path = histogram_yaml_path.to_string_lossy().to_string();
+    serialize_histogram_to_yaml_file(&histogram_yaml_path, &histogram)?;
+    write_histogram_png(histogram_path, &histogram)?;
     Ok(simulation.report)
 }
 
@@ -268,8 +280,9 @@ mod tests {
             .unwrap()
             .as_nanos();
         let dir = std::env::temp_dir();
-        let input_path = dir.join(format!("throughput-{nanos}.yaml"));
-        let histogram_path = dir.join(format!("throughput-{nanos}.png"));
+        let input_path = dir.join(format!("throughput-input-{nanos}.yaml"));
+        let histogram_path = dir.join(format!("throughput-histogram-{nanos}.png"));
+        let histogram_yaml_path = dir.join(format!("throughput-histogram-{nanos}.yaml"));
         let yaml = "- date: 2026-01-01\n  completed_issues: 2\n";
         std::fs::write(&input_path, yaml).unwrap();
 
@@ -289,5 +302,7 @@ mod tests {
         );
         assert_eq!(report.iterations, 7);
         assert_eq!(report.velocity, None);
+        assert!(histogram_path.exists());
+        assert!(histogram_yaml_path.exists());
     }
 }
