@@ -77,6 +77,7 @@ impl Histogram {
     }
 
     /// Build the alias table using Vose's algorithm.
+    /// See: https://www.keithschwarz.com/darts-dice-coins/
     /// Returns (alias_prob, alias_bin) where:
     /// - alias_prob[i] is the probability of using bin i (vs its alias)
     /// - alias_bin[i] is the index of the alias bin for bin i
