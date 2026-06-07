@@ -53,12 +53,12 @@ pub fn serialize_histogram_to_yaml<W: Write>(
 
 pub fn deserialize_histogram_from_yaml_str(input: &str) -> Result<Histogram, HistogramYamlError> {
     let record: HistogramRecord = serde_yaml::from_str(input)?;
-    Ok(Histogram {
-        min_value: record.min_value,
-        max_value: record.max_value,
-        bin_width: record.bin_width,
-        bins: record.bins,
-    })
+    Ok(Histogram::from_parts(
+        record.min_value,
+        record.max_value,
+        record.bin_width,
+        record.bins,
+    ))
 }
 
 #[cfg(test)]
@@ -76,12 +76,7 @@ mod tests {
         let temp = assert_fs::TempDir::new().unwrap();
         let file = temp.child("histogram.yaml");
 
-        let histogram = Histogram {
-            min_value: 1.0,
-            max_value: 9.0,
-            bin_width: 4.0,
-            bins: vec![2, 1, 3],
-        };
+        let histogram = Histogram::from_parts(1.0, 9.0, 4.0, vec![2, 1, 3]);
 
         serialize_histogram_to_yaml_file(file.path().to_str().unwrap(), &histogram).unwrap();
 
@@ -123,12 +118,7 @@ bins:
         let temp = assert_fs::TempDir::new().unwrap();
         let file = temp.child("histogram.yaml");
 
-        let original = Histogram {
-            min_value: -3.5,
-            max_value: 8.5,
-            bin_width: 3.0,
-            bins: vec![1, 4, 2, 5],
-        };
+        let original = Histogram::from_parts(-3.5, 8.5, 3.0, vec![1, 4, 2, 5]);
 
         serialize_histogram_to_yaml_file(file.path().to_str().unwrap(), &original).unwrap();
         let deserialized = deserialize_histogram_from_yaml_file(file.path().to_str().unwrap()).unwrap();
