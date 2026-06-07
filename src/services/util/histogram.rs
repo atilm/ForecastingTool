@@ -40,12 +40,9 @@ impl Histogram {
         let min_value = data.iter().cloned().fold(f32::INFINITY, f32::min);
         let max_value = data.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
 
-        let bin_count = (data.len() as f32).sqrt().ceil() as usize;
-        let bin_width = if (max_value - min_value).abs() < f32::EPSILON {
-            1.0
-        } else {
-            (max_value - min_value) / bin_count as f32
-        };
+        // Bin count is the number of days in the data. Therefore the bin width is one day.
+        let bin_count = (max_value - min_value).ceil().max(1.0) as usize;
+        let bin_width = 1.0;
 
         let mut bins: Vec<i32> = vec![0; bin_count];
         for &value in data {
