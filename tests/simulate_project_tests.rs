@@ -196,6 +196,67 @@ work_packages:
 }
 
 #[test]
+fn simulate_project_with_histogram_reference_estimate() {
+    let histogram_file = assert_fs::NamedTempFile::new("histogram.yaml").unwrap();
+  histogram_file
+    .write_str(
+      r#"min_value: 0.0
+max_value: 1.0
+bin_width: 1.0
+bins:
+  - 1
+"#,
+    )
+        .unwrap();
+
+    let project_yaml = format!(
+        r#"
+name: Demo
+work_packages:
+  - id: WP0
+    estimate:
+      type: histogram_reference
+      histogram_file_path: "{}"
+  - id: FIN
+    estimate:
+      type: three_point
+      optimistic: 0
+      most_likely: 0
+      pessimistic: 0
+    dependencies: [WP0]
+"#,
+        histogram_file.path().to_str().unwrap()
+    );
+
+    let input_file = assert_fs::NamedTempFile::new("project.yaml").unwrap();
+    input_file.write_str(&project_yaml).unwrap();
+    let output_file = assert_fs::NamedTempFile::new("simulation.yaml").unwrap();
+
+    let input_arg = input_file.path().to_str().unwrap().to_string();
+    let output_arg = output_file.path().to_str().unwrap().to_string();
+
+    let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
+    cmd.args(&[
+        "simulate",
+        "project",
+        "-i",
+        &input_arg,
+        "-o",
+        &output_arg,
+        "-s",
+        "2026-02-01",
+        "--iterations",
+        "10",
+    ]);
+
+    cmd.assert().success();
+
+    let output = fs::read_to_string(output_file.path()).unwrap();
+    assert!(output.contains("start_date: 2026-02-01"));
+    assert!(output.contains("days: 1.0"));
+}
+
+#[test]
 fn simulate_project_with_calendar_files() {
     let project_yaml = r#"
 name: Demo

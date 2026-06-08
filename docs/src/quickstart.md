@@ -3,6 +3,7 @@
 ## 1. Prepare input data
 
 Create a `project.yaml` file with your issues and estimates.
+See the Project YAML Format page for the supported estimate types, including `story_points`, `three_point`, `reference`, `histogram_reference`, and `milestone`.
 
 ## 2. Run a simulation
 

@@ -1,12 +1,13 @@
 use thiserror::Error;
 use rand::Rng;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum HistogramError {
     #[error("Empty data.")]
     EmptyData,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct HistogramBucket {
     pub lower_bound: f32,
     pub upper_bound: f32,
@@ -25,6 +26,7 @@ pub struct HistogramIntoIter {
     bins: std::vec::IntoIter<i32>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct Histogram {
     pub min_value: f32,
     pub max_value: f32,

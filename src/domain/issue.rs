@@ -37,6 +37,7 @@ impl Issue {
             Estimate::Milestone => None,
             Estimate::ThreePoint(_) => None,
             Estimate::Reference(_) => None,
+            Estimate::HistogramReference(_) => None,
         }
     }
 

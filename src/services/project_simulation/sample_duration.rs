@@ -1,5 +1,6 @@
 use crate::domain::estimate::{
-    Estimate, ReferenceEstimate, StoryPointEstimate, ThreePointEstimate,
+    Estimate, HistogramReferenceEstimate, ReferenceEstimate, StoryPointEstimate,
+    ThreePointEstimate,
 };
 use crate::services::project_simulation::beta_pert_sampler::ThreePointSampler;
 use thiserror::Error;
@@ -24,6 +25,9 @@ pub(crate) fn sample_duration_days<R: ThreePointSampler + ?Sized>(
         Estimate::StoryPoint(estimate) => to_story_point_triplet(estimate, issue_id)?,
         Estimate::ThreePoint(estimate) => to_three_point_triplet(estimate)?,
         Estimate::Reference(estimate) => to_reference_triplet(estimate, issue_id)?,
+        Estimate::HistogramReference(estimate) => {
+            return sample_histogram_duration_days(estimate, sampler, issue_id);
+        }
         Estimate::Milestone => (0.0, 0.0, 0.0, false),
     };
 
@@ -49,6 +53,35 @@ pub(crate) fn sample_duration_days<R: ThreePointSampler + ?Sized>(
     } else {
         Ok(sampled)
     }
+}
+
+fn sample_histogram_duration_days<R: ThreePointSampler + ?Sized>(
+    estimate: &HistogramReferenceEstimate,
+    sampler: &mut R,
+    issue_id: &str,
+) -> Result<f32, SamplingError> {
+    let histogram = estimate.cached_histogram.as_ref().ok_or_else(|| {
+        SamplingError::InvalidEstimate(format!(
+            "Missing referenced histogram: {}",
+            issue_id.to_string()
+        ))
+    })?;
+
+    let sampled = sampler.sample_histogram(histogram).map_err(|_| {
+        SamplingError::InvalidEstimate(format!(
+            "Sampling histogram failed: {}",
+            issue_id.to_string()
+        ))
+    })?;
+
+    if !sampled.is_finite() {
+        return Err(SamplingError::InvalidEstimate(format!(
+            "sample is infinite: {}",
+            issue_id.to_string()
+        )));
+    }
+
+    Ok(sampled + estimate.elapsed_days)
 }
 
 fn to_reference_triplet(
@@ -139,6 +172,32 @@ fn fibonacci_bounds(value: f32) -> (f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::project_simulation::beta_pert_sampler::ThreePointSamplerError;
+    use crate::services::util::histogram::{Histogram, HistogramError};
+
+    struct HistogramSamplerStub {
+        histogram_result: Option<f32>,
+        histogram_error: Option<HistogramError>,
+    }
+
+    impl ThreePointSampler for HistogramSamplerStub {
+        fn sample(
+            &mut self,
+            _optimistic: f32,
+            _most_likely: f32,
+            _pessimistic: f32,
+        ) -> Result<f32, ThreePointSamplerError> {
+            Ok(0.0)
+        }
+
+        fn sample_histogram(&mut self, _histogram: &Histogram) -> Result<f32, HistogramError> {
+            match (self.histogram_result, &self.histogram_error) {
+                (Some(value), _) => Ok(value),
+                (None, Some(HistogramError::EmptyData)) => Err(HistogramError::EmptyData),
+                (None, None) => Ok(0.0),
+            }
+        }
+    }
 
     #[test]
     fn story_point_triplets_span_two_fibonacci_steps() {
@@ -186,5 +245,74 @@ mod tests {
             );
             assert!(is_story_point_estimate);
         }
+    }
+
+    #[test]
+    fn histogram_reference_samples_duration_and_adds_elapsed_days() {
+        let estimate = HistogramReferenceEstimate {
+            histogram_file_path: "histogram.yaml".to_string(),
+            cached_histogram: Some(Histogram::from_parts(2.0, 4.0, 1.0, vec![1, 1])),
+            elapsed_days: 3.0,
+        };
+        let mut sampler = HistogramSamplerStub {
+            histogram_result: Some(4.5),
+            histogram_error: None,
+        };
+
+        let sampled = sample_duration_days(
+            &Estimate::HistogramReference(estimate),
+            None,
+            &mut sampler,
+            "HIST-1",
+        )
+        .unwrap();
+
+        assert_eq!(sampled, 7.5);
+    }
+
+    #[test]
+    fn histogram_reference_requires_cached_histogram() {
+        let estimate = HistogramReferenceEstimate {
+            histogram_file_path: "histogram.yaml".to_string(),
+            cached_histogram: None,
+            elapsed_days: 0.0,
+        };
+        let mut sampler = HistogramSamplerStub {
+            histogram_result: Some(1.0),
+            histogram_error: None,
+        };
+
+        let error = sample_duration_days(
+            &Estimate::HistogramReference(estimate),
+            None,
+            &mut sampler,
+            "HIST-2",
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, SamplingError::InvalidEstimate(message) if message.contains("Missing referenced histogram")));
+    }
+
+    #[test]
+    fn histogram_reference_rejects_non_finite_sample() {
+        let estimate = HistogramReferenceEstimate {
+            histogram_file_path: "histogram.yaml".to_string(),
+            cached_histogram: Some(Histogram::from_parts(0.0, 1.0, 1.0, vec![1])),
+            elapsed_days: 0.0,
+        };
+        let mut sampler = HistogramSamplerStub {
+            histogram_result: Some(f32::INFINITY),
+            histogram_error: None,
+        };
+
+        let error = sample_duration_days(
+            &Estimate::HistogramReference(estimate),
+            None,
+            &mut sampler,
+            "HIST-3",
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, SamplingError::InvalidEstimate(message) if message.contains("sample is infinite")));
     }
 }

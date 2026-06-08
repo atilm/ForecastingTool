@@ -1,3 +1,5 @@
+use crate::services::util::histogram::Histogram;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct StoryPointEstimate {
     pub estimate: Option<f32>,
@@ -19,9 +21,19 @@ pub struct ReferenceEstimate {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// Links to a histogram yaml file whose distribution should be sampled
+/// directly during project simulation.
+pub struct HistogramReferenceEstimate {
+    pub histogram_file_path: String,
+    pub cached_histogram: Option<Histogram>,
+    pub elapsed_days: f32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Estimate {
     StoryPoint(StoryPointEstimate),
     ThreePoint(ThreePointEstimate),
     Reference(ReferenceEstimate),
+    HistogramReference(HistogramReferenceEstimate),
     Milestone,
 }

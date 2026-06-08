@@ -5,12 +5,16 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::estimate::{
-    Estimate, ReferenceEstimate, StoryPointEstimate, ThreePointEstimate,
+    Estimate, HistogramReferenceEstimate, ReferenceEstimate, StoryPointEstimate,
+    ThreePointEstimate,
 };
 use crate::domain::issue::{Issue, IssueId};
 use crate::domain::issue_status::IssueStatus;
 use crate::domain::project::Project;
 use crate::domain::validation::project_validation::{ValidationErrors, validate_project};
+use crate::services::parsing::histogram_yaml::{
+    HistogramYamlError, deserialize_histogram_from_yaml_file,
+};
 use crate::services::parsing::simulation_report_yaml::{
     ReportParseError, load_simulation_report_from_file,
 };
@@ -34,6 +38,12 @@ pub enum ProjectYamlError {
         path: String,
         #[source]
         source: ReportParseError,
+    },
+    #[error("failed to load histogram reference estimate from histogram file '{path}': {source}")]
+    HistogramReferenceEstimateLoad {
+        path: String,
+        #[source]
+        source: HistogramYamlError,
     },
     #[error("{0}")]
     Validation(#[from] ValidationErrors),
@@ -72,6 +82,9 @@ enum EstimateRecord {
     },
     Reference {
         report_file_path: String,
+    },
+    HistogramReference {
+        histogram_file_path: String,
     },
     Milestone,
 }
@@ -215,7 +228,46 @@ fn estimate_from_record(
                 report_file_path: report_file_path.to_string(),
             })))
         }
+        EstimateRecord::HistogramReference {
+            histogram_file_path,
+        } => {
+            let start_date = parse_date_opt(record.start_date.as_deref())?;
+            let elapsed_days = elapsed_days_since_start(&start_date, project_start_date);
+            let cached_histogram = Some(
+                deserialize_histogram_from_yaml_file(histogram_file_path).map_err(|source| {
+                    ProjectYamlError::HistogramReferenceEstimateLoad {
+                        path: histogram_file_path.clone(),
+                        source,
+                    }
+                })?,
+            );
+            Ok(Some(Estimate::HistogramReference(
+                HistogramReferenceEstimate {
+                    histogram_file_path: histogram_file_path.to_string(),
+                    cached_histogram,
+                    elapsed_days,
+                },
+            )))
+        }
         EstimateRecord::Milestone => Ok(Some(Estimate::Milestone)),
+    }
+}
+
+fn elapsed_days_since_start(
+    issue_start_date: &Option<NaiveDate>,
+    project_start_date: &Option<NaiveDate>,
+) -> f32 {
+    let current_date = project_start_date.unwrap_or_else(|| chrono::Local::now().naive_local().date());
+
+    if let Some(start_date) = issue_start_date {
+        let past_days = (current_date - *start_date).num_days();
+        if past_days < 0 {
+            0.0
+        } else {
+            past_days as f32
+        }
+    } else {
+        0.0
     }
 }
 
@@ -225,20 +277,7 @@ fn three_point_estimate_from_report_file(
     project_start_date: &Option<NaiveDate>,
 ) -> Result<ThreePointEstimate, ReportParseError> {
     let report = load_simulation_report_from_file(path)?;
-
-    let current_date =
-        project_start_date.unwrap_or_else(|| chrono::Local::now().naive_local().date());
-
-    let past_days = if let Some(start_date) = issue_start_date {
-        let past_days = (current_date - *start_date).num_days();
-        if past_days < 0 {
-            0.0f32
-        } else {
-            past_days as f32
-        }
-    } else {
-        0.0f32
-    };
+    let past_days = elapsed_days_since_start(issue_start_date, project_start_date);
 
     Ok(ThreePointEstimate {
         optimistic: Some(past_days + report.p0.days),
@@ -271,6 +310,13 @@ fn estimate_to_record(estimate: Option<&Estimate>) -> Option<EstimateRecord> {
             cached_estimate: _,
         }) => Some(EstimateRecord::Reference {
             report_file_path: report_file_path.clone(),
+        }),
+        Estimate::HistogramReference(HistogramReferenceEstimate {
+            histogram_file_path,
+            cached_histogram: _,
+            elapsed_days: _,
+        }) => Some(EstimateRecord::HistogramReference {
+            histogram_file_path: histogram_file_path.clone(),
         }),
         Estimate::Milestone => Some(EstimateRecord::Milestone),
     }
@@ -314,6 +360,8 @@ mod tests {
     use crate::domain::estimate::Estimate;
     use crate::domain::issue::IssueId;
     use crate::domain::validation::project_validation::ProjectValidationError;
+    use crate::services::parsing::histogram_yaml::serialize_histogram_to_yaml_file;
+    use crate::services::util::histogram::Histogram;
     use std::fs;
 
     #[test]
@@ -453,6 +501,121 @@ work_packages:
             }
             _ => panic!("expected reference estimate load error"),
         }
+    }
+
+    #[test]
+    fn deserialize_project_with_histogram_reference_estimate() {
+        let histogram_file = assert_fs::NamedTempFile::new("histogram.yaml").unwrap();
+        let histogram = Histogram::from_parts(1.0, 3.0, 1.0, vec![2, 1]);
+        serialize_histogram_to_yaml_file(histogram_file.path().to_str().unwrap(), &histogram)
+            .unwrap();
+
+        let yaml = format!(
+            r#"
+name: Demo
+work_packages:
+  - id: ABC-5
+    estimate:
+      type: histogram_reference
+      histogram_file_path: {}
+"#,
+            histogram_file.path().to_str().unwrap()
+        );
+
+        let project = deserialize_project_from_yaml_str(&yaml, &None).unwrap();
+        let issue = &project.work_packages[0];
+
+        assert!(matches!(
+            issue.estimate,
+            Some(Estimate::HistogramReference(HistogramReferenceEstimate {
+                histogram_file_path: _,
+                cached_histogram: Some(_),
+                elapsed_days: 0.0,
+            }))
+        ));
+    }
+
+    #[test]
+    fn deserialize_project_reports_histogram_reference_estimate_load_error() {
+        let yaml = r#"
+name: Demo
+work_packages:
+  - id: ABC-5
+    estimate:
+      type: histogram_reference
+      histogram_file_path: /definitely/missing/histogram.yaml
+"#;
+
+        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
+        match error {
+            ProjectYamlError::HistogramReferenceEstimateLoad { path, source } => {
+                assert_eq!(path, "/definitely/missing/histogram.yaml");
+                assert!(matches!(source, HistogramYamlError::Read(_)));
+            }
+            _ => panic!("expected histogram reference estimate load error"),
+        }
+    }
+
+    #[test]
+    fn deserialize_project_with_histogram_reference_adds_elapsed_days_for_in_progress_issue() {
+        let histogram_file = assert_fs::NamedTempFile::new("histogram.yaml").unwrap();
+        let histogram = Histogram::from_parts(1.0, 3.0, 1.0, vec![2, 1]);
+        serialize_histogram_to_yaml_file(histogram_file.path().to_str().unwrap(), &histogram)
+            .unwrap();
+
+        let yaml = format!(
+            r#"
+name: Demo
+work_packages:
+  - id: ABC-5
+    status: InProgress
+    start_date: 2026-01-05
+    estimate:
+      type: histogram_reference
+      histogram_file_path: {}
+"#,
+            histogram_file.path().to_str().unwrap()
+        );
+
+        let project = deserialize_project_from_yaml_str(
+            &yaml,
+            &Some(NaiveDate::from_ymd_opt(2026, 1, 10).unwrap()),
+        )
+        .unwrap();
+        let issue = &project.work_packages[0];
+
+        assert!(matches!(
+            issue.estimate,
+            Some(Estimate::HistogramReference(HistogramReferenceEstimate {
+                elapsed_days,
+                ..
+            })) if (elapsed_days - 5.0).abs() < f32::EPSILON
+        ));
+    }
+
+    #[test]
+    fn serialize_project_to_yaml_includes_histogram_reference_estimate_format() {
+        let mut issue = Issue::new();
+        issue.issue_id = Some(IssueId {
+            id: "ABC-6".to_string(),
+        });
+        issue.estimate = Some(Estimate::HistogramReference(HistogramReferenceEstimate {
+            histogram_file_path: "/tmp/example-histogram.yaml".to_string(),
+            cached_histogram: Some(Histogram::from_parts(0.0, 1.0, 1.0, vec![1])),
+            elapsed_days: 4.0,
+        }));
+
+        let project = Project {
+            name: "TEST".to_string(),
+            work_packages: vec![issue],
+        };
+
+        let mut buffer = Vec::new();
+        serialize_project_to_yaml(&mut buffer, &project).unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+
+        assert!(output.contains("type: histogram_reference"));
+        assert!(output.contains("histogram_file_path: /tmp/example-histogram.yaml"));
     }
 
     #[test]

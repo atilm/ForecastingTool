@@ -6,6 +6,7 @@ use crate::domain::issue_status::IssueStatus;
 use crate::services::project_simulation::beta_pert_sampler::{
     ThreePointSampler, ThreePointSamplerError,
 };
+use crate::services::util::histogram::{Histogram, HistogramError};
 
 // A mock ThreePointSampler that always returns the most likely value
 pub struct MockSampler;
@@ -17,6 +18,14 @@ impl ThreePointSampler for MockSampler {
         _pessimistic: f32,
     ) -> Result<f32, ThreePointSamplerError> {
         Ok(most_likely)
+    }
+
+    fn sample_histogram(&mut self, histogram: &Histogram) -> Result<f32, HistogramError> {
+        if histogram.bins.iter().all(|count| *count <= 0) {
+            return Err(HistogramError::EmptyData);
+        }
+
+        Ok(histogram.min_value)
     }
 }
 

@@ -1,6 +1,8 @@
 use rand::Rng;
 use rand_distr::{Beta, Distribution};
 
+use crate::services::util::histogram::{Histogram, HistogramError};
+
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum ThreePointSamplerError {
     #[error("pessimistic value must be >= optimistic value")]
@@ -18,6 +20,8 @@ pub trait ThreePointSampler {
         most_likely: f32,
         pessimistic: f32,
     ) -> Result<f32, ThreePointSamplerError>;
+
+    fn sample_histogram(&mut self, histogram: &Histogram) -> Result<f32, HistogramError>;
 }
 
 pub struct BetaPertSampler<R: Rng> {
@@ -54,6 +58,10 @@ impl<R: Rng> ThreePointSampler for BetaPertSampler<R> {
         let sample = beta_dist.sample(&mut self.rng) as f32;
         Ok(optimistic + sample * (pessimistic - optimistic))
     }
+
+    fn sample_histogram(&mut self, histogram: &Histogram) -> Result<f32, HistogramError> {
+        histogram.sample(&mut self.rng)
+    }
 }
 
 pub struct PertExpectedValueSampler;
@@ -66,6 +74,22 @@ impl ThreePointSampler for PertExpectedValueSampler {
         pessimistic: f32,
     ) -> Result<f32, ThreePointSamplerError> {
         pert_expected_value(optimistic, most_likely, pessimistic)
+    }
+
+    fn sample_histogram(&mut self, histogram: &Histogram) -> Result<f32, HistogramError> {
+        let total_count: i32 = histogram.bins.iter().sum();
+        if total_count <= 0 {
+            return Err(HistogramError::EmptyData);
+        }
+
+        let weighted_sum = histogram
+            .iter()
+            .map(|bucket| {
+                let midpoint = (bucket.lower_bound + bucket.upper_bound) / 2.0;
+                midpoint * bucket.count as f32
+            })
+            .sum::<f32>();
+        Ok(weighted_sum / total_count as f32)
     }
 }
 

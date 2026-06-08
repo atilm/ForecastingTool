@@ -17,6 +17,8 @@ Structure your `project.yaml` like this:
 * If you need a special start_date of the first todo task, you must set it explicitly
 * **The simulation start date cli argument will only have an effect, if the start date of a task without dependencies is not set!** 
 
+The supported estimate types are documented in the project format docs, including `story_points`, `three_point`, `reference`, `histogram_reference`, and `milestone`.
+
 ## Install Shell Completions
 
 ```shell
