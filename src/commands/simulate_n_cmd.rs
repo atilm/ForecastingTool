@@ -13,7 +13,7 @@ pub fn simulate_n_command(args: SimulateThroughputArgs) -> CommandResult {
         calendar_dir,
     } = args;
 
-    let histogram_path = format!("{output}.png");
+    let histogram_path = format!("{output}_histogram.png");
     let simulation = simulate_from_throughput_file(
         &throughput,
         iterations,

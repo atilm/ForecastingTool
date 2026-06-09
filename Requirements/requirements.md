@@ -1,7 +1,11 @@
 # ToDos
 
-* [x] ~~Allow ToDo tasks with set start date to set start-dates manually~~
-* [x] ~~Info Message, when a standard / explicit calendar is applied and when not~~
+## Fixes
+
+* message "using calendar the calendar" korrigieren
+* [ ] Create sensible histogram.yaml paths
+
+## Ideas
 
 * [ ] Output error messages in RED
 
