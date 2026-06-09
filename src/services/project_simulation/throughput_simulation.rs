@@ -50,7 +50,7 @@ pub(crate) fn simulate_from_throughput_file(
     iterations: usize,
     number_of_issues: usize,
     start_date: NaiveDate,
-    histogram_path: &str,
+    histogram_png_path: &str,
     calendar_path: Option<&str>,
 ) -> Result<SimulationReport, SimulationError> {
     let throughput_yaml = std::fs::read_to_string(throughput_path)?;
@@ -67,10 +67,10 @@ pub(crate) fn simulate_from_throughput_file(
     )?;
     simulation.report.data_source = data_source_name(throughput_path);
     let histogram = Histogram::create(&simulation.results)?;
-    let histogram_yaml_path = std::path::Path::new(histogram_path).with_extension("yaml");
+    let histogram_yaml_path = std::path::Path::new(histogram_png_path).with_extension("yaml");
     let histogram_yaml_path = histogram_yaml_path.to_string_lossy().to_string();
     serialize_histogram_to_yaml_file(&histogram_yaml_path, &histogram)?;
-    write_histogram_png(histogram_path, &histogram)?;
+    write_histogram_png(histogram_png_path, &histogram)?;
     Ok(simulation.report)
 }
 

@@ -1,6 +1,7 @@
 use assert_fs::prelude::*;
 use predicates::prelude::*;
 use std::fs;
+use std::path::Path;
 
 #[test]
 fn simulate_project_writes_output_and_histogram() {
@@ -69,7 +70,14 @@ work_packages:
 
     let input_arg = input_file.path().to_str().unwrap().to_string();
     let output_arg = output_file.path().to_str().unwrap().to_string();
-    let histogram_path = format!("{output_arg}.png");
+    let output_path = Path::new(&output_arg);
+    let histogram_path = output_path
+      .with_file_name(format!(
+        "{}_histogram.png",
+        output_path.file_stem().unwrap().to_string_lossy()
+      ))
+      .to_string_lossy()
+      .to_string();
 
     let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
     cmd.args(&[
