@@ -50,8 +50,9 @@ pub fn write_simulation_gantt_markdown(
 ///
 /// Each `WorkPackageSimulation` in the report becomes a task. The start date
 /// is resolved as follows:
-/// - if the corresponding issue status is Done or InProgress, issue.start_date
-///   is used and must be set
+/// - if issue.start_date is set, it is used regardless of status
+/// - otherwise, if the issue is Done or InProgress, a missing start_date is
+///   reported as an error
 /// - otherwise, the latest p85 end_date among dependencies is used
 /// - if no dependencies are available in the report, report.start_date is used
 ///
@@ -129,15 +130,16 @@ fn compute_start_date(
     let issue = get_issue_by_simulation(wp_sim, project);
 
     if let Some(issue) = issue {
+        if let Some(start_date) = issue.start_date {
+            return Ok(start_date);
+        }
+
         if let Some(status) = issue.status.as_ref() {
             if matches!(status, IssueStatus::Done | IssueStatus::InProgress) {
-                let start_date = issue.start_date.ok_or_else(|| {
-                    SimulationGanttError::MissingStartDateForStatus {
-                        issue_id: wp_sim.id.clone(),
-                        status: status.clone(),
-                    }
-                })?;
-                return Ok(start_date);
+                return Err(SimulationGanttError::MissingStartDateForStatus {
+                    issue_id: wp_sim.id.clone(),
+                    status: status.clone(),
+                });
             }
         }
     }
@@ -487,5 +489,42 @@ mod tests {
         assert!(md.contains(":done, WP1, 2026-01-10, 2026-01-20"));
         assert!(md.contains(":active, WP2, 2026-01-21, 2026-01-25"));
         assert!(md.contains(":WP3, 2026-01-25, 2026-01-30"));
+    }
+
+    #[test]
+    fn explicit_start_date_is_used_even_when_status_is_todo() {
+        let report = build_report(
+            "2026-01-01",
+            vec![
+                WorkPackageSimulation {
+                    id: "WP1".to_string(),
+                    is_milestone: false,
+                    percentiles: wp_percentiles("2026-01-10"),
+                },
+                WorkPackageSimulation {
+                    id: "WP2".to_string(),
+                    is_milestone: false,
+                    percentiles: wp_percentiles("2026-01-20"),
+                },
+            ],
+        );
+
+        let project = build_project(
+            "Demo",
+            vec![
+                build_issue("WP1", "Dependency", None),
+                build_issue_with_status(
+                    "WP2",
+                    "Explicit start",
+                    Some(vec!["WP1"]),
+                    Some(IssueStatus::ToDo),
+                    Some("2026-01-07"),
+                ),
+            ],
+        );
+
+        let md = generate_simulation_gantt_markdown(&project, &report).unwrap();
+
+        assert!(md.contains(":WP2, 2026-01-07, 2026-01-20"));
     }
 }
