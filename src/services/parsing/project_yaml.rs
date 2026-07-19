@@ -94,12 +94,15 @@ pub fn load_project_from_yaml_file(
     project_start_date: &Option<NaiveDate>,
 ) -> Result<Project, ProjectYamlError> {
     let contents = std::fs::read_to_string(path)?;
-    deserialize_project_from_yaml_str(&contents, project_start_date)
+
+    let project_start_date = project_start_date.unwrap_or_else(|| chrono::Local::now().naive_local().date());
+
+    deserialize_project_from_yaml_str(&contents, &project_start_date)
 }
 
 pub fn deserialize_project_from_yaml_str(
     input: &str,
-    project_start_date: &Option<NaiveDate>,
+    project_start_date: &NaiveDate,
 ) -> Result<Project, ProjectYamlError> {
     let record: ProjectRecord = serde_yaml::from_str(input)?;
     let mut work_packages = Vec::with_capacity(record.work_packages.len());
@@ -187,7 +190,7 @@ fn issue_to_record(issue: &Issue) -> IssueRecord {
 
 fn estimate_from_record(
     record: &IssueRecord,
-    project_start_date: &Option<NaiveDate>,
+    project_start_date: &NaiveDate,
 ) -> Result<Option<Estimate>, ProjectYamlError> {
     if record.estimate.is_none() {
         return Ok(None);
@@ -255,12 +258,10 @@ fn estimate_from_record(
 
 fn elapsed_days_since_start(
     issue_start_date: &Option<NaiveDate>,
-    project_start_date: &Option<NaiveDate>,
+    project_start_date: &NaiveDate,
 ) -> f32 {
-    let current_date = project_start_date.unwrap_or_else(|| chrono::Local::now().naive_local().date());
-
     if let Some(start_date) = issue_start_date {
-        let past_days = (current_date - *start_date).num_days();
+        let past_days = (*project_start_date - *start_date).num_days();
         if past_days < 0 {
             0.0
         } else {
@@ -274,7 +275,7 @@ fn elapsed_days_since_start(
 fn three_point_estimate_from_report_file(
     path: &str,
     issue_start_date: &Option<NaiveDate>,
-    project_start_date: &Option<NaiveDate>,
+    project_start_date: &NaiveDate,
 ) -> Result<ThreePointEstimate, ReportParseError> {
     let report = load_simulation_report_from_file(path)?;
     let past_days = elapsed_days_since_start(issue_start_date, project_start_date);
@@ -364,6 +365,8 @@ mod tests {
     use crate::services::util::histogram::Histogram;
     use std::fs;
 
+    const PROJECT_START_DATE: NaiveDate = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
+
     #[test]
     fn serialize_project_to_yaml_includes_estimate_format() {
         let mut issue = Issue::new();
@@ -417,7 +420,7 @@ work_packages:
     dependencies: null
 "#;
 
-        let project = deserialize_project_from_yaml_str(yaml, &None).unwrap();
+        let project = deserialize_project_from_yaml_str(yaml, &PROJECT_START_DATE).unwrap();
         let issue = &project.work_packages[0];
         assert_eq!(project.name, "Demo");
         assert_eq!(issue.issue_id.as_ref().unwrap().id, "ABC-1");
@@ -444,7 +447,7 @@ work_packages:
       pessimistic: 8
 "#;
 
-        let project = deserialize_project_from_yaml_str(yaml, &None).unwrap();
+        let project = deserialize_project_from_yaml_str(yaml, &PROJECT_START_DATE).unwrap();
         let issue = &project.work_packages[0];
         assert!(matches!(
             issue.estimate,
@@ -465,7 +468,7 @@ work_packages:
     start_date: 2026-99-01
 "#;
 
-        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
+        let error = deserialize_project_from_yaml_str(yaml, &PROJECT_START_DATE).unwrap_err();
         assert!(matches!(error, ProjectYamlError::InvalidDate(_)));
     }
 
@@ -478,7 +481,7 @@ work_packages:
     status: Blocked
 "#;
 
-        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
+        let error = deserialize_project_from_yaml_str(yaml, &PROJECT_START_DATE).unwrap_err();
         assert!(matches!(error, ProjectYamlError::InvalidStatus(_)));
     }
 
@@ -493,7 +496,7 @@ work_packages:
       report_file_path: /definitely/missing/report.yaml
 "#;
 
-        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
+        let error = deserialize_project_from_yaml_str(yaml, &PROJECT_START_DATE).unwrap_err();
         match error {
             ProjectYamlError::ReferenceEstimateLoad { path, source } => {
                 assert_eq!(path, "/definitely/missing/report.yaml");
@@ -522,7 +525,7 @@ work_packages:
             histogram_file.path().to_str().unwrap()
         );
 
-        let project = deserialize_project_from_yaml_str(&yaml, &None).unwrap();
+        let project = deserialize_project_from_yaml_str(&yaml, &PROJECT_START_DATE).unwrap();
         let issue = &project.work_packages[0];
 
         assert!(matches!(
@@ -546,7 +549,7 @@ work_packages:
       histogram_file_path: /definitely/missing/histogram.yaml
 "#;
 
-        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
+        let error = deserialize_project_from_yaml_str(yaml, &PROJECT_START_DATE).unwrap_err();
         match error {
             ProjectYamlError::HistogramReferenceEstimateLoad { path, source } => {
                 assert_eq!(path, "/definitely/missing/histogram.yaml");
@@ -579,7 +582,7 @@ work_packages:
 
         let project = deserialize_project_from_yaml_str(
             &yaml,
-            &Some(NaiveDate::from_ymd_opt(2026, 1, 10).unwrap()),
+            &PROJECT_START_DATE,
         )
         .unwrap();
         let issue = &project.work_packages[0];
@@ -626,7 +629,7 @@ work_packages:
   - id: ""
 "#;
 
-        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
+        let error = deserialize_project_from_yaml_str(yaml, &PROJECT_START_DATE).unwrap_err();
         assert!(matches!(error, ProjectYamlError::MissingIssueId));
     }
 
@@ -641,7 +644,7 @@ work_packages:
     dependencies: []
 "#;
 
-        let project = deserialize_project_from_yaml_str(yaml, &None).unwrap();
+        let project = deserialize_project_from_yaml_str(yaml, &PROJECT_START_DATE).unwrap();
         let issue = &project.work_packages[1];
         assert_eq!(issue.dependencies.as_ref().unwrap().len(), 1);
         assert_eq!(issue.dependencies.as_ref().unwrap()[0].id, "ABC-1");
@@ -656,7 +659,7 @@ work_packages:
     dependencies: []
 "#;
 
-        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
+        let error = deserialize_project_from_yaml_str(yaml, &PROJECT_START_DATE).unwrap_err();
         assert!(matches!(error, ProjectYamlError::MissingPreviousDependency));
     }
 
@@ -671,7 +674,7 @@ work_packages:
     dependencies: [ABC-404]
 "#;
 
-        let error = deserialize_project_from_yaml_str(yaml, &None).unwrap_err();
+        let error = deserialize_project_from_yaml_str(yaml, &PROJECT_START_DATE).unwrap_err();
         match error {
             ProjectYamlError::Validation(errors) => {
                 assert!(errors.iter().any(|value| {
@@ -764,7 +767,7 @@ p100:
         let estimate = three_point_estimate_from_report_file(
             report_file.path().to_str().unwrap(),
             &None,
-            &None,
+            &PROJECT_START_DATE,
         )
         .unwrap();
 
@@ -803,7 +806,7 @@ p100:
         fs::write(report_file.path(), report_yaml).unwrap();
 
         // 5 days have already passed since the issue start date, so they should be added to the estimate remaining days
-        let current_date = Some(NaiveDate::from_ymd_opt(2026, 1, 10).unwrap());
+        let current_date = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
         let issue_start_date = Some(NaiveDate::from_ymd_opt(2026, 1, 5).unwrap());
 
         // Act
@@ -848,7 +851,7 @@ p100:
         let error = three_point_estimate_from_report_file(
             report_file.path().to_str().unwrap(),
             &None,
-            &None,
+            &PROJECT_START_DATE,
         )
         .unwrap_err();
 
@@ -869,7 +872,7 @@ start_date: "2026-01-01"
         let error = three_point_estimate_from_report_file(
             report_file.path().to_str().unwrap(),
             &None,
-            &None,
+            &PROJECT_START_DATE,
         )
         .unwrap_err();
 

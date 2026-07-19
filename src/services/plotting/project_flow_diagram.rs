@@ -131,6 +131,9 @@ pub fn generate_markdown_descriptions(project: &Project) -> String {
 mod tests {
     use super::*;
     use crate::services::parsing::project_yaml::deserialize_project_from_yaml_str;
+    use chrono::NaiveDate;
+
+    const PROJECT_START_DATE: NaiveDate = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
 
     const YAML_CONTENT: &str = concat!(
         "name: My Project\n",
@@ -180,7 +183,7 @@ mod tests {
 
     #[test]
     fn generate_flow_diagram_matches_expected() {
-        let project = deserialize_project_from_yaml_str(YAML_CONTENT, &None).unwrap();
+        let project = deserialize_project_from_yaml_str(YAML_CONTENT, &PROJECT_START_DATE).unwrap();
         let diagram = generate_flow_diagram(&project);
 
         let expected = concat!(
@@ -214,7 +217,7 @@ mod tests {
 
     #[test]
     fn generate_markdown_descriptions_includes_issue_text() {
-        let project = deserialize_project_from_yaml_str(YAML_CONTENT, &None).unwrap();
+        let project = deserialize_project_from_yaml_str(YAML_CONTENT, &PROJECT_START_DATE).unwrap();
         let descriptions = generate_markdown_descriptions(&project);
 
         let expected = "## WP1: Work package 1\nThis is\nwork package 1.\n\n## WP3: Work package 3\nThis is another\nwork package 3.";
