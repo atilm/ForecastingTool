@@ -214,6 +214,13 @@ fn validate_status_dates(
                     date_type: DateType::DoneDate,
                 });
             }
+            if has_done_date && issue_done_date.unwrap() > *project_start_date {
+                errors.push(ProjectValidationError::InvalidIssueStatus {
+                    id: id.to_string(),
+                    status: IssueStatus::Done,
+                    date_type: DateType::DoneDate,
+                });
+            }
         }
     }
 }
@@ -299,6 +306,24 @@ mod tests {
         let errors = validate_project(&project, &PROJECT_START_DATE).unwrap_err();
         assert!(errors.iter().any(|error| {
             matches!(error, ProjectValidationError::InvalidIssueStatus { id, status: IssueStatus::ToDo, date_type: DateType::StartDate } if id == "ABC-3")
+        }));
+    }
+
+    #[test]
+    fn validate_project_rejects_done_items_with_done_date_later_than_project_start_date() {
+        let mut issue = make_issue("ABC-4");
+        issue.status = Some(IssueStatus::Done);
+        issue.start_date = NaiveDate::from_ymd_opt(2026, 1, 1);
+        issue.done_date = NaiveDate::from_ymd_opt(2026, 1, 11);
+
+        let project = Project {
+            name: "Demo".to_string(),
+            work_packages: vec![issue],
+        };
+
+        let errors = validate_project(&project, &PROJECT_START_DATE).unwrap_err();
+        assert!(errors.iter().any(|error| {
+            matches!(error, ProjectValidationError::InvalidIssueStatus { id, status: IssueStatus::Done, date_type: DateType::DoneDate } if id == "ABC-4")
         }));
     }
 
