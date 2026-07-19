@@ -1,3 +1,4 @@
+use chrono::NaiveDate;
 use std::collections::HashSet;
 use std::fmt;
 use std::ops::Deref;
@@ -67,12 +68,15 @@ impl Deref for ValidationErrors {
     }
 }
 
-pub fn validate_project(project: &Project) -> Result<(), ValidationErrors> {
+pub fn validate_project(
+    project: &Project,
+    projet_start_date: &NaiveDate,
+) -> Result<(), ValidationErrors> {
     let mut errors = Vec::new();
     let all_ids = collect_all_issue_ids(project);
     validate_no_duplicate_ids(project, &mut errors);
     validate_dependency_references(project, &all_ids, &mut errors);
-    validate_issue_statuses(project, &mut errors);
+    validate_issue_statuses(project, projet_start_date, &mut errors);
     if errors.is_empty() {
         Ok(())
     } else {
@@ -96,7 +100,9 @@ fn validate_no_duplicate_ids(project: &Project, errors: &mut Vec<ProjectValidati
             continue;
         };
         if !seen.insert(issue_id.id.as_str()) {
-            errors.push(ProjectValidationError::DuplicateIssueId(issue_id.id.clone()));
+            errors.push(ProjectValidationError::DuplicateIssueId(
+                issue_id.id.clone(),
+            ));
         }
     }
 }
@@ -125,7 +131,11 @@ fn validate_dependency_references(
     }
 }
 
-fn validate_issue_statuses(project: &Project, errors: &mut Vec<ProjectValidationError>) {
+fn validate_issue_statuses(
+    project: &Project,
+    project_start_date: &NaiveDate,
+    errors: &mut Vec<ProjectValidationError>,
+) {
     for issue in &project.work_packages {
         let id = issue
             .issue_id
@@ -133,7 +143,14 @@ fn validate_issue_statuses(project: &Project, errors: &mut Vec<ProjectValidation
             .map(|value| value.id.clone())
             .unwrap_or_default();
         if let Some(status) = &issue.status {
-            validate_status_dates(&id, status, issue.start_date.is_some(), issue.done_date.is_some(), errors);
+            validate_status_dates(
+                &id,
+                status,
+                project_start_date,
+                &issue.start_date,
+                &issue.done_date,
+                errors,
+            );
         }
     }
 }
@@ -141,12 +158,23 @@ fn validate_issue_statuses(project: &Project, errors: &mut Vec<ProjectValidation
 fn validate_status_dates(
     id: &str,
     status: &IssueStatus,
-    has_start_date: bool,
-    has_done_date: bool,
+    project_start_date: &NaiveDate,
+    issue_start_date: &Option<NaiveDate>,
+    issue_done_date: &Option<NaiveDate>,
     errors: &mut Vec<ProjectValidationError>,
 ) {
+    let has_start_date = issue_start_date.is_some();
+    let has_done_date = issue_done_date.is_some();
+
     match status {
         IssueStatus::ToDo => {
+            if has_start_date && issue_start_date.unwrap() < *project_start_date {
+                errors.push(ProjectValidationError::InvalidIssueStatus {
+                    id: id.to_string(),
+                    status: IssueStatus::ToDo,
+                    date_type: DateType::StartDate,
+                });
+            }
             if has_done_date {
                 errors.push(ProjectValidationError::UnexpectedIssueDate {
                     id: id.to_string(),
@@ -197,6 +225,8 @@ mod tests {
     use super::*;
     use crate::domain::issue::{Issue, IssueId};
 
+    const PROJECT_START_DATE: NaiveDate = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
+
     fn make_issue(id: &str) -> Issue {
         let mut issue = Issue::new();
         issue.issue_id = Some(IssueId { id: id.to_string() });
@@ -207,7 +237,7 @@ mod tests {
     fn validate_project_accepts_valid_project() {
         let mut todo = make_issue("ABC-0");
         todo.status = Some(IssueStatus::ToDo);
-        todo.start_date = NaiveDate::from_ymd_opt(2026, 1, 1);
+        todo.start_date = NaiveDate::from_ymd_opt(2026, 1, 15);
 
         let mut issue = make_issue("ABC-1");
         issue.status = Some(IssueStatus::Done);
@@ -219,7 +249,7 @@ mod tests {
             work_packages: vec![todo, issue],
         };
 
-        assert!(validate_project(&project).is_ok());
+        assert!(validate_project(&project, &PROJECT_START_DATE).is_ok());
     }
 
     #[test]
@@ -231,7 +261,7 @@ mod tests {
             work_packages: vec![issue1, issue2],
         };
 
-        let errors = validate_project(&project).unwrap_err();
+        let errors = validate_project(&project, &PROJECT_START_DATE).unwrap_err();
         assert!(errors.iter().any(
             |error| matches!(error, ProjectValidationError::DuplicateIssueId(id) if id == "ABC-1")
         ));
@@ -249,9 +279,26 @@ mod tests {
             work_packages: vec![issue],
         };
 
-        let errors = validate_project(&project).unwrap_err();
+        let errors = validate_project(&project, &PROJECT_START_DATE).unwrap_err();
         assert!(errors.iter().any(|error| {
             matches!(error, ProjectValidationError::NonExistingDependency(link) if link == "ABC-2 -> ABC-404")
+        }));
+    }
+
+    #[test]
+    fn validate_project_rejects_todo_items_with_start_date_before_project_start_date() {
+        let mut issue = make_issue("ABC-3");
+        issue.status = Some(IssueStatus::ToDo);
+        issue.start_date = NaiveDate::from_ymd_opt(2026, 1, 9);
+
+        let project = Project {
+            name: "Demo".to_string(),
+            work_packages: vec![issue],
+        };
+
+        let errors = validate_project(&project, &PROJECT_START_DATE).unwrap_err();
+        assert!(errors.iter().any(|error| {
+            matches!(error, ProjectValidationError::InvalidIssueStatus { id, status: IssueStatus::ToDo, date_type: DateType::StartDate } if id == "ABC-3")
         }));
     }
 
@@ -277,7 +324,7 @@ mod tests {
             work_packages: vec![todo, todo_2, in_progress, done],
         };
 
-        let errors = validate_project(&project).unwrap_err();
+        let errors = validate_project(&project, &PROJECT_START_DATE).unwrap_err();
 
         assert!(!errors.iter().any(|error| {
             matches!(

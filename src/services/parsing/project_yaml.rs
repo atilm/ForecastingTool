@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::estimate::{
-    Estimate, HistogramReferenceEstimate, ReferenceEstimate, StoryPointEstimate,
-    ThreePointEstimate,
+    Estimate, HistogramReferenceEstimate, ReferenceEstimate, StoryPointEstimate, ThreePointEstimate,
 };
 use crate::domain::issue::{Issue, IssueId};
 use crate::domain::issue_status::IssueStatus;
@@ -95,7 +94,8 @@ pub fn load_project_from_yaml_file(
 ) -> Result<Project, ProjectYamlError> {
     let contents = std::fs::read_to_string(path)?;
 
-    let project_start_date = project_start_date.unwrap_or_else(|| chrono::Local::now().naive_local().date());
+    let project_start_date =
+        project_start_date.unwrap_or_else(|| chrono::Local::now().naive_local().date());
 
     deserialize_project_from_yaml_str(&contents, &project_start_date)
 }
@@ -144,7 +144,7 @@ pub fn deserialize_project_from_yaml_str(
         work_packages,
     };
 
-    validate_project(&project)?;
+    validate_project(&project, project_start_date)?;
 
     Ok(project)
 }
@@ -262,11 +262,7 @@ fn elapsed_days_since_start(
 ) -> f32 {
     if let Some(start_date) = issue_start_date {
         let past_days = (*project_start_date - *start_date).num_days();
-        if past_days < 0 {
-            0.0
-        } else {
-            past_days as f32
-        }
+        if past_days < 0 { 0.0 } else { past_days as f32 }
     } else {
         0.0
     }
@@ -580,11 +576,7 @@ work_packages:
             histogram_file.path().to_str().unwrap()
         );
 
-        let project = deserialize_project_from_yaml_str(
-            &yaml,
-            &PROJECT_START_DATE,
-        )
-        .unwrap();
+        let project = deserialize_project_from_yaml_str(&yaml, &PROJECT_START_DATE).unwrap();
         let issue = &project.work_packages[0];
 
         assert!(matches!(
