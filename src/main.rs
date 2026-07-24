@@ -1,5 +1,6 @@
 use clap::{CommandFactory, Parser};
 use clap_complete;
+use forecasts::commands::CommandResult;
 use forecasts::commands::base_commands::{
     CliArgs, Commands, GetCommands, PlotCommands, SimulateCommands, UtilCommands,
 };
@@ -12,7 +13,6 @@ use forecasts::commands::plot_simulation_gantt_cmd::plot_simulation_gantt_comman
 use forecasts::commands::plot_throughput_cmd::plot_throughput_command;
 use forecasts::commands::simulate_cmd::simulate_command;
 use forecasts::commands::simulate_n_cmd::simulate_n_command;
-use forecasts::commands::CommandResult;
 use std::io;
 
 fn main() {

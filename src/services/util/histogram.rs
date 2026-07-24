@@ -1,5 +1,5 @@
-use thiserror::Error;
 use rand::Rng;
+use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum HistogramError {
@@ -36,7 +36,12 @@ pub struct Histogram {
 }
 
 impl Histogram {
-    pub(crate) fn from_parts(min_value: f32, max_value: f32, bin_width: f32, bins: Vec<i32>) -> Self {
+    pub(crate) fn from_parts(
+        min_value: f32,
+        max_value: f32,
+        bin_width: f32,
+        bins: Vec<i32>,
+    ) -> Self {
         let alias_table = Self::build_alias_table(&bins);
         Self {
             min_value,
@@ -89,17 +94,20 @@ impl Histogram {
         if total <= 0 {
             return (vec![1.0; n], (0..n).collect());
         }
-        
+
         // Normalize to probabilities scaled by n
-        let mut probs: Vec<f32> = bins.iter().map(|&b| (b as f32 * n as f32) / total as f32).collect();
-        
+        let mut probs: Vec<f32> = bins
+            .iter()
+            .map(|&b| (b as f32 * n as f32) / total as f32)
+            .collect();
+
         let mut alias_bin = vec![0; n];
         let mut alias_prob = vec![1.0; n];
-        
+
         // Separate into overfull (prob > 1.0) and underfull (prob < 1.0) queues
         let mut overfull = Vec::new();
         let mut underfull = Vec::new();
-        
+
         for i in 0..n {
             if probs[i] > 1.0 {
                 overfull.push(i);
@@ -107,18 +115,18 @@ impl Histogram {
                 underfull.push(i);
             }
         }
-        
+
         // Pair overfull with underfull
         while !overfull.is_empty() && !underfull.is_empty() {
             let poor = underfull.pop().unwrap();
             let rich = overfull.pop().unwrap();
             alias_prob[poor] = probs[poor].clamp(0.0, 1.0);
-            
+
             alias_bin[poor] = rich;
-            
+
             // Transfer excess probability from rich to poor's alias
             probs[rich] = probs[rich] - (1.0 - probs[poor]);
-            
+
             if probs[rich] > 1.0 {
                 overfull.push(rich);
             } else if probs[rich] < 1.0 {
@@ -134,12 +142,12 @@ impl Histogram {
             alias_prob[i] = 1.0;
             alias_bin[i] = i;
         }
-        
+
         (alias_prob, alias_bin)
     }
 
     /// Sample a random value from the probability distribution described by the histogram.
-    /// 
+    ///
     /// Uses Vose's Alias Method for O(1) sampling.
     pub fn sample<R: Rng>(&self, rng: &mut R) -> Result<f32, HistogramError> {
         let total: i32 = self.bins.iter().sum();
@@ -149,19 +157,19 @@ impl Histogram {
 
         let (alias_prob, alias_bin) = &self.alias_table;
         let n = self.bins.len();
-        
+
         // Pick a random bin
         let i = rng.gen_range(0..n);
-        
+
         // With probability alias_prob[i], use bin i; otherwise use alias
         let use_primary = rng.gen_range(0.0..1.0) < alias_prob[i];
         let bin_index = if use_primary { i } else { alias_bin[i] };
-        
+
         // Map bin index to a value within the bin's range
         let lower = self.min_value + bin_index as f32 * self.bin_width;
         let upper = lower + self.bin_width;
         let value = rng.gen_range(lower..upper);
-        
+
         Ok(value)
     }
 
@@ -421,7 +429,9 @@ mod tests {
 
         for _ in 0..100 {
             let sample = histogram.sample(&mut rng).unwrap();
-            assert!(sample >= histogram.min_value && sample < histogram.max_value + histogram.bin_width);
+            assert!(
+                sample >= histogram.min_value && sample < histogram.max_value + histogram.bin_width
+            );
         }
     }
 
@@ -440,7 +450,7 @@ mod tests {
         // Low bin (1.0-2.33): should have ~33% (3 out of 9 values)
         // Mid bin (2.33-4.67): should have ~0% (0 out of 9 values)
         // High bin (4.67-6.3): should have ~67% (6 out of 9 values)
-        
+
         let low_bin_count = samples.iter().filter(|&&s| s < 2.33).count();
         let high_bin_count = samples.iter().filter(|&&s| s >= 4.67).count();
 
@@ -448,7 +458,15 @@ mod tests {
         let high_ratio = high_bin_count as f32 / samples.len() as f32;
 
         // Allow 10% tolerance due to randomness
-        assert!((low_ratio - 0.333).abs() < 0.1, "Low bin ratio {}", low_ratio);
-        assert!((high_ratio - 0.667).abs() < 0.1, "High bin ratio {}", high_ratio);
+        assert!(
+            (low_ratio - 0.333).abs() < 0.1,
+            "Low bin ratio {}",
+            low_ratio
+        );
+        assert!(
+            (high_ratio - 0.667).abs() < 0.1,
+            "High bin ratio {}",
+            high_ratio
+        );
     }
 }

@@ -94,9 +94,9 @@ pub fn generate_simulation_gantt_markdown(
         let label = format!("{} {}", id, summary);
         let start = compute_start_date(wp_sim, project, &wp_sim_by_id, report.start_date)?;
         let end = wp_sim.percentiles.p85.end_date;
-        let status = get_issue_by_simulation(wp_sim, project)
-            .and_then(|issue| issue.status.as_ref());
-        
+        let status =
+            get_issue_by_simulation(wp_sim, project).and_then(|issue| issue.status.as_ref());
+
         let status_prefix = match status {
             Some(IssueStatus::Done) => "done, ",
             Some(IssueStatus::InProgress) => "active, ",

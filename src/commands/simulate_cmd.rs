@@ -43,8 +43,9 @@ pub fn simulate_command(args: SimulateProjectArgs) -> CommandResult {
         calendar_dir,
     } = args;
 
-    let simulation = simulate_project_from_yaml_file(&input, iterations, start_date, calendar_dir.as_deref())
-        .map_err(CommandError::SimulateProject)?;
+    let simulation =
+        simulate_project_from_yaml_file(&input, iterations, start_date, calendar_dir.as_deref())
+            .map_err(CommandError::SimulateProject)?;
 
     let (histogram_path, histogram_yaml_path) = histogram_paths_from_output(&output);
     let mut messages = Vec::new();
@@ -52,19 +53,26 @@ pub fn simulate_command(args: SimulateProjectArgs) -> CommandResult {
     match Histogram::create(&simulation.results) {
         Ok(histogram) => {
             match serialize_histogram_to_yaml_file(&histogram_yaml_path, &histogram) {
-                Ok(()) => messages.push(format!("Simulation histogram written to {histogram_yaml_path}")),
-                Err(error) => {
-                    messages.push(format!("Warning: failed to write simulation histogram yaml: {error}"))
-                }
+                Ok(()) => messages.push(format!(
+                    "Simulation histogram written to {histogram_yaml_path}"
+                )),
+                Err(error) => messages.push(format!(
+                    "Warning: failed to write simulation histogram yaml: {error}"
+                )),
             }
 
             match write_histogram_png(&histogram_path, &histogram) {
-                Ok(()) => messages.push(format!("Simulation histogram written to {histogram_path}")),
-                Err(error) => messages
-                    .push(format!("Warning: failed to write simulation histogram png: {error}")),
+                Ok(()) => {
+                    messages.push(format!("Simulation histogram written to {histogram_path}"))
+                }
+                Err(error) => messages.push(format!(
+                    "Warning: failed to write simulation histogram png: {error}"
+                )),
             }
         }
-        Err(error) => messages.push(format!("Warning: failed to build simulation histogram: {error}")),
+        Err(error) => messages.push(format!(
+            "Warning: failed to build simulation histogram: {error}"
+        )),
     }
 
     let milestone_plot_path = format!("{output}.milestones.png");
@@ -73,7 +81,8 @@ pub fn simulate_command(args: SimulateProjectArgs) -> CommandResult {
         Err(error) => messages.push(format!("Warning: failed to write milestone plot: {error}")),
     }
 
-    let yaml = serde_yaml::to_string(&simulation.report).map_err(CommandError::SerializeSimulation)?;
+    let yaml =
+        serde_yaml::to_string(&simulation.report).map_err(CommandError::SerializeSimulation)?;
     std::fs::write(&output, yaml).map_err(CommandError::WriteOutput)?;
 
     messages.insert(0, format!("Simulation result written to {output}"));

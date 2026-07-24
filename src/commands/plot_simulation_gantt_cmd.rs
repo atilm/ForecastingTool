@@ -12,5 +12,7 @@ pub fn plot_simulation_gantt_command(args: PlotSimulationGanttArgs) -> CommandRe
     write_simulation_gantt_markdown(&input, &report, &output)
         .map_err(CommandError::PlotSimulationGantt)?;
 
-    Ok(vec![format!("Simulation Gantt diagram written to {output}")])
+    Ok(vec![format!(
+        "Simulation Gantt diagram written to {output}"
+    )])
 }

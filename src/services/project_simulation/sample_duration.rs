@@ -1,6 +1,5 @@
 use crate::domain::estimate::{
-    Estimate, HistogramReferenceEstimate, ReferenceEstimate, StoryPointEstimate,
-    ThreePointEstimate,
+    Estimate, HistogramReferenceEstimate, ReferenceEstimate, StoryPointEstimate, ThreePointEstimate,
 };
 use crate::services::project_simulation::beta_pert_sampler::ThreePointSampler;
 use thiserror::Error;
@@ -290,7 +289,9 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(matches!(error, SamplingError::InvalidEstimate(message) if message.contains("Missing referenced histogram")));
+        assert!(
+            matches!(error, SamplingError::InvalidEstimate(message) if message.contains("Missing referenced histogram"))
+        );
     }
 
     #[test]
@@ -313,6 +314,8 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(matches!(error, SamplingError::InvalidEstimate(message) if message.contains("sample is infinite")));
+        assert!(
+            matches!(error, SamplingError::InvalidEstimate(message) if message.contains("sample is infinite"))
+        );
     }
 }

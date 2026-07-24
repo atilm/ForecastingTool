@@ -1,10 +1,10 @@
 use crate::domain::calendar::TeamCalendar;
 use crate::domain::throughput::Throughput;
+use crate::services::parsing::histogram_yaml::HistogramYamlError;
+use crate::services::parsing::histogram_yaml::serialize_histogram_to_yaml_file;
 use crate::services::parsing::throughput_yaml::{
     ThroughputYamlError, deserialize_throughput_from_yaml_str,
 };
-use crate::services::parsing::histogram_yaml::HistogramYamlError;
-use crate::services::parsing::histogram_yaml::serialize_histogram_to_yaml_file;
 use crate::services::util::data_source_name;
 use crate::services::util::histogram::Histogram;
 use crate::services::util::histogram::HistogramError as BuildHistogramError;
@@ -16,7 +16,9 @@ use thiserror::Error;
 use crate::services::parsing::team_calendar_yaml::{
     TeamCalendarYamlError, load_team_calendar_if_provided,
 };
-use crate::services::plotting::histogram::{HistogramError as PlotHistogramError, write_histogram_png};
+use crate::services::plotting::histogram::{
+    HistogramError as PlotHistogramError, write_histogram_png,
+};
 use crate::services::project_simulation::percentiles;
 use crate::services::project_simulation::simulation_types::{
     SimulationOutput, SimulationPercentile, SimulationReport,

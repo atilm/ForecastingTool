@@ -105,7 +105,8 @@ bins:
         )
         .unwrap();
 
-        let histogram = deserialize_histogram_from_yaml_file(file.path().to_str().unwrap()).unwrap();
+        let histogram =
+            deserialize_histogram_from_yaml_file(file.path().to_str().unwrap()).unwrap();
 
         assert_f32_eq(histogram.min_value, 2.0);
         assert_f32_eq(histogram.max_value, 12.0);
@@ -121,7 +122,8 @@ bins:
         let original = Histogram::from_parts(-3.5, 8.5, 3.0, vec![1, 4, 2, 5]);
 
         serialize_histogram_to_yaml_file(file.path().to_str().unwrap(), &original).unwrap();
-        let deserialized = deserialize_histogram_from_yaml_file(file.path().to_str().unwrap()).unwrap();
+        let deserialized =
+            deserialize_histogram_from_yaml_file(file.path().to_str().unwrap()).unwrap();
 
         assert_f32_eq(deserialized.min_value, original.min_value);
         assert_f32_eq(deserialized.max_value, original.max_value);
