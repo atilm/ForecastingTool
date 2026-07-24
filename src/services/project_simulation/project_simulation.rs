@@ -112,6 +112,7 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     calendar: &TeamCalendar,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
     let converted_project = if project.has_story_points() {
+        println!("Project contains story points, converting InProgress items into ToDo items with decreased story points.");
         convert_in_progress_story_points(project)
     } else {
         project.clone()
@@ -210,6 +211,12 @@ fn convert_in_progress_story_points(project: &Project) -> Project {
             estimate: Some(value),
         })) = issue.estimate.as_mut()
         {
+            println!(
+                "Converting story points for issue {} from {} to {}",
+                issue.issue_id.as_ref().map(|id| &id.id).unwrap_or(&"Unknown".to_string()),
+                value,
+                previous_value(*value)
+            );
             *value = previous_value(*value);
         }
     }
