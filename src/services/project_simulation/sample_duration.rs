@@ -2,6 +2,7 @@ use crate::domain::estimate::{
     Estimate, HistogramReferenceEstimate, ReferenceEstimate, StoryPointEstimate, ThreePointEstimate,
 };
 use crate::services::project_simulation::beta_pert_sampler::ThreePointSampler;
+use crate::services::project_simulation::fibonacci::bounds as fibonacci_bounds;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -132,42 +133,6 @@ fn to_three_point_triplet(
     ))
 }
 
-fn fibonacci_bounds(value: f32) -> (f32, f32) {
-    let series = [
-        0.0, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 20.0, 40.0, 100.0, 200.0, 400.0,
-    ];
-
-    let lower_than_one = (series[0] + series[1]) / 2.0;
-    let greater_than_one = (series[1] + series[2]) / 2.0;
-
-    if value <= lower_than_one {
-        return (series[0], series[2]);
-    }
-
-    if value > lower_than_one && value <= greater_than_one {
-        return (series[0], series[3]);
-    }
-
-    for window in series.windows(5) {
-        let lower_limit = (window[1] + window[2]) / 2.0;
-        let upper_limit = (window[2] + window[3]) / 2.0;
-        if value > lower_limit && value <= upper_limit {
-            return (window[0], window[4]);
-        }
-    }
-
-    let lower_than_200 = (series[9] + series[10]) / 2.0;
-    let greater_than_200 = (series[10] + series[11]) / 2.0;
-    if value > lower_than_200 && value <= greater_than_200 {
-        return (series[8], series[11]);
-    }
-
-    if value > greater_than_200 && value <= 400.0 {
-        return (series[9], series[11]);
-    }
-
-    (value, value)
-}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,9 +179,10 @@ mod tests {
             (1.51, (0.0, 1.51, 5.0)),
             (30.01, (13.0, 30.01, 200.0)),
             // Test values at upper bounds
-            (200.0, (40.0, 200.0, 400.0)),
-            (300.01, (100.0, 300.01, 400.0)),
-            (401.0, (401.0, 401.0, 401.0)),
+            (200.0, (40.0, 200.0, 800.0)),
+            (300.01, (100.0, 300.01, 800.0)),
+            (401.0, (100.0, 401.0, 800.0)),
+            (801.0, (801.0, 801.0, 801.0)),
         ];
 
         for (input, expected) in test_cases {

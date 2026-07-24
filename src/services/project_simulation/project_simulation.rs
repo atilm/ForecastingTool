@@ -30,6 +30,7 @@ use crate::services::util::data_source_name;
 
 use crate::services::project_simulation::critical_path_method::CriticalPathMethodError;
 use crate::services::project_simulation::critical_path_method::critical_path_method;
+use crate::services::project_simulation::fibonacci::previous_value;
 use crate::services::project_simulation::network_nodes::NetworkNodesError;
 
 #[derive(Debug, Clone, Copy)]
@@ -209,23 +210,11 @@ fn convert_in_progress_story_points(project: &Project) -> Project {
             estimate: Some(value),
         })) = issue.estimate.as_mut()
         {
-            *value = previous_fibonacci_value(*value);
+            *value = previous_value(*value);
         }
     }
 
     converted_project
-}
-
-fn previous_fibonacci_value(value: f32) -> f32 {
-    const FIBONACCI_ESTIMATES: [f32; 12] = [
-        1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 20.0, 40.0, 100.0, 200.0, 400.0, 800.0,
-    ];
-
-    FIBONACCI_ESTIMATES
-        .windows(2)
-        .find_map(|window| (value <= window[1]).then_some(window[0]))
-        .unwrap_or(value)
-        .max(1.0)
 }
 
 fn percentiles_from_samples(
