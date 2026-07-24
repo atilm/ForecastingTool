@@ -72,12 +72,12 @@ work_packages:
     let output_arg = output_file.path().to_str().unwrap().to_string();
     let output_path = Path::new(&output_arg);
     let histogram_path = output_path
-      .with_file_name(format!(
-        "{}_histogram.png",
-        output_path.file_stem().unwrap().to_string_lossy()
-      ))
-      .to_string_lossy()
-      .to_string();
+        .with_file_name(format!(
+            "{}_histogram.png",
+            output_path.file_stem().unwrap().to_string_lossy()
+        ))
+        .to_string_lossy()
+        .to_string();
 
     let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
     cmd.args(&[
@@ -110,11 +110,11 @@ work_packages:
 
 #[test]
 fn simulate_project_handles_referenced_estimates_correctly_when_the_are_in_progress() {
-  // Build report file for simulated sub-project
-  // All-equal durations for predictable test results
-  // Today is 2026-01-14 and there are 9 days remaining
-  // In the project file below we can see, that the sub-project started on 2026-01-08, so the total duration should be 15 days
-  let report_yaml = r#"
+    // Build report file for simulated sub-project
+    // All-equal durations for predictable test results
+    // Today is 2026-01-14 and there are 9 days remaining
+    // In the project file below we can see, that the sub-project started on 2026-01-08, so the total duration should be 15 days
+    let report_yaml = r#"
 data_source: "sub-project.yaml"
 start_date: "2026-01-14"
 velocity: null
@@ -137,11 +137,11 @@ p100:
   end_date: "2026-01-23"
 "#;
 
-  let report_file = assert_fs::NamedTempFile::new("report.yaml").unwrap();
-  report_file.write_str(report_yaml).unwrap();
+    let report_file = assert_fs::NamedTempFile::new("report.yaml").unwrap();
+    report_file.write_str(report_yaml).unwrap();
 
-  // Build the project file that references the above report for WP0, which is InProgress and depends on DONE-1
-  let project_yaml = format!(
+    // Build the project file that references the above report for WP0, which is InProgress and depends on DONE-1
+    let project_yaml = format!(
         r#"
 name: Demo
 work_packages:
@@ -206,15 +206,15 @@ work_packages:
 #[test]
 fn simulate_project_with_histogram_reference_estimate() {
     let histogram_file = assert_fs::NamedTempFile::new("histogram.yaml").unwrap();
-  histogram_file
-    .write_str(
-      r#"min_value: 0.0
+    histogram_file
+        .write_str(
+            r#"min_value: 0.0
 max_value: 1.0
 bin_width: 1.0
 bins:
   - 1
 "#,
-    )
+        )
         .unwrap();
 
     let project_yaml = format!(
@@ -336,4 +336,85 @@ free_date_ranges:
     assert!(output.contains("start_date: 2026-02-01"));
     assert!(output.contains("simulated_items:"));
     assert!(output.contains("p0:"));
+}
+
+#[test]
+fn simulate_project_reduces_in_progress_story_points_before_simulation() {
+    let project_yaml = r#"
+name: Demo
+work_packages:
+  - id: DONE-1
+    status: Done
+    estimate:
+      type: story_points
+      value: 1
+    start_date: 2026-01-01
+    done_date: 2026-01-01
+  - id: IP-1
+    status: InProgress
+    estimate:
+      type: story_points
+      value: 5
+    start_date: 2026-01-01
+"#;
+
+    let input_file = assert_fs::NamedTempFile::new("project.yaml").unwrap();
+    input_file.write_str(project_yaml).unwrap();
+    let output_file = assert_fs::NamedTempFile::new("simulation.yaml").unwrap();
+
+    let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
+    cmd.args(&[
+        "simulate",
+        "project",
+        "-i",
+        input_file.path().to_str().unwrap(),
+        "-o",
+        output_file.path().to_str().unwrap(),
+        "-s",
+        "2026-01-02",
+        "--iterations",
+        "100",
+    ]);
+
+    cmd.assert().success();
+
+    let output = fs::read_to_string(output_file.path()).unwrap();
+    #[derive(serde::Deserialize)]
+    struct Report {
+        work_packages: Vec<WorkPackage>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct WorkPackage {
+        id: String,
+        percentiles: Percentiles,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Percentiles {
+        p0: Percentile,
+        p100: Percentile,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Percentile {
+        days: f32,
+    }
+
+    let report: Report = serde_yaml::from_str(&output).unwrap();
+    let in_progress = report
+        .work_packages
+        .into_iter()
+        .find(|work_package| work_package.id == "IP-1")
+        .unwrap();
+
+    assert!(
+        in_progress.percentiles.p100.days <= 12.0,
+        "reduced estimate should keep the maximum simulated duration bounded: {} days",
+        in_progress.percentiles.p100.days
+    );
+    assert!(
+        in_progress.percentiles.p0.days > 0.0,
+        "cleared start date should make the item start from the simulation date"
+    );
 }

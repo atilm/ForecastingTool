@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::domain::calendar::TeamCalendar;
+use crate::domain::estimate::{Estimate, StoryPointEstimate};
+use crate::domain::issue_status::IssueStatus;
 
 use crate::services::project_simulation::network_nodes::SortedNetworkNodes;
 use crate::services::project_simulation::network_nodes::build_network_nodes;
@@ -108,6 +110,12 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     sampler: &mut R,
     calendar: &TeamCalendar,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
+    let converted_project = if project.has_story_points() {
+        convert_in_progress_story_points(project)
+    } else {
+        project.clone()
+    };
+    let project = &converted_project;
     let mut samples_by_id: HashMap<String, Vec<WorkItemSample>> = HashMap::new();
     let mut project_end_dates = Vec::with_capacity(iterations);
     let calendar_option = if project.has_story_points() {
@@ -187,6 +195,39 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     Ok(SimulationOutput { report, results })
 }
 
+fn convert_in_progress_story_points(project: &Project) -> Project {
+    let mut converted_project = project.clone();
+
+    for issue in &mut converted_project.work_packages {
+        if issue.status != Some(IssueStatus::InProgress) {
+            continue;
+        }
+
+        issue.status = Some(IssueStatus::ToDo);
+        issue.start_date = None;
+        if let Some(Estimate::StoryPoint(StoryPointEstimate {
+            estimate: Some(value),
+        })) = issue.estimate.as_mut()
+        {
+            *value = previous_fibonacci_value(*value);
+        }
+    }
+
+    converted_project
+}
+
+fn previous_fibonacci_value(value: f32) -> f32 {
+    const FIBONACCI_ESTIMATES: [f32; 12] = [
+        1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 20.0, 40.0, 100.0, 200.0, 400.0, 800.0,
+    ];
+
+    FIBONACCI_ESTIMATES
+        .windows(2)
+        .find_map(|window| (value <= window[1]).then_some(window[0]))
+        .unwrap_or(value)
+        .max(1.0)
+}
+
 fn percentiles_from_samples(
     samples: &[WorkItemSample],
     start_date: chrono::NaiveDate,
@@ -221,7 +262,9 @@ fn calculate_days(start_date: chrono::NaiveDate, end_date: chrono::NaiveDate) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::estimate::Estimate;
     use crate::domain::issue::IssueId;
+    use crate::domain::issue_status::IssueStatus;
     use crate::test_support::{MockSampler, build_in_progress_story_point_issue};
     use crate::test_support::{
         build_constant_three_point_issue, build_done_issue, build_done_issue_with_deps,
@@ -230,6 +273,66 @@ mod tests {
     };
     use chrono::NaiveDate;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn convert_in_progress_story_points_to_todo_decrements_estimate() {
+        let mut in_progress =
+            build_in_progress_story_point_issue("IP-1", 8.0, on_date(2026, 1, 1), &[]);
+        let original_start_date = in_progress.start_date;
+        let project = Project {
+            name: "Demo".to_string(),
+            work_packages: vec![in_progress.clone()],
+        };
+
+        let converted = convert_in_progress_story_points(&project);
+        in_progress = converted.work_packages.into_iter().next().unwrap();
+
+        assert_eq!(in_progress.status, Some(IssueStatus::ToDo));
+        assert!(original_start_date.is_some());
+        assert_eq!(in_progress.start_date, None);
+        assert_eq!(
+            in_progress.estimate,
+            Some(Estimate::StoryPoint(StoryPointEstimate {
+                estimate: Some(5.0),
+            }))
+        );
+    }
+
+    #[test]
+    fn convert_in_progress_story_points_floors_estimate_at_one() {
+        let project = Project {
+            name: "Demo".to_string(),
+            work_packages: vec![build_in_progress_story_point_issue(
+                "IP-1",
+                1.0,
+                on_date(2026, 1, 1),
+                &[],
+            )],
+        };
+
+        let converted = convert_in_progress_story_points(&project);
+
+        assert_eq!(
+            converted.work_packages[0].estimate,
+            Some(Estimate::StoryPoint(StoryPointEstimate {
+                estimate: Some(1.0),
+            }))
+        );
+    }
+
+    #[test]
+    fn convert_in_progress_story_points_leaves_other_work_packages_unchanged() {
+        let todo = build_story_point_issue("TODO-1", 8.0, &[]);
+        let three_point = build_constant_three_point_issue("3P-1", 2.0, &[]);
+        let project = Project {
+            name: "Demo".to_string(),
+            work_packages: vec![todo.clone(), three_point.clone()],
+        };
+
+        let converted = convert_in_progress_story_points(&project);
+
+        assert_eq!(converted.work_packages, project.work_packages);
+    }
 
     #[test]
     fn simulate_rejects_cyclic_dependencies() {
@@ -369,8 +472,8 @@ mod tests {
         let wp2 = work_packages.iter().find(|wp| wp.id == "SP-2").unwrap();
 
         assert_eq!(wp0.percentiles.p0.end_date, on_date(2026, 1, 8));
-        assert_eq!(wp1.percentiles.p0.end_date, on_date(2026, 2, 20));
-        assert_eq!(wp2.percentiles.p0.end_date, on_date(2026, 2, 26));
+        assert_eq!(wp1.percentiles.p0.end_date, on_date(2026, 1, 13));
+        assert_eq!(wp2.percentiles.p0.end_date, on_date(2026, 1, 19));
     }
 
     #[test]
