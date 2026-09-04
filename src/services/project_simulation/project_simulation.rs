@@ -202,6 +202,7 @@ fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
             start_date,
             calendar_option,
             creation,
+            sampler,
         )?;
         max_processed_nodes = max_processed_nodes.max(result_nodes.len());
 

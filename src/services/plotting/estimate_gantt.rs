@@ -58,6 +58,7 @@ pub fn write_pert_gantt_markdown(
         start_date,
         Some(&calendar),
         StoryPointCreationConfig::disabled(),
+        &mut expected_value_sampler,
     )?;
 
     let markdown = generate_gantt_markdown(&result_nodes, &project);

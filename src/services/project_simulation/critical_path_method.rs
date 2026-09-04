@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
+use crate::domain::estimate::{Estimate, StoryPointEstimate};
+use crate::services::project_simulation::beta_pert_sampler::{BetaPertSampler, ThreePointSampler};
 use crate::services::project_simulation::network_nodes::SortedNetworkNodes;
+use crate::services::project_simulation::sample_duration::{SamplingError, sample_duration_days};
 use chrono::NaiveDate;
 use thiserror::Error;
 
@@ -30,6 +33,8 @@ pub enum CriticalPathMethodError {
         "The provided calendar does not have enough capacity to complete the task within a reasonable time frame."
     )]
     InsufficientCalendarCapacity,
+    #[error("failed to sample generated story-point duration: {0}")]
+    Sampling(#[from] SamplingError),
     #[error("simulation exceeded the 1000 processed-node safety limit")]
     ProcessedNodeLimitExceeded,
 }
@@ -57,19 +62,23 @@ pub fn critical_path_method(
     project_start: NaiveDate,
     calendar: Option<&TeamCalendar>,
 ) -> Result<Vec<ResultNode>, CriticalPathMethodError> {
+    let mut rng = rand::thread_rng();
+    let mut sampler = BetaPertSampler::new(&mut rng);
     critical_path_method_with_creation(
         network,
         project_start,
         calendar,
         StoryPointCreationConfig::disabled(),
+        &mut sampler,
     )
 }
 
-pub fn critical_path_method_with_creation(
+pub fn critical_path_method_with_creation<R: ThreePointSampler + ?Sized>(
     network: SortedNetworkNodes,
     project_start: NaiveDate,
     calendar: Option<&TeamCalendar>,
     creation: StoryPointCreationConfig,
+    sampler: &mut R,
 ) -> Result<Vec<ResultNode>, CriticalPathMethodError> {
     let mut sorted_nodes = network.take();
     let original_terminal_ids = terminal_node_ids(&sorted_nodes);
@@ -143,11 +152,16 @@ pub fn critical_path_method_with_creation(
                     } else {
                         vec![generated_id(generated_count - 1, &original_ids)]
                     };
+                    let estimate = Estimate::StoryPoint(StoryPointEstimate {
+                        estimate: Some(points),
+                    });
+                    let duration =
+                        sample_duration_days(&estimate, Some(creation.velocity), sampler, &id)?;
                     sorted_nodes.push(
                         crate::services::project_simulation::network_nodes::NetworkNode {
                             id,
                             is_milestone: false,
-                            duration: points / creation.velocity,
+                            duration,
                             start_date: None,
                             end_date: None,
                             dependencies,
@@ -343,8 +357,10 @@ fn start_date_from_capacity_days(
 
 #[cfg(test)]
 mod tests {
+    use crate::services::project_simulation::beta_pert_sampler::ThreePointSamplerError;
     use crate::services::project_simulation::network_nodes::NetworkNode;
-    use crate::test_support::on_date;
+    use crate::services::util::histogram::{Histogram, HistogramError};
+    use crate::test_support::{MockSampler, on_date};
 
     use super::*;
     use chrono::NaiveDate;
@@ -402,6 +418,7 @@ mod tests {
     fn creation_appends_serial_work_after_original_terminal_nodes() {
         let network = SortedNetworkNodes::new(vec![build_network_node("A", 2.0, &[])]).unwrap();
         let start = on_date(2026, 1, 1);
+        let mut sampler = MockSampler;
 
         let result = critical_path_method_with_creation(
             network,
@@ -411,6 +428,7 @@ mod tests {
                 rate: 0.5,
                 velocity: 10.0,
             },
+            &mut sampler,
         )
         .unwrap();
 
@@ -423,6 +441,7 @@ mod tests {
     #[test]
     fn high_creation_rate_stops_before_processing_node_1001() {
         let network = SortedNetworkNodes::new(vec![build_network_node("A", 1.0, &[])]).unwrap();
+        let mut sampler = MockSampler;
         let result = critical_path_method_with_creation(
             network,
             on_date(2026, 1, 1),
@@ -431,11 +450,47 @@ mod tests {
                 rate: 1000.0,
                 velocity: 1.0,
             },
+            &mut sampler,
         );
         assert!(matches!(
             result,
             Err(CriticalPathMethodError::ProcessedNodeLimitExceeded)
         ));
+    }
+
+    struct FailingSampler;
+
+    impl ThreePointSampler for FailingSampler {
+        fn sample(
+            &mut self,
+            _optimistic: f32,
+            _most_likely: f32,
+            _pessimistic: f32,
+        ) -> Result<f32, ThreePointSamplerError> {
+            Err(ThreePointSamplerError::MostLikelyOutOfRange)
+        }
+
+        fn sample_histogram(&mut self, _histogram: &Histogram) -> Result<f32, HistogramError> {
+            Ok(0.0)
+        }
+    }
+
+    #[test]
+    fn generated_duration_sampling_errors_are_returned() {
+        let network = SortedNetworkNodes::new(vec![build_network_node("A", 2.0, &[])]).unwrap();
+        let mut sampler = FailingSampler;
+        let result = critical_path_method_with_creation(
+            network,
+            on_date(2026, 1, 1),
+            None,
+            StoryPointCreationConfig {
+                rate: 0.5,
+                velocity: 10.0,
+            },
+            &mut sampler,
+        );
+
+        assert!(matches!(result, Err(CriticalPathMethodError::Sampling(_))));
     }
 
     struct WorkPackageTestCase {
