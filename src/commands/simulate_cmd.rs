@@ -4,7 +4,7 @@ use crate::commands::{CommandError, CommandResult};
 use crate::services::parsing::histogram_yaml::serialize_histogram_to_yaml_file;
 use crate::services::plotting::histogram::write_histogram_png;
 use crate::services::plotting::milestone_plot::write_milestone_plot_png;
-use crate::services::project_simulation::project_simulation::simulate_project_from_yaml_file;
+use crate::services::project_simulation::project_simulation::simulate_project_from_yaml_file_with_creation_rate;
 use crate::services::util::histogram::Histogram;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -41,11 +41,17 @@ pub fn simulate_command(args: SimulateProjectArgs) -> CommandResult {
         iterations,
         start_date,
         calendar_dir,
+        story_point_creation_rate,
     } = args;
 
-    let simulation =
-        simulate_project_from_yaml_file(&input, iterations, start_date, calendar_dir.as_deref())
-            .map_err(CommandError::SimulateProject)?;
+    let simulation = simulate_project_from_yaml_file_with_creation_rate(
+        &input,
+        iterations,
+        start_date,
+        calendar_dir.as_deref(),
+        story_point_creation_rate,
+    )
+    .map_err(CommandError::SimulateProject)?;
 
     let (histogram_path, histogram_yaml_path) = histogram_paths_from_output(&output);
     let mut messages = Vec::new();

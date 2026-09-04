@@ -45,6 +45,15 @@ pub(crate) fn previous_value(value: f32) -> f32 {
         .max(1.0)
 }
 
+pub(crate) fn largest_value_at_most(value: f32) -> f32 {
+    ESTIMATES
+        .iter()
+        .copied()
+        .filter(|estimate| *estimate <= value)
+        .last()
+        .unwrap_or(0.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -91,5 +100,13 @@ mod tests {
                 "unexpected previous value for {value}"
             );
         }
+    }
+
+    #[test]
+    fn largest_value_at_most_uses_configured_scale() {
+        assert_eq!(largest_value_at_most(0.9), 0.0);
+        assert_eq!(largest_value_at_most(5.0), 5.0);
+        assert_eq!(largest_value_at_most(7.9), 5.0);
+        assert_eq!(largest_value_at_most(900.0), 800.0);
     }
 }

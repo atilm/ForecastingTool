@@ -175,6 +175,9 @@ pub struct SimulateProjectArgs {
     /// Optional path to a calendar directory
     #[arg(short, long)]
     pub calendar_dir: Option<String>,
+    /// Daily rate with which story points are created. Per calendar day, without taking into account weekends or holidays.
+    #[arg(short = 'r', long, default_value_t = 0.0, value_parser = parse_story_point_creation_rate)]
+    pub story_point_creation_rate: f32,
 }
 
 #[derive(Args)]
@@ -210,6 +213,17 @@ fn default_start_date() -> NaiveDate {
     Local::now().date_naive()
 }
 
+fn parse_story_point_creation_rate(value: &str) -> Result<f32, String> {
+    let rate = value
+        .parse::<f32>()
+        .map_err(|_| "rate must be a finite, non-negative decimal number".to_string())?;
+    if rate.is_finite() && rate >= 0.0 {
+        Ok(rate)
+    } else {
+        Err("rate must be a finite, non-negative decimal number".to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -232,8 +246,52 @@ mod tests {
         {
             assert_eq!(simulate.start_date, default_start_date());
             assert_eq!(simulate.iterations, 10000);
+            assert_eq!(simulate.story_point_creation_rate, 0.0);
         } else {
             panic!("expected simulate project command");
+        }
+    }
+
+    #[test]
+    fn simulate_project_parses_story_point_creation_rate() {
+        let args = CliArgs::try_parse_from([
+            "forecasts",
+            "simulate",
+            "project",
+            "-i",
+            "input.yaml",
+            "-o",
+            "output.yaml",
+            "-r",
+            "1.5",
+        ])
+        .unwrap();
+        let Commands::Simulate {
+            command: SimulateCommands::Project(simulate),
+        } = args.command
+        else {
+            panic!("expected simulate project command");
+        };
+        assert_eq!(simulate.story_point_creation_rate, 1.5);
+    }
+
+    #[test]
+    fn simulate_project_rejects_invalid_story_point_creation_rates() {
+        for rate in ["-1", "NaN", "inf"] {
+            assert!(
+                CliArgs::try_parse_from([
+                    "forecasts",
+                    "simulate",
+                    "project",
+                    "-i",
+                    "input.yaml",
+                    "-o",
+                    "output.yaml",
+                    "-r",
+                    rate,
+                ])
+                .is_err()
+            );
         }
     }
 

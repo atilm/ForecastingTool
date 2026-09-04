@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use thiserror::Error;
 
@@ -29,13 +29,16 @@ use crate::services::project_simulation::velocity_calculation::calculate_project
 use crate::services::util::data_source_name;
 
 use crate::services::project_simulation::critical_path_method::CriticalPathMethodError;
-use crate::services::project_simulation::critical_path_method::critical_path_method;
+use crate::services::project_simulation::critical_path_method::{
+    StoryPointCreationConfig, critical_path_method_with_creation,
+};
 use crate::services::project_simulation::fibonacci::previous_value;
 use crate::services::project_simulation::network_nodes::NetworkNodesError;
 
 #[derive(Debug, Clone, Copy)]
 struct WorkItemSample {
     end_date: chrono::NaiveDate,
+    is_milestone: bool,
 }
 
 #[derive(Error, Debug)]
@@ -68,9 +71,31 @@ pub fn simulate_project_from_yaml_file(
     start_date: NaiveDate,
     calendar_path: Option<&str>,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
+    simulate_project_from_yaml_file_with_creation_rate(
+        path,
+        iterations,
+        start_date,
+        calendar_path,
+        0.0,
+    )
+}
+
+pub fn simulate_project_from_yaml_file_with_creation_rate(
+    path: &str,
+    iterations: usize,
+    start_date: NaiveDate,
+    calendar_path: Option<&str>,
+    story_point_creation_rate: f32,
+) -> Result<SimulationOutput, ProjectSimulationError> {
     let project = load_project_from_yaml_file(path, &Some(start_date))?;
     let calendar = load_team_calendar_if_provided(calendar_path)?;
-    let mut output = simulate_project(&project, iterations, start_date, calendar)?;
+    let mut output = simulate_project_with_creation_rate(
+        &project,
+        iterations,
+        start_date,
+        calendar,
+        story_point_creation_rate,
+    )?;
     output.report.data_source = data_source_name(path);
     Ok(output)
 }
@@ -80,6 +105,16 @@ pub fn simulate_project(
     iterations: usize,
     start_date: NaiveDate,
     calendar: TeamCalendar,
+) -> Result<SimulationOutput, ProjectSimulationError> {
+    simulate_project_with_creation_rate(project, iterations, start_date, calendar, 0.0)
+}
+
+pub fn simulate_project_with_creation_rate(
+    project: &Project,
+    iterations: usize,
+    start_date: NaiveDate,
+    calendar: TeamCalendar,
+    story_point_creation_rate: f32,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
     if iterations == 0 {
         return Err(ProjectSimulationError::InvalidIterations);
@@ -92,13 +127,19 @@ pub fn simulate_project(
 
     let mut rng = rand::thread_rng();
     let mut sampler = BetaPertSampler::new(&mut rng);
-    let output = run_simulation(
+    if story_point_creation_rate > 0.0 && !project.has_story_points() {
+        println!(
+            "Warning: story-point creation rate is ignored because the project has no story-point estimates."
+        );
+    }
+    let output = run_simulation_with_creation_rate(
         project,
         velocity,
         iterations,
         start_date,
         &mut sampler,
         &calendar,
+        story_point_creation_rate,
     )?;
     Ok(output)
 }
@@ -111,15 +152,32 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
     sampler: &mut R,
     calendar: &TeamCalendar,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
+    run_simulation_with_creation_rate(
+        project, velocity, iterations, start_date, sampler, calendar, 0.0,
+    )
+}
+
+fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
+    project: &Project,
+    velocity: Option<f32>,
+    iterations: usize,
+    start_date: chrono::NaiveDate,
+    sampler: &mut R,
+    calendar: &TeamCalendar,
+    story_point_creation_rate: f32,
+) -> Result<SimulationOutput, ProjectSimulationError> {
     let converted_project = if project.has_story_points() {
-        println!("Project contains story points, converting InProgress items into ToDo items with decreased story points.");
+        println!(
+            "Project contains story points, converting InProgress items into ToDo items with decreased story points."
+        );
         convert_in_progress_story_points(project)
     } else {
         project.clone()
     };
     let project = &converted_project;
-    let mut samples_by_id: HashMap<String, Vec<WorkItemSample>> = HashMap::new();
+    let mut samples_by_id: BTreeMap<String, Vec<WorkItemSample>> = BTreeMap::new();
     let mut project_end_dates = Vec::with_capacity(iterations);
+    let mut max_processed_nodes = 0usize;
     let calendar_option = if project.has_story_points() {
         println!("Project contains story points, using calendar the calendar.");
         Some(calendar)
@@ -132,7 +190,20 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         let network_nodes = build_network_nodes(&project, velocity, sampler)?;
         let sorted_nodes = SortedNetworkNodes::new(network_nodes)?;
 
-        let result_nodes = critical_path_method(sorted_nodes, start_date, calendar_option)?;
+        let creation = velocity
+            .filter(|_| project.has_story_points() && story_point_creation_rate > 0.0)
+            .map(|velocity| StoryPointCreationConfig {
+                rate: story_point_creation_rate,
+                velocity,
+            })
+            .unwrap_or_else(StoryPointCreationConfig::disabled);
+        let result_nodes = critical_path_method_with_creation(
+            sorted_nodes,
+            start_date,
+            calendar_option,
+            creation,
+        )?;
+        max_processed_nodes = max_processed_nodes.max(result_nodes.len());
 
         let project_end_date = result_nodes
             .iter()
@@ -147,30 +218,17 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
                 .or_insert_with(|| Vec::with_capacity(iterations))
                 .push(WorkItemSample {
                     end_date: result_node.earliest_finish,
+                    is_milestone: result_node.is_milestone,
                 });
         }
     }
 
-    let work_packages = project
-        .work_packages
+    let work_packages = samples_by_id
         .iter()
-        .map(|issue| {
-            let id = issue
-                .issue_id
-                .as_ref()
-                .map(|issue_id| issue_id.id.clone())
-                .unwrap_or_default();
-            WorkPackageSimulation {
-                id,
-                is_milestone: issue.is_milestone(),
-                percentiles: percentiles_from_samples(
-                    samples_by_id
-                        .get(issue.issue_id.as_ref().unwrap().id.as_str())
-                        .map(Vec::as_slice)
-                        .unwrap_or(&[]),
-                    start_date,
-                ),
-            }
+        .map(|(id, samples)| WorkPackageSimulation {
+            id: id.clone(),
+            is_milestone: samples.first().is_some_and(|sample| sample.is_milestone),
+            percentiles: percentiles_from_samples(samples, start_date),
         })
         .collect();
 
@@ -180,7 +238,7 @@ fn run_simulation<R: ThreePointSampler + ?Sized>(
         start_date,
         velocity,
         iterations,
-        simulated_items: project.work_packages.len(),
+        simulated_items: max_processed_nodes,
         p0: to_simulation_percentile(&project_end_dates, 0.0, start_date),
         p15: to_simulation_percentile(&project_end_dates, 15.0, start_date),
         p50: to_simulation_percentile(&project_end_dates, 50.0, start_date),
@@ -213,7 +271,11 @@ fn convert_in_progress_story_points(project: &Project) -> Project {
         {
             println!(
                 "Converting story points for issue {} from {} to {}",
-                issue.issue_id.as_ref().map(|id| &id.id).unwrap_or(&"Unknown".to_string()),
+                issue
+                    .issue_id
+                    .as_ref()
+                    .map(|id| &id.id)
+                    .unwrap_or(&"Unknown".to_string()),
                 value,
                 previous_value(*value)
             );

@@ -6,12 +6,32 @@ use thiserror::Error;
 
 use crate::domain::calendar::TeamCalendar;
 
+const MAX_PROCESSED_NODES: usize = 1000;
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct StoryPointCreationConfig {
+    pub rate: f32,
+    pub velocity: f32,
+}
+
+impl StoryPointCreationConfig {
+    pub fn disabled() -> Self {
+        Self::default()
+    }
+
+    pub fn is_enabled(self) -> bool {
+        self.rate > 0.0 && self.velocity > 0.0
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum CriticalPathMethodError {
     #[error(
         "The provided calendar does not have enough capacity to complete the task within a reasonable time frame."
     )]
     InsufficientCalendarCapacity,
+    #[error("simulation exceeded the 1000 processed-node safety limit")]
+    ProcessedNodeLimitExceeded,
 }
 
 pub struct ResultNode {
@@ -37,15 +57,40 @@ pub fn critical_path_method(
     project_start: NaiveDate,
     calendar: Option<&TeamCalendar>,
 ) -> Result<Vec<ResultNode>, CriticalPathMethodError> {
-    let sorted_nodes = network.take();
+    critical_path_method_with_creation(
+        network,
+        project_start,
+        calendar,
+        StoryPointCreationConfig::disabled(),
+    )
+}
+
+pub fn critical_path_method_with_creation(
+    network: SortedNetworkNodes,
+    project_start: NaiveDate,
+    calendar: Option<&TeamCalendar>,
+    creation: StoryPointCreationConfig,
+) -> Result<Vec<ResultNode>, CriticalPathMethodError> {
+    let mut sorted_nodes = network.take();
+    let original_terminal_ids = terminal_node_ids(&sorted_nodes);
+    let original_ids: std::collections::HashSet<String> =
+        sorted_nodes.iter().map(|node| node.id.clone()).collect();
     let nodes_count = sorted_nodes.len();
 
     let mut earliest_finish_dates: HashMap<String, chrono::NaiveDate> =
         HashMap::with_capacity(nodes_count);
     let mut result_nodes: HashMap<String, ResultNode> = HashMap::with_capacity(nodes_count);
 
-    // Forward pass to calculate earliest start and finish times
-    for node in &sorted_nodes {
+    let mut high_water_date = project_start;
+    let mut accumulated_points = 0.0;
+    let mut generated_count = 0usize;
+    let mut index = 0usize;
+    // Forward pass to calculate earliest start and finish times. The vector can grow as work is created.
+    while index < sorted_nodes.len() {
+        if index >= MAX_PROCESSED_NODES {
+            return Err(CriticalPathMethodError::ProcessedNodeLimitExceeded);
+        }
+        let node = &sorted_nodes[index];
         let earliest_start = if let Some(start_date) = node.start_date {
             start_date
         } else {
@@ -78,6 +123,40 @@ pub fn critical_path_method(
                 total_float: 0.0,             // Placeholder, will be calculated in backward pass
             },
         );
+
+        if creation.is_enabled() {
+            let new_high_water_date = high_water_date.max(earliest_finish);
+            accumulated_points +=
+                (new_high_water_date - high_water_date).num_days() as f32 * creation.rate;
+            high_water_date = new_high_water_date;
+
+            if accumulated_points >= 1.0 {
+                let points = crate::services::project_simulation::fibonacci::largest_value_at_most(
+                    accumulated_points,
+                );
+                if points >= 1.0 {
+                    accumulated_points -= points;
+                    generated_count += 1;
+                    let id = generated_id(generated_count, &original_ids);
+                    let dependencies = if generated_count == 1 {
+                        original_terminal_ids.clone()
+                    } else {
+                        vec![generated_id(generated_count - 1, &original_ids)]
+                    };
+                    sorted_nodes.push(
+                        crate::services::project_simulation::network_nodes::NetworkNode {
+                            id,
+                            is_milestone: false,
+                            duration: points / creation.velocity,
+                            start_date: None,
+                            end_date: None,
+                            dependencies,
+                        },
+                    );
+                }
+            }
+        }
+        index += 1;
     }
 
     // Build successor map (reverse of dependencies)
@@ -138,6 +217,35 @@ pub fn critical_path_method(
         .collect();
 
     Ok(result_vector)
+}
+
+fn terminal_node_ids(
+    nodes: &[crate::services::project_simulation::network_nodes::NetworkNode],
+) -> Vec<String> {
+    let dependencies: std::collections::HashSet<&str> = nodes
+        .iter()
+        .flat_map(|node| node.dependencies.iter().map(String::as_str))
+        .collect();
+    nodes
+        .iter()
+        .filter(|node| !dependencies.contains(node.id.as_str()))
+        .map(|node| node.id.clone())
+        .collect()
+}
+
+fn generated_id(sequence: usize, original_ids: &std::collections::HashSet<String>) -> String {
+    let base = format!("__generated_story_point_{sequence}");
+    if !original_ids.contains(&base) {
+        return base;
+    }
+    let mut suffix = 1usize;
+    loop {
+        let candidate = format!("{base}_{suffix}");
+        if !original_ids.contains(&candidate) {
+            return candidate;
+        }
+        suffix += 1;
+    }
 }
 
 fn calculate_end_date(
@@ -288,6 +396,46 @@ mod tests {
         let expected_order = vec!["WP0", "WP1", "WP2", "WP3", "FIN"];
         let result_order: Vec<String> = result.iter().map(|node| node.id.clone()).collect();
         assert_eq!(result_order, expected_order);
+    }
+
+    #[test]
+    fn creation_appends_serial_work_after_original_terminal_nodes() {
+        let network = SortedNetworkNodes::new(vec![build_network_node("A", 2.0, &[])]).unwrap();
+        let start = on_date(2026, 1, 1);
+
+        let result = critical_path_method_with_creation(
+            network,
+            start,
+            None,
+            StoryPointCreationConfig {
+                rate: 0.5,
+                velocity: 10.0,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[1].id, "__generated_story_point_1");
+        assert_eq!(result[1].earliest_start, on_date(2026, 1, 3));
+        assert_eq!(result[1].earliest_finish, on_date(2026, 1, 4));
+    }
+
+    #[test]
+    fn high_creation_rate_stops_before_processing_node_1001() {
+        let network = SortedNetworkNodes::new(vec![build_network_node("A", 1.0, &[])]).unwrap();
+        let result = critical_path_method_with_creation(
+            network,
+            on_date(2026, 1, 1),
+            None,
+            StoryPointCreationConfig {
+                rate: 1000.0,
+                velocity: 1.0,
+            },
+        );
+        assert!(matches!(
+            result,
+            Err(CriticalPathMethodError::ProcessedNodeLimitExceeded)
+        ));
     }
 
     struct WorkPackageTestCase {

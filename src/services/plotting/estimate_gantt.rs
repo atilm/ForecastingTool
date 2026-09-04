@@ -10,7 +10,9 @@ use crate::services::parsing::team_calendar_yaml::{
 use crate::services::project_simulation::beta_pert_sampler::PertExpectedValueSampler;
 use crate::services::project_simulation::critical_path_method::CriticalPathMethodError;
 use crate::services::project_simulation::critical_path_method::ResultNode;
-use crate::services::project_simulation::critical_path_method::critical_path_method;
+use crate::services::project_simulation::critical_path_method::{
+    StoryPointCreationConfig, critical_path_method_with_creation,
+};
 use crate::services::project_simulation::network_nodes::NetworkNodesError;
 use crate::services::project_simulation::network_nodes::SortedNetworkNodes;
 use crate::services::project_simulation::network_nodes::build_network_nodes;
@@ -51,7 +53,12 @@ pub fn write_pert_gantt_markdown(
 
     let network_nodes = build_network_nodes(&project, velocity, &mut expected_value_sampler)?;
     let sorted_nodes = SortedNetworkNodes::new(network_nodes)?;
-    let result_nodes = critical_path_method(sorted_nodes, start_date, Some(&calendar))?;
+    let result_nodes = critical_path_method_with_creation(
+        sorted_nodes,
+        start_date,
+        Some(&calendar),
+        StoryPointCreationConfig::disabled(),
+    )?;
 
     let markdown = generate_gantt_markdown(&result_nodes, &project);
 
