@@ -47,6 +47,7 @@ Add a new option to the `forecasts simulate project` command:
    - Determine the original graph's terminal node IDs before appending work.
    - Track the latest forward-pass date reached and accrue points only for positive movement of that global date.
    - After each processed node, append at most one generated node when the accumulator is at least one.
+   - Reuse the existing story-point estimate sampling code when assigning a generated issue's estimate; do not introduce a separate sampling implementation.
    - Give generated nodes deterministic, repeatable-across-iteration, collision-safe internal IDs based on their generation sequence; give them duration `generated_points / velocity`, no fixed dates, and dependencies as defined above.
    - Enforce the 1000-node processing limit and return a new `CriticalPathMethodError` variant before processing node 1001.
    - Build successors and run the existing backward pass only after dynamic generation has finished, so generated nodes participate in project-end and float calculations.
