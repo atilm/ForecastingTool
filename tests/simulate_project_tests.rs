@@ -418,3 +418,49 @@ work_packages:
         "cleared start date should make the item start from the simulation date"
     );
 }
+
+#[test]
+fn simulate_project_with_story_point_creation_rate_adds_generated_work() {
+    let project_yaml = r#"
+name: Demo
+work_packages:
+  - id: DONE-1
+    status: Done
+    estimate:
+      type: story_points
+      value: 100
+    start_date: 2025-12-01
+    done_date: 2025-12-02
+  - id: TASK-1
+    estimate:
+      type: three_point
+      optimistic: 2
+      most_likely: 2
+      pessimistic: 2
+"#;
+    let input_file = assert_fs::NamedTempFile::new("project.yaml").unwrap();
+    input_file.write_str(project_yaml).unwrap();
+    let output_file = assert_fs::NamedTempFile::new("simulation.yaml").unwrap();
+
+    let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
+    cmd.args([
+        "simulate",
+        "project",
+        "-i",
+        input_file.path().to_str().unwrap(),
+        "-o",
+        output_file.path().to_str().unwrap(),
+        "-s",
+        "2026-01-05",
+        "--iterations",
+        "1",
+        "--story-point-creation-rate",
+        "0.5",
+    ]);
+
+    cmd.assert().success();
+
+    let output = fs::read_to_string(output_file.path()).unwrap();
+    assert!(output.contains("id: __generated_story_point_1"));
+    assert!(output.contains("simulated_items: 3"));
+}
