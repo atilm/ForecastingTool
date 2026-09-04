@@ -24,7 +24,7 @@ Add a new option to the `forecasts simulate project` command:
    - Every later generated issue depends on the previously generated issue.
    - Time spent processing generated issues also creates story points and can append further issues.
 6. The safety limit is 1000 processed nodes per Monte Carlo iteration, counting both original and generated nodes. The simulation aborts with a custom error before processing a 1001st node; it must not return a truncated forecast.
-7. Generated issues affect project completion dates but are omitted from the report's `work_packages` details. `simulated_items` is the maximum number of processed nodes in any iteration, including generated nodes.
+7. Generated issues affect project completion dates and appear in the report's `work_packages` details. Their internal IDs must be deterministic and repeatable across Monte Carlo iterations for the same generated-issue sequence, while remaining collision-safe with original project IDs. When a work package, including a generated one, occurs in only a subset of iterations, calculate its percentiles from all and only its occurrences rather than treating absent iterations as observations. `simulated_items` is the maximum number of processed nodes in any iteration, including generated nodes.
 
 ## Existing-code analysis
 
@@ -47,10 +47,10 @@ Add a new option to the `forecasts simulate project` command:
    - Determine the original graph's terminal node IDs before appending work.
    - Track the latest forward-pass date reached and accrue points only for positive movement of that global date.
    - After each processed node, append at most one generated node when the accumulator is at least one.
-   - Give generated nodes deterministic collision-safe internal IDs, duration `generated_points / velocity`, no fixed dates, and dependencies as defined above.
+   - Give generated nodes deterministic, repeatable-across-iteration, collision-safe internal IDs based on their generation sequence; give them duration `generated_points / velocity`, no fixed dates, and dependencies as defined above.
    - Enforce the 1000-node processing limit and return a new `CriticalPathMethodError` variant before processing node 1001.
    - Build successors and run the existing backward pass only after dynamic generation has finished, so generated nodes participate in project-end and float calculations.
-6. In `run_simulation`, use each iteration's result-node count to track the maximum processed count for `SimulationReport.simulated_items`. Continue collecting work-package percentiles only for original project IDs so generated details do not enter `work_packages`.
+6. In `run_simulation`, use each iteration's result-node count to track the maximum processed count for `SimulationReport.simulated_items`. Collect work-package samples for both original and generated IDs, aggregating each ID's percentiles over only the iterations in which that ID occurs.
 7. Update all critical-path call sites. `estimate_gantt` passes creation disabled; project simulation passes the enabled configuration only for positive-rate story-point simulations.
 8. Add critical-path unit tests covering:
    - zero/disabled creation leaves dates and node counts unchanged;
@@ -62,7 +62,7 @@ Add a new option to the `forecasts simulate project` command:
    - generated processing creates additional work;
    - stable-rate completion when creation is below processing velocity;
    - a non-terminating/high-rate case returns the limit error before node 1001.
-9. Add project-simulation unit tests for `simulated_items` using the maximum processed count and for omission of generated IDs from work-package details.
+9. Add project-simulation unit tests for `simulated_items` using the maximum processed count, inclusion of generated IDs in work-package details, deterministic generated IDs across iterations, and percentile calculations based only on a work package's occurrences.
 10. Add integration tests in `tests/simulate_project_tests.rs` covering help/default parsing, a positive rate ignored with a warning for a non-story-point project, no warning at zero, a story-point forecast extended by generated work, invalid rates, and the 1000-node abort on stderr with a non-zero exit status.
 11. Update the source documentation in `docs/src/cli-reference.md` if it contains checked-in option text, regenerate any derived CLI documentation through the repository's existing documentation workflow if applicable, then run formatting, focused tests, and the full Rust test suite.
 
