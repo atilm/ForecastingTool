@@ -1,10 +1,20 @@
 # ToDos
 
+* [ ] The burndown plot should also plot generated issues
+* [ ] The burndown plot should use the same calendar directory as the simulation
+
 ## Fixes
 
-* message "using calendar the calendar" korrigieren
+* [ ] message "using calendar the calendar" korrigieren
 
 ## Ideas
+
+* [ ] Add logging
+  * [ ] Logging framework with different sinks
+  * [ ] Log details for velocity calculation
+
+* [ ] Add the ability to modify the velocity with factors in time spans
+  * [ ] It should be possible to overlay factors
 
 * [ ] Output error messages in RED
 
