@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::domain::estimate::{Estimate, StoryPointEstimate};
-use crate::services::project_simulation::beta_pert_sampler::{BetaPertSampler, ThreePointSampler};
+use crate::services::project_simulation::beta_pert_sampler::ThreePointSampler;
 use crate::services::project_simulation::network_nodes::SortedNetworkNodes;
 use crate::services::project_simulation::sample_duration::{SamplingError, sample_duration_days};
 use chrono::NaiveDate;
@@ -56,22 +56,6 @@ impl ResultNode {
     pub fn is_critical(&self) -> bool {
         self.total_float.abs() < f32::EPSILON
     }
-}
-
-pub fn critical_path_method(
-    network: SortedNetworkNodes,
-    project_start: NaiveDate,
-    calendar: Option<&TeamCalendar>,
-) -> Result<Vec<ResultNode>, CriticalPathMethodError> {
-    let mut rng = rand::thread_rng();
-    let mut sampler = BetaPertSampler::new(&mut rng);
-    critical_path_method_with_creation(
-        network,
-        project_start,
-        calendar,
-        StoryPointCreationConfig::disabled(),
-        &mut sampler,
-    )
 }
 
 pub fn critical_path_method_with_creation<R: ThreePointSampler + ?Sized>(
@@ -362,12 +346,31 @@ fn start_date_from_capacity_days(
 #[cfg(test)]
 mod tests {
     use crate::services::project_simulation::beta_pert_sampler::ThreePointSamplerError;
+    use crate::services::project_simulation::beta_pert_sampler::{
+        BetaPertSampler, ThreePointSampler,
+    };
     use crate::services::project_simulation::network_nodes::NetworkNode;
     use crate::services::util::histogram::{Histogram, HistogramError};
     use crate::test_support::{MockSampler, on_date};
 
     use super::*;
     use chrono::NaiveDate;
+
+    pub fn critical_path_method(
+        network: SortedNetworkNodes,
+        project_start: NaiveDate,
+        calendar: Option<&TeamCalendar>,
+    ) -> Result<Vec<ResultNode>, CriticalPathMethodError> {
+        let mut rng = rand::thread_rng();
+        let mut sampler = BetaPertSampler::new(&mut rng);
+        critical_path_method_with_creation(
+            network,
+            project_start,
+            calendar,
+            StoryPointCreationConfig::disabled(),
+            &mut sampler,
+        )
+    }
 
     fn build_network_node(id: &str, duration: f32, dependencies: &[&str]) -> NetworkNode {
         NetworkNode {

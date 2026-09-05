@@ -74,21 +74,6 @@ pub enum ProjectSimulationError {
     NetworkNodes(#[from] NetworkNodesError),
 }
 
-pub fn simulate_project_from_yaml_file(
-    path: &str,
-    iterations: usize,
-    start_date: NaiveDate,
-    calendar_path: Option<&str>,
-) -> Result<SimulationOutput, ProjectSimulationError> {
-    simulate_project_from_yaml_file_with_creation_rate(
-        path,
-        iterations,
-        start_date,
-        calendar_path,
-        0.0,
-    )
-}
-
 pub fn simulate_project_from_yaml_file_with_creation_rate(
     path: &str,
     iterations: usize,
@@ -107,15 +92,6 @@ pub fn simulate_project_from_yaml_file_with_creation_rate(
     )?;
     output.report.data_source = data_source_name(path);
     Ok(output)
-}
-
-pub fn simulate_project(
-    project: &Project,
-    iterations: usize,
-    start_date: NaiveDate,
-    calendar: TeamCalendar,
-) -> Result<SimulationOutput, ProjectSimulationError> {
-    simulate_project_with_creation_rate(project, iterations, start_date, calendar, 0.0)
 }
 
 pub fn simulate_project_with_creation_rate(
@@ -153,19 +129,6 @@ pub fn simulate_project_with_creation_rate(
     Ok(output)
 }
 
-fn run_simulation<R: ThreePointSampler + ?Sized>(
-    project: &Project,
-    velocity: Option<f32>,
-    iterations: usize,
-    start_date: chrono::NaiveDate,
-    sampler: &mut R,
-    calendar: &TeamCalendar,
-) -> Result<SimulationOutput, ProjectSimulationError> {
-    run_simulation_with_creation_rate(
-        project, velocity, iterations, start_date, sampler, calendar, 0.0,
-    )
-}
-
 fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
     project: &Project,
     velocity: Option<f32>,
@@ -200,6 +163,7 @@ fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
     };
     let project = &converted_project;
     let mut samples_by_id: BTreeMap<String, Vec<WorkItemSample>> = BTreeMap::new();
+    let mut generated_ids = Vec::new();
     let mut project_end_dates = Vec::with_capacity(iterations);
     let mut max_processed_nodes = 0usize;
     let calendar_option = if project.has_story_points() {
@@ -238,6 +202,8 @@ fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
         project_end_dates.push(project_end_date);
 
         for result_node in result_nodes {
+            let is_new_generated_node = !report_metadata_by_id.contains_key(&result_node.id)
+                && !samples_by_id.contains_key(&result_node.id);
             let metadata = report_metadata_by_id
                 .get(&result_node.id)
                 .cloned()
@@ -246,6 +212,9 @@ fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
                     estimate: result_node.generated_estimate.clone(),
                     done_date: None,
                 });
+            if is_new_generated_node {
+                generated_ids.push(result_node.id.clone());
+            }
             samples_by_id
                 .entry(result_node.id.clone())
                 .or_insert_with(|| Vec::with_capacity(iterations))
@@ -258,19 +227,21 @@ fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
         }
     }
 
-    let work_packages = samples_by_id
-        .iter()
-        .map(|(id, samples)| WorkPackageSimulation {
-            id: id.clone(),
-            work_package_type: samples
-                .first()
-                .map(|sample| sample.work_package_type.clone())
-                .unwrap_or(WorkPackageType::DynamicToDo),
-            estimate: samples.first().and_then(|sample| sample.estimate.clone()),
-            done_date: samples.first().and_then(|sample| sample.done_date),
-            percentiles: percentiles_from_samples(samples, start_date),
-        })
-        .collect();
+    let mut work_packages = Vec::new();
+    for issue in &project.work_packages {
+        let Some(id) = issue.issue_id.as_ref().map(|issue_id| &issue_id.id) else {
+            continue;
+        };
+        let Some(samples) = samples_by_id.get(id) else {
+            continue;
+        };
+        work_packages.push(work_package_simulation(id, samples, start_date));
+    }
+    for id in generated_ids {
+        if let Some(samples) = samples_by_id.get(&id) {
+            work_packages.push(work_package_simulation(&id, samples, start_date));
+        }
+    }
 
     project_end_dates.sort();
     let report = SimulationReport {
@@ -293,6 +264,23 @@ fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
         .collect();
 
     Ok(SimulationOutput { report, results })
+}
+
+fn work_package_simulation(
+    id: &str,
+    samples: &[WorkItemSample],
+    start_date: NaiveDate,
+) -> WorkPackageSimulation {
+    WorkPackageSimulation {
+        id: id.to_string(),
+        work_package_type: samples
+            .first()
+            .map(|sample| sample.work_package_type.clone())
+            .unwrap_or(WorkPackageType::DynamicToDo),
+        estimate: samples.first().and_then(|sample| sample.estimate.clone()),
+        done_date: samples.first().and_then(|sample| sample.done_date),
+        percentiles: percentiles_from_samples(samples, start_date),
+    }
 }
 
 fn work_package_type_for_issue(issue: &crate::domain::issue::Issue) -> WorkPackageType {
@@ -383,6 +371,43 @@ mod tests {
     };
     use chrono::NaiveDate;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    pub fn simulate_project_from_yaml_file(
+        path: &str,
+        iterations: usize,
+        start_date: NaiveDate,
+        calendar_path: Option<&str>,
+    ) -> Result<SimulationOutput, ProjectSimulationError> {
+        simulate_project_from_yaml_file_with_creation_rate(
+            path,
+            iterations,
+            start_date,
+            calendar_path,
+            0.0,
+        )
+    }
+
+    pub fn simulate_project(
+        project: &Project,
+        iterations: usize,
+        start_date: NaiveDate,
+        calendar: TeamCalendar,
+    ) -> Result<SimulationOutput, ProjectSimulationError> {
+        simulate_project_with_creation_rate(project, iterations, start_date, calendar, 0.0)
+    }
+
+    fn run_simulation<R: ThreePointSampler + ?Sized>(
+        project: &Project,
+        velocity: Option<f32>,
+        iterations: usize,
+        start_date: chrono::NaiveDate,
+        sampler: &mut R,
+        calendar: &TeamCalendar,
+    ) -> Result<SimulationOutput, ProjectSimulationError> {
+        run_simulation_with_creation_rate(
+            project, velocity, iterations, start_date, sampler, calendar, 0.0,
+        )
+    }
 
     #[test]
     fn convert_in_progress_story_points_to_todo_decrements_estimate() {
@@ -809,5 +834,52 @@ mod tests {
                 estimate: Some(_)
             }))
         ));
+    }
+
+    #[test]
+    fn simulation_report_orders_project_work_before_generated_work() {
+        let project = Project {
+            name: "Demo".to_string(),
+            work_packages: vec![
+                build_done_issue("DONE-1", 2.0, on_date(2025, 1, 1), on_date(2025, 1, 2)),
+                build_story_point_issue("Z-1", 2.0, &[]),
+                build_story_point_issue("A-1", 2.0, &["Z-1"]),
+                build_story_point_issue("M-1", 2.0, &["A-1"]),
+            ],
+        };
+        let calendar = create_calendar_without_any_free_days();
+        let mut sampler = MockSampler;
+
+        let output = run_simulation_with_creation_rate(
+            &project,
+            calculate_project_velocity(&project, &calendar).unwrap(),
+            1,
+            on_date(2026, 1, 1),
+            &mut sampler,
+            &calendar,
+            1.0,
+        )
+        .unwrap();
+
+        let ids = output
+            .report
+            .work_packages
+            .unwrap()
+            .into_iter()
+            .map(|work_package| work_package.id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            ids,
+            vec![
+                "DONE-1",
+                "Z-1",
+                "A-1",
+                "M-1",
+                "__generated_story_point_1",
+                "__generated_story_point_2",
+                "__generated_story_point_3",
+            ]
+        );
     }
 }

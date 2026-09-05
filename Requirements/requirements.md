@@ -1,8 +1,5 @@
 # ToDos
 
-* [ ] The burndown plot should also plot generated issues
-* [ ] The burndown plot should use the same calendar directory as the simulation
-
 ## Fixes
 
 * [ ] message "using calendar the calendar" korrigieren
