@@ -53,7 +53,9 @@ p100:
   end_date: "2026-01-25"
 work_packages:
   - id: WP1
-    is_milestone: false
+    type: ToDo
+    estimate: { type: three_point, optimistic: 2, most_likely: 5, pessimistic: 14 }
+    done_date: null
     percentiles:
       p0:
         days: 5.0
@@ -71,7 +73,9 @@ work_packages:
         days: 14.0
         end_date: "2026-01-19"
   - id: WP2
-    is_milestone: false
+    type: ToDo
+    estimate: { type: three_point, optimistic: 5, most_likely: 10, pessimistic: 21 }
+    done_date: null
     percentiles:
       p0:
         days: 5.0
@@ -89,7 +93,9 @@ work_packages:
         days: 14.0
         end_date: "2026-01-29"
   - id: MS1
-    is_milestone: true
+    type: Milestone
+    estimate: { type: milestone }
+    done_date: null
     percentiles:
       p0:
         days: 0.0

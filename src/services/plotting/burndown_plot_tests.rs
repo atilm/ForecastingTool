@@ -1,18 +1,14 @@
 use super::*;
 
-use crate::domain::calendar::{Calendar, FreeDateRange, TeamCalendar};
-use crate::domain::estimate::ThreePointEstimate;
-use crate::domain::issue::IssueId;
 use crate::services::project_simulation::simulation_types::{
     SimulationPercentile, WorkPackagePercentiles,
 };
-
 use assert_fs::prelude::*;
 use chrono::NaiveDate;
 use predicates::prelude::*;
 
-fn on_date(year: i32, month: u32, day: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(year, month, day).unwrap()
+fn date(value: &str) -> NaiveDate {
+    NaiveDate::parse_from_str(value, "%Y-%m-%d").unwrap()
 }
 
 fn percentile(end_date: NaiveDate) -> SimulationPercentile {
@@ -22,324 +18,251 @@ fn percentile(end_date: NaiveDate) -> SimulationPercentile {
     }
 }
 
-fn simulation_for(
+fn work_package(
     id: &str,
-    p15: NaiveDate,
-    p50: NaiveDate,
-    p85: NaiveDate,
+    work_package_type: WorkPackageType,
+    estimate: Option<Estimate>,
+    done_date: Option<NaiveDate>,
+    completion_date: NaiveDate,
 ) -> WorkPackageSimulation {
     WorkPackageSimulation {
         id: id.to_string(),
-        is_milestone: false,
+        work_package_type,
+        estimate,
+        done_date,
         percentiles: WorkPackagePercentiles {
-            p0: percentile(p15),
-            p15: percentile(p15),
-            p50: percentile(p50),
-            p85: percentile(p85),
-            p100: percentile(p85),
+            p0: percentile(completion_date),
+            p15: percentile(completion_date),
+            p50: percentile(completion_date),
+            p85: percentile(completion_date),
+            p100: percentile(completion_date),
         },
     }
 }
 
+fn story_points(points: f32) -> Option<Estimate> {
+    Some(Estimate::StoryPoint(StoryPointEstimate {
+        estimate: Some(points),
+    }))
+}
+
 fn base_report(work_packages: Option<Vec<WorkPackageSimulation>>) -> SimulationReport {
+    let start = date("2026-03-01");
     SimulationReport {
         data_source: "unit".to_string(),
-        start_date: on_date(2026, 3, 1),
+        start_date: start,
         velocity: Some(1.0),
         iterations: 10,
         simulated_items: 2,
-        p0: percentile(on_date(2026, 3, 2)),
-        p15: percentile(on_date(2026, 3, 2)),
-        p50: percentile(on_date(2026, 3, 3)),
-        p85: percentile(on_date(2026, 3, 4)),
-        p100: percentile(on_date(2026, 3, 5)),
+        p0: percentile(start),
+        p15: percentile(start),
+        p50: percentile(start),
+        p85: percentile(start),
+        p100: percentile(start),
         work_packages,
     }
 }
 
 #[test]
-fn build_data_converts_none_estimate_to_one_story_point() {
-    let mut done = Issue::new();
-    done.issue_id = Some(IssueId {
-        id: "DONE-1".to_string(),
-    });
-    done.status = Some(IssueStatus::Done);
-    done.done_date = Some(on_date(2026, 3, 1));
-    done.estimate = None;
+fn build_data_includes_dynamic_work_at_chart_start_and_never_rises() {
+    let report = base_report(Some(vec![
+        work_package(
+            "DONE-1",
+            WorkPackageType::Done,
+            story_points(2.0),
+            Some(date("2026-03-01")),
+            date("2026-03-01"),
+        ),
+        work_package(
+            "TODO-1",
+            WorkPackageType::ToDo,
+            story_points(3.0),
+            None,
+            date("2026-03-02"),
+        ),
+        work_package(
+            "GENERATED-1",
+            WorkPackageType::DynamicToDo,
+            story_points(5.0),
+            None,
+            date("2026-03-03"),
+        ),
+        work_package(
+            "IN-PROGRESS-1",
+            WorkPackageType::InProgress,
+            story_points(2.0),
+            None,
+            date("2026-03-04"),
+        ),
+        work_package(
+            "MILESTONE-1",
+            WorkPackageType::Milestone,
+            Some(Estimate::Milestone),
+            None,
+            date("2026-03-05"),
+        ),
+    ]));
 
-    let mut todo = Issue::new();
-    todo.issue_id = Some(IssueId {
-        id: "TODO-1".to_string(),
-    });
-    todo.status = Some(IssueStatus::ToDo);
-    todo.estimate = None;
+    let data = build_burndown_data(&report, None).unwrap();
 
-    let project = Project {
-        name: "Demo".to_string(),
-        work_packages: vec![done, todo],
-    };
-    let report = base_report(Some(vec![simulation_for(
-        "TODO-1",
-        on_date(2026, 3, 2),
-        on_date(2026, 3, 3),
-        on_date(2026, 3, 4),
-    )]));
-
-    let data = build_burndown_data(&project, &report, None).unwrap();
-    assert_eq!(data.total_points, 2.0);
-    assert!(data.capacity_ranges.is_empty());
-    assert_eq!(data.done_points[0].remaining, 1.0);
-    assert_eq!(data.p50_points[0].remaining, 0.0);
-}
-
-#[test]
-fn build_data_rejects_non_story_point_estimates() {
-    let mut done = Issue::new();
-    done.issue_id = Some(IssueId {
-        id: "DONE-1".to_string(),
-    });
-    done.status = Some(IssueStatus::Done);
-    done.done_date = Some(on_date(2026, 3, 1));
-    done.estimate = Some(Estimate::ThreePoint(ThreePointEstimate {
-        optimistic: Some(1.0),
-        most_likely: Some(2.0),
-        pessimistic: Some(3.0),
-    }));
-
-    let project = Project {
-        name: "Demo".to_string(),
-        work_packages: vec![done],
-    };
-    let report = base_report(Some(vec![]));
-
-    let error = build_burndown_data(&project, &report, None).unwrap_err();
-    assert!(matches!(
-        error,
-        BurndownPlotError::UnsupportedEstimateType { .. }
-    ));
-}
-
-#[test]
-fn build_data_requires_done_date_for_done_issues() {
-    let mut done = Issue::new();
-    done.issue_id = Some(IssueId {
-        id: "DONE-1".to_string(),
-    });
-    done.status = Some(IssueStatus::Done);
-    done.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
-        estimate: Some(2.0),
-    }));
-
-    let mut todo = Issue::new();
-    todo.issue_id = Some(IssueId {
-        id: "TODO-1".to_string(),
-    });
-    todo.status = Some(IssueStatus::ToDo);
-    todo.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
-        estimate: Some(3.0),
-    }));
-
-    let project = Project {
-        name: "Demo".to_string(),
-        work_packages: vec![done, todo],
-    };
-    let report = base_report(Some(vec![simulation_for(
-        "TODO-1",
-        on_date(2026, 3, 2),
-        on_date(2026, 3, 3),
-        on_date(2026, 3, 4),
-    )]));
-
-    let error = build_burndown_data(&project, &report, None).unwrap_err();
-    assert!(matches!(error, BurndownPlotError::MissingDoneDate { .. }));
-}
-
-#[test]
-fn build_data_requires_at_least_one_done_issue() {
-    let mut todo = Issue::new();
-    todo.issue_id = Some(IssueId {
-        id: "TODO-1".to_string(),
-    });
-    todo.status = Some(IssueStatus::ToDo);
-    todo.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
-        estimate: Some(3.0),
-    }));
-
-    let project = Project {
-        name: "Demo".to_string(),
-        work_packages: vec![todo],
-    };
-    let report = base_report(Some(vec![simulation_for(
-        "TODO-1",
-        on_date(2026, 3, 2),
-        on_date(2026, 3, 3),
-        on_date(2026, 3, 4),
-    )]));
-
-    let error = build_burndown_data(&project, &report, None).unwrap_err();
-    assert!(matches!(error, BurndownPlotError::NoDoneIssues));
-}
-
-#[test]
-fn build_data_requires_simulation_for_not_done_issue() {
-    let mut done = Issue::new();
-    done.issue_id = Some(IssueId {
-        id: "DONE-1".to_string(),
-    });
-    done.status = Some(IssueStatus::Done);
-    done.done_date = Some(on_date(2026, 3, 1));
-    done.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
-        estimate: Some(2.0),
-    }));
-
-    let mut todo = Issue::new();
-    todo.issue_id = Some(IssueId {
-        id: "TODO-1".to_string(),
-    });
-    todo.status = Some(IssueStatus::ToDo);
-    todo.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
-        estimate: Some(3.0),
-    }));
-
-    let project = Project {
-        name: "Demo".to_string(),
-        work_packages: vec![done, todo],
-    };
-    let report = base_report(Some(vec![]));
-
-    let error = build_burndown_data(&project, &report, None).unwrap_err();
-    assert!(matches!(
-        error,
-        BurndownPlotError::MissingSimulationForIssue { .. }
-    ));
-}
-
-#[test]
-fn build_data_collects_low_capacity_ranges_from_calendar_ignoring_free_weekdays() {
-    let mut done = Issue::new();
-    done.issue_id = Some(IssueId {
-        id: "DONE-1".to_string(),
-    });
-    done.status = Some(IssueStatus::Done);
-    done.done_date = Some(on_date(2026, 3, 1));
-    done.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
-        estimate: Some(2.0),
-    }));
-
-    let mut todo = Issue::new();
-    todo.issue_id = Some(IssueId {
-        id: "TODO-1".to_string(),
-    });
-    todo.status = Some(IssueStatus::ToDo);
-    todo.estimate = Some(Estimate::StoryPoint(StoryPointEstimate {
-        estimate: Some(3.0),
-    }));
-
-    let project = Project {
-        name: "Demo".to_string(),
-        work_packages: vec![done, todo],
-    };
-    let report = base_report(Some(vec![simulation_for(
-        "TODO-1",
-        on_date(2026, 3, 3),
-        on_date(2026, 3, 4),
-        on_date(2026, 3, 6),
-    )]));
-
-    let calendar = TeamCalendar {
-        calendars: vec![
-            Calendar {
-                free_weekdays: vec![chrono::Weekday::Tue],
-                free_date_ranges: vec![],
-            },
-            Calendar {
-                free_weekdays: vec![],
-                free_date_ranges: vec![FreeDateRange {
-                    start_date: on_date(2026, 3, 5),
-                    end_date: on_date(2026, 3, 6),
-                }],
-            },
-        ],
-    };
-
-    let data = build_burndown_data(&project, &report, Some(&calendar)).unwrap();
-
+    assert_eq!(data.total_points, 12.0);
+    assert_eq!(data.done_points[0].remaining, 10.0);
     assert_eq!(
-        data.capacity_ranges,
-        vec![CapacityRange {
-            start_date: on_date(2026, 3, 5),
-            end_date: on_date(2026, 3, 6),
-            capacity: 0.5,
-        },]
+        data.forecast_p50_points.last().unwrap().point.remaining,
+        0.0
+    );
+    assert!(
+        data.forecast_p50_points
+            .windows(2)
+            .all(|points| points[1].point.remaining <= points[0].point.remaining)
+    );
+    assert!(
+        data.forecast_p50_points
+            .iter()
+            .any(|point| point.work_package_type == WorkPackageType::DynamicToDo)
     );
 }
 
 #[test]
-fn plot_burndown_from_yaml_files_writes_png() {
-    let project_yaml = r#"
-name: Demo
-work_packages:
-  - id: DONE-1
-    status: Done
-    start_date: 2026-02-25
-    done_date: 2026-03-01
-    estimate:
-      type: story_points
-      value: 3
-  - id: TODO-1
-    status: ToDo
-"#;
+fn build_data_defaults_missing_estimate_to_one_story_point() {
+    let report = base_report(Some(vec![
+        work_package(
+            "DONE-1",
+            WorkPackageType::Done,
+            None,
+            Some(date("2026-03-01")),
+            date("2026-03-01"),
+        ),
+        work_package(
+            "TODO-1",
+            WorkPackageType::ToDo,
+            None,
+            None,
+            date("2026-03-02"),
+        ),
+    ]));
+    assert_eq!(
+        build_burndown_data(&report, None).unwrap().total_points,
+        2.0
+    );
+}
 
+#[test]
+fn build_data_rejects_missing_done_date_with_item_id() {
+    let report = base_report(Some(vec![
+        work_package(
+            "DONE-1",
+            WorkPackageType::Done,
+            story_points(2.0),
+            None,
+            date("2026-03-01"),
+        ),
+        work_package(
+            "TODO-1",
+            WorkPackageType::ToDo,
+            story_points(2.0),
+            None,
+            date("2026-03-02"),
+        ),
+    ]));
+    assert!(
+        matches!(build_burndown_data(&report, None), Err(BurndownPlotError::MissingDoneDate { id }) if id == "DONE-1")
+    );
+}
+
+#[test]
+fn build_data_rejects_unsupported_estimate() {
+    let report = base_report(Some(vec![
+        work_package(
+            "DONE-1",
+            WorkPackageType::Done,
+            story_points(2.0),
+            Some(date("2026-03-01")),
+            date("2026-03-01"),
+        ),
+        work_package(
+            "TODO-1",
+            WorkPackageType::ToDo,
+            Some(Estimate::ThreePoint(
+                crate::domain::estimate::ThreePointEstimate {
+                    optimistic: Some(1.0),
+                    most_likely: Some(2.0),
+                    pessimistic: Some(3.0),
+                },
+            )),
+            None,
+            date("2026-03-02"),
+        ),
+    ]));
+    assert!(
+        matches!(build_burndown_data(&report, None), Err(BurndownPlotError::UnsupportedEstimateType { id }) if id == "TODO-1")
+    );
+}
+
+#[test]
+fn build_data_requires_work_package_data_and_both_work_categories() {
+    assert!(matches!(
+        build_burndown_data(&base_report(None), None),
+        Err(BurndownPlotError::MissingSimulationWorkPackages)
+    ));
+    assert!(matches!(
+        build_burndown_data(
+            &base_report(Some(vec![work_package(
+                "DONE-1",
+                WorkPackageType::Done,
+                story_points(1.0),
+                Some(date("2026-03-01")),
+                date("2026-03-01")
+            )])),
+            None
+        ),
+        Err(BurndownPlotError::NoForecastIssues)
+    ));
+    assert!(matches!(
+        build_burndown_data(
+            &base_report(Some(vec![work_package(
+                "TODO-1",
+                WorkPackageType::ToDo,
+                story_points(1.0),
+                None,
+                date("2026-03-02")
+            )])),
+            None
+        ),
+        Err(BurndownPlotError::NoDoneIssues)
+    ));
+}
+
+#[test]
+fn plot_burndown_from_report_writes_png() {
     let report_yaml = r#"
 data_source: unit
 start_date: 2026-03-01
 velocity: 2.0
 iterations: 100
 simulated_items: 2
-p0:
-  days: 1
-  end_date: 2026-03-02
-p15:
-  days: 2
-  end_date: 2026-03-03
-p50:
-  days: 3
-  end_date: 2026-03-04
-p85:
-  days: 4
-  end_date: 2026-03-05
-p100:
-  days: 5
-  end_date: 2026-03-06
+p0: { days: 1, end_date: 2026-03-02 }
+p15: { days: 1, end_date: 2026-03-02 }
+p50: { days: 1, end_date: 2026-03-02 }
+p85: { days: 1, end_date: 2026-03-02 }
+p100: { days: 1, end_date: 2026-03-02 }
 work_packages:
-  - id: TODO-1
-    is_milestone: false
-    percentiles:
-      p0:
-        days: 1
-        end_date: 2026-03-02
-      p15:
-        days: 2
-        end_date: 2026-03-03
-      p50:
-        days: 3
-        end_date: 2026-03-04
-      p85:
-        days: 4
-        end_date: 2026-03-05
-      p100:
-        days: 5
-        end_date: 2026-03-06
+  - id: DONE-1
+    type: Done
+    estimate: { type: story_point, estimate: 3.0 }
+    done_date: 2026-03-01
+    percentiles: { p0: { days: 0, end_date: 2026-03-01 }, p15: { days: 0, end_date: 2026-03-01 }, p50: { days: 0, end_date: 2026-03-01 }, p85: { days: 0, end_date: 2026-03-01 }, p100: { days: 0, end_date: 2026-03-01 } }
+  - id: GENERATED-1
+    type: DynamicToDo
+    estimate: { type: story_point, estimate: 5.0 }
+    done_date: null
+    percentiles: { p0: { days: 1, end_date: 2026-03-02 }, p15: { days: 1, end_date: 2026-03-02 }, p50: { days: 2, end_date: 2026-03-03 }, p85: { days: 3, end_date: 2026-03-04 }, p100: { days: 4, end_date: 2026-03-05 } }
 "#;
-
-    let project_file = assert_fs::NamedTempFile::new("project.yaml").unwrap();
-    project_file.write_str(project_yaml).unwrap();
     let report_file = assert_fs::NamedTempFile::new("result.yaml").unwrap();
     report_file.write_str(report_yaml).unwrap();
     let output_file = assert_fs::NamedTempFile::new("burndown.png").unwrap();
 
     plot_burndown_from_yaml_files(
-        project_file.path().to_str().unwrap(),
         report_file.path().to_str().unwrap(),
         output_file.path().to_str().unwrap(),
         None,
@@ -347,6 +270,5 @@ work_packages:
     .unwrap();
 
     output_file.assert(predicate::path::exists());
-    let metadata = std::fs::metadata(output_file.path()).unwrap();
-    assert!(metadata.len() > 0);
+    assert!(std::fs::metadata(output_file.path()).unwrap().len() > 0);
 }

@@ -12,7 +12,7 @@ use crate::services::parsing::simulation_report_yaml::{
     ReportParseError, load_simulation_report_from_file,
 };
 use crate::services::project_simulation::simulation_types::{
-    SimulationReport, WorkPackageSimulation,
+    SimulationReport, WorkPackageSimulation, WorkPackageType,
 };
 
 #[derive(Error, Debug)]
@@ -103,7 +103,7 @@ pub fn generate_simulation_gantt_markdown(
             _ => "",
         };
 
-        if wp_sim.is_milestone {
+        if wp_sim.work_package_type == WorkPackageType::Milestone {
             lines.push(format!(
                 "    {label} :milestone, {id}, {end}, 0d",
                 end = end.format("%Y-%m-%d"),
@@ -174,7 +174,7 @@ mod tests {
     use crate::domain::issue::{Issue, IssueId};
     use crate::domain::issue_status::IssueStatus;
     use crate::services::project_simulation::simulation_types::{
-        SimulationPercentile, WorkPackagePercentiles, WorkPackageSimulation,
+        SimulationPercentile, WorkPackagePercentiles, WorkPackageSimulation, WorkPackageType,
     };
     use chrono::NaiveDate;
 
@@ -253,7 +253,9 @@ mod tests {
             "2026-01-01",
             vec![WorkPackageSimulation {
                 id: "WP1".to_string(),
-                is_milestone: false,
+                work_package_type: WorkPackageType::ToDo,
+                estimate: None,
+                done_date: None,
                 percentiles: wp_percentiles("2026-01-10"),
             }],
         );
@@ -272,12 +274,16 @@ mod tests {
             vec![
                 WorkPackageSimulation {
                     id: "WP1".to_string(),
-                    is_milestone: false,
+                    work_package_type: WorkPackageType::ToDo,
+                    estimate: None,
+                    done_date: None,
                     percentiles: wp_percentiles("2026-01-10"),
                 },
                 WorkPackageSimulation {
                     id: "WP2".to_string(),
-                    is_milestone: false,
+                    work_package_type: WorkPackageType::ToDo,
+                    estimate: None,
+                    done_date: None,
                     percentiles: wp_percentiles("2026-01-20"),
                 },
             ],
@@ -303,17 +309,23 @@ mod tests {
             vec![
                 WorkPackageSimulation {
                     id: "WP1".to_string(),
-                    is_milestone: false,
+                    work_package_type: WorkPackageType::ToDo,
+                    estimate: None,
+                    done_date: None,
                     percentiles: wp_percentiles("2026-01-05"),
                 },
                 WorkPackageSimulation {
                     id: "WP2".to_string(),
-                    is_milestone: false,
+                    work_package_type: WorkPackageType::ToDo,
+                    estimate: None,
+                    done_date: None,
                     percentiles: wp_percentiles("2026-01-15"),
                 },
                 WorkPackageSimulation {
                     id: "WP3".to_string(),
-                    is_milestone: false,
+                    work_package_type: WorkPackageType::ToDo,
+                    estimate: None,
+                    done_date: None,
                     percentiles: wp_percentiles("2026-01-25"),
                 },
             ],
@@ -341,12 +353,16 @@ mod tests {
             vec![
                 WorkPackageSimulation {
                     id: "WP1".to_string(),
-                    is_milestone: false,
+                    work_package_type: WorkPackageType::ToDo,
+                    estimate: None,
+                    done_date: None,
                     percentiles: wp_percentiles("2026-01-10"),
                 },
                 WorkPackageSimulation {
                     id: "MS1".to_string(),
-                    is_milestone: true,
+                    work_package_type: WorkPackageType::Milestone,
+                    estimate: None,
+                    done_date: None,
                     percentiles: wp_percentiles("2026-01-10"),
                 },
             ],
@@ -371,7 +387,9 @@ mod tests {
             "2026-01-01",
             vec![WorkPackageSimulation {
                 id: "WP1".to_string(),
-                is_milestone: false,
+                work_package_type: WorkPackageType::ToDo,
+                estimate: None,
+                done_date: None,
                 percentiles: wp_percentiles("2026-01-10"),
             }],
         );
@@ -389,7 +407,9 @@ mod tests {
             "2026-01-01",
             vec![WorkPackageSimulation {
                 id: "WP2".to_string(),
-                is_milestone: false,
+                work_package_type: WorkPackageType::ToDo,
+                estimate: None,
+                done_date: None,
                 percentiles: wp_percentiles("2026-01-20"),
             }],
         );
@@ -413,7 +433,9 @@ mod tests {
             "2026-01-01",
             vec![WorkPackageSimulation {
                 id: "WP1".to_string(),
-                is_milestone: false,
+                work_package_type: WorkPackageType::ToDo,
+                estimate: None,
+                done_date: None,
                 percentiles: wp_percentiles("2026-01-10"),
             }],
         );
@@ -447,17 +469,23 @@ mod tests {
             vec![
                 WorkPackageSimulation {
                     id: "WP1".to_string(),
-                    is_milestone: false,
+                    work_package_type: WorkPackageType::ToDo,
+                    estimate: None,
+                    done_date: None,
                     percentiles: wp_percentiles("2026-01-20"),
                 },
                 WorkPackageSimulation {
                     id: "WP2".to_string(),
-                    is_milestone: false,
+                    work_package_type: WorkPackageType::ToDo,
+                    estimate: None,
+                    done_date: None,
                     percentiles: wp_percentiles("2026-01-25"),
                 },
                 WorkPackageSimulation {
                     id: "WP3".to_string(),
-                    is_milestone: false,
+                    work_package_type: WorkPackageType::ToDo,
+                    estimate: None,
+                    done_date: None,
                     percentiles: wp_percentiles("2026-01-30"),
                 },
             ],
@@ -498,12 +526,16 @@ mod tests {
             vec![
                 WorkPackageSimulation {
                     id: "WP1".to_string(),
-                    is_milestone: false,
+                    work_package_type: WorkPackageType::ToDo,
+                    estimate: None,
+                    done_date: None,
                     percentiles: wp_percentiles("2026-01-10"),
                 },
                 WorkPackageSimulation {
                     id: "WP2".to_string(),
-                    is_milestone: false,
+                    work_package_type: WorkPackageType::ToDo,
+                    estimate: None,
+                    done_date: None,
                     percentiles: wp_percentiles("2026-01-20"),
                 },
             ],

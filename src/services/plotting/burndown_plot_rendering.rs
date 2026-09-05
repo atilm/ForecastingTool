@@ -3,8 +3,9 @@ use plotters::coord::types::{RangedCoordf32, RangedCoordi32};
 use plotters::prelude::*;
 
 use crate::services::plotting::burndown_plot::{
-    BurndownData, BurndownPlotError, CapacityRange, ChartPoint,
+    BurndownData, BurndownPlotError, CapacityRange, ChartPoint, ClassifiedChartPoint,
 };
+use crate::services::project_simulation::simulation_types::WorkPackageType;
 
 pub(super) fn render_burndown_plot_png(
     output_path: &str,
@@ -44,12 +45,13 @@ pub(super) fn render_burndown_plot_png(
     let forecast_band_color = RGBColor(140, 190, 255);
 
     draw_forecast_band(&mut chart, data, forecast_band_color)?;
-    draw_points(
+    draw_labeled_points(
         &mut chart,
         &data.done_points,
         data.start_date,
         RGBColor(130, 130, 130),
         5,
+        "Done",
     )?;
     draw_points(
         &mut chart,
@@ -58,7 +60,7 @@ pub(super) fn render_burndown_plot_png(
         forecast_band_color,
         2,
     )?;
-    draw_points(&mut chart, &data.p50_points, data.start_date, BLUE, 5)?;
+    draw_classified_p50_points(&mut chart, data)?;
     draw_points(
         &mut chart,
         &data.p85_points,
@@ -66,9 +68,49 @@ pub(super) fn render_burndown_plot_png(
         forecast_band_color,
         2,
     )?;
+    chart
+        .configure_series_labels()
+        .background_style(WHITE.mix(0.8))
+        .border_style(BLACK)
+        .draw()
+        .map_err(|e| BurndownPlotError::Plot(e.to_string()))?;
 
     root.present()
         .map_err(|e| BurndownPlotError::Plot(e.to_string()))?;
+    Ok(())
+}
+
+fn draw_classified_p50_points(
+    chart: &mut ChartContext<BitMapBackend<'_>, Cartesian2d<RangedCoordi32, RangedCoordf32>>,
+    data: &BurndownData,
+) -> Result<(), BurndownPlotError> {
+    for (work_package_type, color, label) in [
+        (WorkPackageType::ToDo, GREEN, "ToDo"),
+        (
+            WorkPackageType::InProgress,
+            RGBColor(30, 100, 220),
+            "InProgress",
+        ),
+        (WorkPackageType::DynamicToDo, RED, "DynamicToDo"),
+    ] {
+        let points = data
+            .forecast_p50_points
+            .iter()
+            .filter(|point| point.work_package_type == work_package_type)
+            .cloned()
+            .collect::<Vec<ClassifiedChartPoint>>();
+        if points.is_empty() {
+            continue;
+        }
+        draw_labeled_points(
+            chart,
+            &points.iter().map(|item| item.point).collect::<Vec<_>>(),
+            data.start_date,
+            color,
+            5,
+            label,
+        )?;
+    }
     Ok(())
 }
 
@@ -156,5 +198,29 @@ fn draw_points(
             &|coord, size, style| EmptyElement::at(coord) + Circle::new((0, 0), size, style),
         ))
         .map_err(|e| BurndownPlotError::Plot(e.to_string()))?;
+    Ok(())
+}
+
+fn draw_labeled_points(
+    chart: &mut ChartContext<BitMapBackend<'_>, Cartesian2d<RangedCoordi32, RangedCoordf32>>,
+    points: &[ChartPoint],
+    start_date: NaiveDate,
+    color: RGBColor,
+    point_size: i32,
+    label: &str,
+) -> Result<(), BurndownPlotError> {
+    let coords = points
+        .iter()
+        .map(|point| ((point.date - start_date).num_days() as i32, point.remaining));
+    chart
+        .draw_series(PointSeries::of_element(
+            coords,
+            point_size,
+            color.filled(),
+            &|coord, size, style| EmptyElement::at(coord) + Circle::new((0, 0), size, style),
+        ))
+        .map_err(|e| BurndownPlotError::Plot(e.to_string()))?
+        .label(label)
+        .legend(move |(x, y)| Circle::new((x, y), point_size, color.filled()));
     Ok(())
 }

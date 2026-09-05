@@ -22,7 +22,7 @@ use crate::services::project_simulation::percentiles;
 use crate::services::project_simulation::sample_duration::SamplingError;
 use crate::services::project_simulation::simulation_types::{
     SimulationOutput, SimulationPercentile, SimulationReport, WorkPackagePercentiles,
-    WorkPackageSimulation,
+    WorkPackageSimulation, WorkPackageType,
 };
 use crate::services::project_simulation::velocity_calculation::VelocityCalculationError;
 use crate::services::project_simulation::velocity_calculation::calculate_project_velocity;
@@ -35,10 +35,19 @@ use crate::services::project_simulation::critical_path_method::{
 use crate::services::project_simulation::fibonacci::previous_value;
 use crate::services::project_simulation::network_nodes::NetworkNodesError;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct WorkItemSample {
     end_date: chrono::NaiveDate,
-    is_milestone: bool,
+    work_package_type: WorkPackageType,
+    estimate: Option<Estimate>,
+    done_date: Option<NaiveDate>,
+}
+
+#[derive(Debug, Clone)]
+struct WorkPackageReportMetadata {
+    work_package_type: WorkPackageType,
+    estimate: Option<Estimate>,
+    done_date: Option<NaiveDate>,
 }
 
 #[derive(Error, Debug)]
@@ -166,6 +175,21 @@ fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
     calendar: &TeamCalendar,
     story_point_creation_rate: f32,
 ) -> Result<SimulationOutput, ProjectSimulationError> {
+    let report_metadata_by_id = project
+        .work_packages
+        .iter()
+        .filter_map(|issue| {
+            let id = issue.issue_id.as_ref()?.id.clone();
+            Some((
+                id,
+                WorkPackageReportMetadata {
+                    work_package_type: work_package_type_for_issue(issue),
+                    estimate: issue.estimate.clone(),
+                    done_date: issue.done_date,
+                },
+            ))
+        })
+        .collect::<BTreeMap<_, _>>();
     let converted_project = if project.has_story_points() {
         println!(
             "Project contains story points, converting InProgress items into ToDo items with decreased story points."
@@ -214,12 +238,22 @@ fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
         project_end_dates.push(project_end_date);
 
         for result_node in result_nodes {
+            let metadata = report_metadata_by_id
+                .get(&result_node.id)
+                .cloned()
+                .unwrap_or(WorkPackageReportMetadata {
+                    work_package_type: WorkPackageType::DynamicToDo,
+                    estimate: result_node.generated_estimate.clone(),
+                    done_date: None,
+                });
             samples_by_id
                 .entry(result_node.id.clone())
                 .or_insert_with(|| Vec::with_capacity(iterations))
                 .push(WorkItemSample {
                     end_date: result_node.earliest_finish,
-                    is_milestone: result_node.is_milestone,
+                    work_package_type: metadata.work_package_type,
+                    estimate: metadata.estimate,
+                    done_date: metadata.done_date,
                 });
         }
     }
@@ -228,7 +262,12 @@ fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
         .iter()
         .map(|(id, samples)| WorkPackageSimulation {
             id: id.clone(),
-            is_milestone: samples.first().is_some_and(|sample| sample.is_milestone),
+            work_package_type: samples
+                .first()
+                .map(|sample| sample.work_package_type.clone())
+                .unwrap_or(WorkPackageType::DynamicToDo),
+            estimate: samples.first().and_then(|sample| sample.estimate.clone()),
+            done_date: samples.first().and_then(|sample| sample.done_date),
             percentiles: percentiles_from_samples(samples, start_date),
         })
         .collect();
@@ -254,6 +293,18 @@ fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
         .collect();
 
     Ok(SimulationOutput { report, results })
+}
+
+fn work_package_type_for_issue(issue: &crate::domain::issue::Issue) -> WorkPackageType {
+    if issue.is_milestone() {
+        return WorkPackageType::Milestone;
+    }
+
+    match issue.status {
+        Some(IssueStatus::Done) => WorkPackageType::Done,
+        Some(IssueStatus::InProgress) => WorkPackageType::InProgress,
+        Some(IssueStatus::ToDo) | None => WorkPackageType::ToDo,
+    }
 }
 
 fn convert_in_progress_story_points(project: &Project) -> Project {
@@ -716,5 +767,47 @@ mod tests {
         );
         assert_eq!(output.report.iterations, 5);
         assert_eq!(output.report.velocity, None);
+    }
+
+    #[test]
+    fn simulation_report_includes_dynamic_story_point_work() {
+        let project = Project {
+            name: "Demo".to_string(),
+            work_packages: vec![
+                build_done_issue("DONE-1", 2.0, on_date(2026, 1, 1), on_date(2026, 1, 2)),
+                build_story_point_issue("TODO-1", 2.0, &[]),
+            ],
+        };
+        let calendar = create_calendar_without_any_free_days();
+        let mut sampler = MockSampler;
+
+        let output = run_simulation_with_creation_rate(
+            &project,
+            Some(2.0),
+            1,
+            on_date(2026, 1, 3),
+            &mut sampler,
+            &calendar,
+            1.0,
+        )
+        .unwrap();
+        let work_packages = output.report.work_packages.unwrap();
+        let done = work_packages
+            .iter()
+            .find(|item| item.id == "DONE-1")
+            .unwrap();
+        let generated = work_packages
+            .iter()
+            .find(|item| item.work_package_type == WorkPackageType::DynamicToDo)
+            .unwrap();
+
+        assert_eq!(done.work_package_type, WorkPackageType::Done);
+        assert_eq!(done.done_date, Some(on_date(2026, 1, 2)));
+        assert!(matches!(
+            generated.estimate,
+            Some(Estimate::StoryPoint(StoryPointEstimate {
+                estimate: Some(_)
+            }))
+        ));
     }
 }

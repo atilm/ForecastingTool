@@ -42,6 +42,7 @@ pub enum CriticalPathMethodError {
 pub struct ResultNode {
     pub id: String,
     pub is_milestone: bool,
+    pub generated_estimate: Option<Estimate>,
     pub earliest_start: NaiveDate,
     pub latest_start: NaiveDate,
     pub earliest_finish: NaiveDate,
@@ -93,6 +94,7 @@ pub fn critical_path_method_with_creation<R: ThreePointSampler + ?Sized>(
     let mut high_water_date = project_start;
     let mut accumulated_points = 0.0;
     let mut generated_count = 0usize;
+    let mut generated_estimates = HashMap::new();
     let mut index = 0usize;
     // Forward pass to calculate earliest start and finish times. The vector can grow as work is created.
     while index < sorted_nodes.len() {
@@ -124,6 +126,7 @@ pub fn critical_path_method_with_creation<R: ThreePointSampler + ?Sized>(
             ResultNode {
                 id: node.id.clone(),
                 is_milestone: node.is_milestone,
+                generated_estimate: generated_estimates.get(&node.id).cloned(),
                 earliest_start,
                 latest_start: project_start, // Placeholder, will be calculated in backward pass
                 earliest_finish,
@@ -133,7 +136,7 @@ pub fn critical_path_method_with_creation<R: ThreePointSampler + ?Sized>(
             },
         );
 
-        if creation.is_enabled() {
+        if creation.is_enabled() && original_ids.contains(&node.id) {
             let new_high_water_date = high_water_date.max(earliest_finish);
             accumulated_points +=
                 (new_high_water_date - high_water_date).num_days() as f32 * creation.rate;
@@ -155,6 +158,7 @@ pub fn critical_path_method_with_creation<R: ThreePointSampler + ?Sized>(
                     let estimate = Estimate::StoryPoint(StoryPointEstimate {
                         estimate: Some(points),
                     });
+                    generated_estimates.insert(id.clone(), estimate.clone());
                     let duration =
                         sample_duration_days(&estimate, Some(creation.velocity), sampler, &id)?;
                     sorted_nodes.push(
@@ -439,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn high_creation_rate_stops_before_processing_node_1001() {
+    fn high_creation_rate_creates_work_only_from_original_nodes() {
         let network = SortedNetworkNodes::new(vec![build_network_node("A", 1.0, &[])]).unwrap();
         let mut sampler = MockSampler;
         let result = critical_path_method_with_creation(
@@ -451,11 +455,10 @@ mod tests {
                 velocity: 1.0,
             },
             &mut sampler,
-        );
-        assert!(matches!(
-            result,
-            Err(CriticalPathMethodError::ProcessedNodeLimitExceeded)
-        ));
+        )
+        .unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[1].id, "__generated_story_point_1");
     }
 
     struct FailingSampler;

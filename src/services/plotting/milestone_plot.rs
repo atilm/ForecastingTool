@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::services::project_simulation::simulation_types::{
-    SimulationOutput, SimulationReport, WorkPackageSimulation,
+    SimulationOutput, SimulationReport, WorkPackageSimulation, WorkPackageType,
 };
 use plotters::prelude::*;
 use thiserror::Error;
@@ -59,7 +59,7 @@ fn collect_milestones(
 
     let milestones: Vec<&WorkPackageSimulation> = work_packages
         .iter()
-        .filter(|item| item.is_milestone)
+        .filter(|item| item.work_package_type == WorkPackageType::Milestone)
         .collect();
     if milestones.is_empty() {
         return Err(MilestonePlotError::NoMilestones);
@@ -193,7 +193,13 @@ mod tests {
     ) -> WorkPackageSimulation {
         WorkPackageSimulation {
             id: id.to_string(),
-            is_milestone,
+            work_package_type: if is_milestone {
+                WorkPackageType::Milestone
+            } else {
+                WorkPackageType::ToDo
+            },
+            estimate: None,
+            done_date: None,
             percentiles: WorkPackagePercentiles {
                 p0: percentile(p0, 2026, 3, 1),
                 p15: percentile(p15, 2026, 3, 2),

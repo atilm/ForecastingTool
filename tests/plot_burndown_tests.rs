@@ -2,213 +2,66 @@ use assert_fs::prelude::*;
 use predicates::prelude::*;
 use std::fs;
 
-#[test]
-fn plot_burndown_creates_png() {
-    let project_yaml = r#"
-name: Demo
-work_packages:
-  - id: DONE-1
-    status: Done
-    start_date: 2026-02-25
-    done_date: 2026-03-01
-    estimate:
-      type: story_points
-      value: 3
-  - id: TODO-1
-    status: ToDo
-  - id: INP-1
-    status: InProgress
-    start_date: 2026-03-02
-    estimate:
-      type: story_points
-      value: 2
-"#;
-
-    let report_yaml = r#"
-data_source: unit
+fn report_yaml() -> &'static str {
+    r#"
+data_source: integration
 start_date: 2026-03-01
 velocity: 2.0
 iterations: 250
 simulated_items: 3
-p0:
-  days: 1
-  end_date: 2026-03-02
-p15:
-  days: 2
-  end_date: 2026-03-03
-p50:
-  days: 4
-  end_date: 2026-03-05
-p85:
-  days: 6
-  end_date: 2026-03-07
-p100:
-  days: 8
-  end_date: 2026-03-09
+p0: { days: 1, end_date: 2026-03-02 }
+p15: { days: 1, end_date: 2026-03-02 }
+p50: { days: 1, end_date: 2026-03-02 }
+p85: { days: 1, end_date: 2026-03-02 }
+p100: { days: 1, end_date: 2026-03-02 }
 work_packages:
+  - id: DONE-1
+    type: Done
+    estimate: { type: story_point, estimate: 3.0 }
+    done_date: 2026-03-01
+    percentiles: { p0: { days: 0, end_date: 2026-03-01 }, p15: { days: 0, end_date: 2026-03-01 }, p50: { days: 0, end_date: 2026-03-01 }, p85: { days: 0, end_date: 2026-03-01 }, p100: { days: 0, end_date: 2026-03-01 } }
   - id: TODO-1
-    is_milestone: false
-    percentiles:
-      p0:
-        days: 1
-        end_date: 2026-03-02
-      p15:
-        days: 2
-        end_date: 2026-03-03
-      p50:
-        days: 3
-        end_date: 2026-03-04
-      p85:
-        days: 5
-        end_date: 2026-03-06
-      p100:
-        days: 6
-        end_date: 2026-03-07
-  - id: INP-1
-    is_milestone: false
-    percentiles:
-      p0:
-        days: 2
-        end_date: 2026-03-03
-      p15:
-        days: 3
-        end_date: 2026-03-04
-      p50:
-        days: 4
-        end_date: 2026-03-05
-      p85:
-        days: 6
-        end_date: 2026-03-07
-      p100:
-        days: 7
-        end_date: 2026-03-08
-"#;
-
-    let project_file = assert_fs::NamedTempFile::new("project.yaml").unwrap();
-    project_file.write_str(project_yaml).unwrap();
-    let report_file = assert_fs::NamedTempFile::new("result.yaml").unwrap();
-    report_file.write_str(report_yaml).unwrap();
-    let output_file = assert_fs::NamedTempFile::new("burndown.png").unwrap();
-
-    let project_arg = project_file.path().to_str().unwrap().to_string();
-    let report_arg = report_file.path().to_str().unwrap().to_string();
-    let output_arg = output_file.path().to_str().unwrap().to_string();
-
-    let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
-    cmd.args(&[
-        "plot",
-        "burndown",
-        "-i",
-        &project_arg,
-        "-r",
-        &report_arg,
-        "-o",
-        &output_arg,
-    ]);
-
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Burndown plot written to"));
-
-    let metadata = fs::metadata(output_arg).unwrap();
-    assert!(metadata.len() > 0);
+    type: ToDo
+    estimate: { type: story_point, estimate: 2.0 }
+    done_date: null
+    percentiles: { p0: { days: 1, end_date: 2026-03-02 }, p15: { days: 1, end_date: 2026-03-02 }, p50: { days: 2, end_date: 2026-03-03 }, p85: { days: 3, end_date: 2026-03-04 }, p100: { days: 4, end_date: 2026-03-05 } }
+  - id: __generated_story_point_1
+    type: DynamicToDo
+    estimate: { type: story_point, estimate: 5.0 }
+    done_date: null
+    percentiles: { p0: { days: 2, end_date: 2026-03-03 }, p15: { days: 2, end_date: 2026-03-03 }, p50: { days: 3, end_date: 2026-03-04 }, p85: { days: 4, end_date: 2026-03-05 }, p100: { days: 5, end_date: 2026-03-06 } }
+"#
 }
 
 #[test]
-fn plot_burndown_accepts_calendar_dir() {
-    let project_yaml = r#"
-name: Demo
-work_packages:
-  - id: DONE-1
-    status: Done
-    start_date: 2026-02-25
-    done_date: 2026-03-01
-    estimate:
-      type: story_points
-      value: 3
-  - id: TODO-1
-    status: ToDo
-"#;
-
-    let report_yaml = r#"
-data_source: unit
-start_date: 2026-03-01
-velocity: 2.0
-iterations: 250
-simulated_items: 2
-p0:
-  days: 1
-  end_date: 2026-03-02
-p15:
-  days: 2
-  end_date: 2026-03-03
-p50:
-  days: 4
-  end_date: 2026-03-05
-p85:
-  days: 6
-  end_date: 2026-03-07
-p100:
-  days: 8
-  end_date: 2026-03-09
-work_packages:
-  - id: TODO-1
-    is_milestone: false
-    percentiles:
-      p0:
-        days: 1
-        end_date: 2026-03-02
-      p15:
-        days: 2
-        end_date: 2026-03-03
-      p50:
-        days: 3
-        end_date: 2026-03-04
-      p85:
-        days: 5
-        end_date: 2026-03-06
-      p100:
-        days: 6
-        end_date: 2026-03-07
-"#;
-
+fn plot_burndown_creates_png_from_report_with_dynamic_work() {
     let temp = assert_fs::TempDir::new().unwrap();
-    let project_file = temp.child("project.yaml");
-    project_file.write_str(project_yaml).unwrap();
     let report_file = temp.child("result.yaml");
-    report_file.write_str(report_yaml).unwrap();
-    let calendar_dir = temp.child("calendars");
-    calendar_dir.create_dir_all().unwrap();
-    calendar_dir
-        .child("team.yaml")
-        .write_str("free_date_ranges:\n  - start_date: 2026-03-05\n    end_date: 2026-03-06\n")
-        .unwrap();
+    report_file.write_str(report_yaml()).unwrap();
     let output_file = temp.child("burndown.png");
-    output_file.touch().unwrap();
 
-    let project_arg = project_file.path().to_str().unwrap().to_string();
-    let report_arg = report_file.path().to_str().unwrap().to_string();
-    let output_arg = output_file.path().to_str().unwrap().to_string();
-    let calendar_arg = calendar_dir.path().to_str().unwrap().to_string();
-
-    let mut cmd = assert_cmd::cargo_bin_cmd!("forecasts");
-    cmd.args(&[
+    let mut command = assert_cmd::cargo_bin_cmd!("forecasts");
+    command.args([
         "plot",
         "burndown",
-        "-i",
-        &project_arg,
-        "-r",
-        &report_arg,
-        "-o",
-        &output_arg,
-        "--calendar-dir",
-        &calendar_arg,
+        "--report",
+        report_file.path().to_str().unwrap(),
+        "--output",
+        output_file.path().to_str().unwrap(),
     ]);
-
-    cmd.assert()
+    command
+        .assert()
         .success()
         .stdout(predicate::str::contains("Burndown plot written to"));
+    assert!(fs::metadata(output_file.path()).unwrap().len() > 0);
+}
 
-    let metadata = fs::metadata(output_arg).unwrap();
-    assert!(metadata.len() > 0);
+#[test]
+fn plot_burndown_rejects_removed_project_input_option() {
+    let mut command = assert_cmd::cargo_bin_cmd!("forecasts");
+    command.args(["plot", "burndown", "--input", "project.yaml"]);
+    command
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--input"));
 }

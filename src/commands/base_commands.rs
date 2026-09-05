@@ -52,7 +52,7 @@ pub enum PlotCommands {
     /// Plot a simulation Gantt diagram from a project YAML and a simulation report YAML
     #[command(name = "simulation-gantt")]
     SimulationGantt(PlotSimulationGanttArgs),
-    /// Plot a burndown chart using project and simulation result YAML files
+    /// Plot a burndown chart from a simulation result YAML file
     Burndown(PlotBurndownArgs),
 }
 
@@ -144,9 +144,6 @@ pub struct PlotSimulationGanttArgs {
 
 #[derive(Args)]
 pub struct PlotBurndownArgs {
-    /// Project YAML file
-    #[arg(short, long)]
-    pub input: String,
     /// Simulation result YAML file
     #[arg(short, long)]
     pub report: String,
@@ -327,8 +324,6 @@ mod tests {
             "forecasts",
             "plot",
             "burndown",
-            "-i",
-            "input.yaml",
             "-r",
             "report.yaml",
             "-o",

@@ -139,6 +139,7 @@ mod tests {
         ResultNode {
             id: id.to_string(),
             is_milestone: false,
+            generated_estimate: None,
             earliest_start,
             latest_start: earliest_start,
             earliest_finish,

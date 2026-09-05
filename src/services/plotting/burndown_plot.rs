@@ -1,13 +1,7 @@
-use std::collections::HashMap;
-
 use chrono::{Duration, NaiveDate};
 use thiserror::Error;
 
 use crate::domain::estimate::{Estimate, StoryPointEstimate};
-use crate::domain::issue::Issue;
-use crate::domain::issue_status::IssueStatus;
-use crate::domain::project::Project;
-use crate::services::parsing::project_yaml::{ProjectYamlError, load_project_from_yaml_file};
 use crate::services::parsing::simulation_report_yaml::{
     ReportParseError, load_simulation_report_from_file,
 };
@@ -16,28 +10,24 @@ use crate::services::parsing::team_calendar_yaml::{
 };
 use crate::services::plotting::burndown_plot_rendering::render_burndown_plot_png;
 use crate::services::project_simulation::simulation_types::{
-    SimulationReport, WorkPackageSimulation,
+    SimulationReport, WorkPackageSimulation, WorkPackageType,
 };
 
 #[derive(Error, Debug)]
 pub enum BurndownPlotError {
-    #[error("failed to parse project yaml: {0}")]
-    ParseProject(#[from] ProjectYamlError),
     #[error("failed to parse simulation report yaml: {0}")]
     ParseReport(#[from] ReportParseError),
-    #[error("project has no done issues")]
+    #[error("simulation report has no done work packages")]
     NoDoneIssues,
-    #[error("project has no todo or in-progress issues")]
+    #[error("simulation report has no todo, in-progress, or dynamically created work packages")]
     NoForecastIssues,
-    #[error("done issue '{id}' is missing done_date")]
+    #[error("done work package '{id}' is missing done_date")]
     MissingDoneDate { id: String },
     #[error("simulation report has no work package data")]
     MissingSimulationWorkPackages,
     #[error("failed to parse team calendar yaml: {0}")]
     ParseCalendar(#[from] TeamCalendarYamlError),
-    #[error("simulation report has no entry for issue '{id}'")]
-    MissingSimulationForIssue { id: String },
-    #[error("issue '{id}' has unsupported estimate type for burndown")]
+    #[error("work package '{id}' has unsupported estimate type for burndown")]
     UnsupportedEstimateType { id: String },
     #[error("failed to render burndown plot: {0}")]
     Plot(String),
@@ -52,6 +42,7 @@ struct DoneIssue {
 #[derive(Clone)]
 struct ForecastIssue {
     points: f32,
+    work_package_type: WorkPackageType,
     p15: NaiveDate,
     p50: NaiveDate,
     p85: NaiveDate,
@@ -61,6 +52,12 @@ struct ForecastIssue {
 pub(crate) struct ChartPoint {
     pub(crate) date: NaiveDate,
     pub(crate) remaining: f32,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ClassifiedChartPoint {
+    pub(crate) point: ChartPoint,
+    pub(crate) work_package_type: WorkPackageType,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -78,53 +75,56 @@ pub(crate) struct BurndownData {
     pub(crate) capacity_ranges: Vec<CapacityRange>,
     pub(crate) done_points: Vec<ChartPoint>,
     pub(crate) p15_points: Vec<ChartPoint>,
-    pub(crate) p50_points: Vec<ChartPoint>,
     pub(crate) p85_points: Vec<ChartPoint>,
+    pub(crate) forecast_p50_points: Vec<ClassifiedChartPoint>,
 }
 
 pub fn plot_burndown_from_yaml_files(
-    project_path: &str,
     report_path: &str,
     output_path: &str,
     calendar_path: Option<&str>,
 ) -> Result<(), BurndownPlotError> {
-    let project = load_project_from_yaml_file(project_path, &None)?;
     let report = load_simulation_report_from_file(report_path)?;
     let calendar = load_team_calendar_if_provided(calendar_path)?;
-    let data = build_burndown_data(&project, &report, calendar_path.map(|_| &calendar))?;
+    let data = build_burndown_data(&report, calendar_path.map(|_| &calendar))?;
     render_burndown_plot_png(output_path, &data)
 }
 
 fn build_burndown_data(
-    project: &Project,
     report: &SimulationReport,
     calendar: Option<&crate::domain::calendar::TeamCalendar>,
 ) -> Result<BurndownData, BurndownPlotError> {
-    let simulation_by_id = simulation_map(report)?;
+    let work_packages = report
+        .work_packages
+        .as_deref()
+        .ok_or(BurndownPlotError::MissingSimulationWorkPackages)?;
 
     let mut done_issues = Vec::new();
     let mut forecast_issues = Vec::new();
 
-    for issue in &project.work_packages {
-        let id = issue_id(issue);
-        let points = story_points_for_burndown(issue)?;
+    for work_package in work_packages {
+        if work_package.work_package_type == WorkPackageType::Milestone {
+            continue;
+        }
 
-        if matches!(issue.status, Some(IssueStatus::Done)) {
-            let done_date = issue
-                .done_date
-                .ok_or_else(|| BurndownPlotError::MissingDoneDate { id: id.clone() })?;
+        let points = story_points_for_burndown(work_package)?;
+        if work_package.work_package_type == WorkPackageType::Done {
+            let done_date =
+                work_package
+                    .done_date
+                    .ok_or_else(|| BurndownPlotError::MissingDoneDate {
+                        id: work_package.id.clone(),
+                    })?;
             done_issues.push(DoneIssue { points, done_date });
             continue;
         }
 
-        let simulation = simulation_by_id
-            .get(id.as_str())
-            .ok_or_else(|| BurndownPlotError::MissingSimulationForIssue { id: id.clone() })?;
         forecast_issues.push(ForecastIssue {
             points,
-            p15: simulation.percentiles.p15.end_date,
-            p50: simulation.percentiles.p50.end_date,
-            p85: simulation.percentiles.p85.end_date,
+            work_package_type: work_package.work_package_type.clone(),
+            p15: work_package.percentiles.p15.end_date,
+            p50: work_package.percentiles.p50.end_date,
+            p85: work_package.percentiles.p85.end_date,
         });
     }
 
@@ -162,7 +162,8 @@ fn build_burndown_data(
 
     let done_points = build_done_points(&done_issues, total_points);
     let p15_points = build_forecast_points(total_points, &done_events, &forecast_issues, |i| i.p15);
-    let p50_points = build_forecast_points(total_points, &done_events, &forecast_issues, |i| i.p50);
+    let forecast_p50_points =
+        build_classified_forecast_points(total_points, &done_events, &forecast_issues, |i| i.p50);
     let p85_points = build_forecast_points(total_points, &done_events, &forecast_issues, |i| i.p85);
 
     Ok(BurndownData {
@@ -172,8 +173,8 @@ fn build_burndown_data(
         capacity_ranges,
         done_points,
         p15_points,
-        p50_points,
         p85_points,
+        forecast_p50_points,
     })
 }
 
@@ -288,35 +289,53 @@ where
     points
 }
 
-fn issue_id(issue: &Issue) -> String {
-    issue
-        .issue_id
-        .as_ref()
-        .map(|value| value.id.clone())
-        .unwrap_or_default()
+fn build_classified_forecast_points<F>(
+    total_points: f32,
+    done_events: &[(NaiveDate, f32)],
+    forecast_issues: &[ForecastIssue],
+    date_selector: F,
+) -> Vec<ClassifiedChartPoint>
+where
+    F: Fn(&ForecastIssue) -> NaiveDate,
+{
+    let mut forecast_events: Vec<(&ForecastIssue, NaiveDate)> = forecast_issues
+        .iter()
+        .map(|item| (item, date_selector(item)))
+        .collect();
+    forecast_events.sort_by_key(|(_, date)| *date);
+
+    let mut done_idx = 0;
+    let mut done_sum = 0.0;
+    let mut forecast_sum = 0.0;
+    forecast_events
+        .into_iter()
+        .map(|(issue, date)| {
+            while done_idx < done_events.len() && done_events[done_idx].0 <= date {
+                done_sum += done_events[done_idx].1;
+                done_idx += 1;
+            }
+            forecast_sum += issue.points;
+            ClassifiedChartPoint {
+                point: ChartPoint {
+                    date,
+                    remaining: total_points - done_sum - forecast_sum,
+                },
+                work_package_type: issue.work_package_type.clone(),
+            }
+        })
+        .collect()
 }
 
-fn story_points_for_burndown(issue: &Issue) -> Result<f32, BurndownPlotError> {
-    let id = issue_id(issue);
-    match issue.estimate.as_ref() {
+fn story_points_for_burndown(
+    work_package: &WorkPackageSimulation,
+) -> Result<f32, BurndownPlotError> {
+    match work_package.estimate.as_ref() {
         None => Ok(1.0),
         Some(Estimate::StoryPoint(StoryPointEstimate { estimate })) => Ok(estimate.unwrap_or(1.0)),
-        _ => Err(BurndownPlotError::UnsupportedEstimateType { id }),
+        _ => Err(BurndownPlotError::UnsupportedEstimateType {
+            id: work_package.id.clone(),
+        }),
     }
-}
-
-fn simulation_map(
-    report: &SimulationReport,
-) -> Result<HashMap<&str, &WorkPackageSimulation>, BurndownPlotError> {
-    let work_packages = report
-        .work_packages
-        .as_ref()
-        .ok_or(BurndownPlotError::MissingSimulationWorkPackages)?;
-
-    Ok(work_packages
-        .iter()
-        .map(|item| (item.id.as_str(), item))
-        .collect())
 }
 
 #[cfg(test)]
