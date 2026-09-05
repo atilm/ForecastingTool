@@ -816,6 +816,7 @@ mod tests {
         use chrono::Weekday;
 
         let calendar = TeamCalendar {
+            source_file_path: None,
             calendars: vec![
                 Calendar {
                     free_weekdays: vec![Weekday::Sat, Weekday::Sun],
@@ -859,6 +860,7 @@ mod tests {
         use chrono::Weekday;
 
         let calendar = TeamCalendar {
+            source_file_path: None,
             calendars: vec![Calendar {
                 free_weekdays: vec![Weekday::Sat, Weekday::Sun],
                 free_date_ranges: vec![],

@@ -106,6 +106,7 @@ pub fn load_team_calendar_from_yaml_dir<P: AsRef<Path>>(
     }
 
     let mut team_calendar = TeamCalendar::new();
+    team_calendar.source_file_path = Some(dir_path.to_path_buf());
     team_calendar.calendars = yaml_files
         .iter()
         .map(|file_path| load_calendar_from_yaml_file(file_path))
@@ -284,6 +285,11 @@ mod tests {
 
         let team_calendar = load_team_calendar_from_yaml_dir(temp.path()).unwrap();
         assert_eq!(team_calendar.calendars.len(), 2);
+        // assert that team_calendar.source_file_path and temp.path() contain the same path
+        assert_eq!(
+            team_calendar.source_file_path.as_ref().unwrap(),
+            &temp.path().to_path_buf()
+        );
 
         let monday = NaiveDate::from_ymd_opt(2026, 2, 16).unwrap();
         let wednesday = NaiveDate::from_ymd_opt(2026, 2, 18).unwrap();

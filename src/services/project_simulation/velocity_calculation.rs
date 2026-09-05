@@ -158,6 +158,7 @@ mod tests {
         ];
 
         let half_capacity_calendar = TeamCalendar {
+            source_file_path: None,
             calendars: vec![
                 Calendar {
                     free_weekdays: vec![Weekday::Sat, Weekday::Sun],

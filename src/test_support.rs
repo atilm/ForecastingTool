@@ -35,6 +35,7 @@ pub fn on_date(year: i32, month: u32, day: u32) -> chrono::NaiveDate {
 
 pub fn create_calendar_without_any_free_days() -> crate::domain::calendar::TeamCalendar {
     crate::domain::calendar::TeamCalendar {
+        source_file_path: None,
         calendars: vec![crate::domain::calendar::Calendar {
             free_weekdays: vec![],
             free_date_ranges: vec![],

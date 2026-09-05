@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use chrono::Datelike;
 use chrono::NaiveDate;
 use chrono::Weekday;
@@ -36,14 +38,22 @@ impl Calendar {
 
 #[derive(Debug, Clone)]
 pub struct TeamCalendar {
+    pub source_file_path: Option<PathBuf>,
     pub calendars: Vec<Calendar>,
 }
 
 impl TeamCalendar {
     pub fn new() -> Self {
         Self {
+            source_file_path: None,
             calendars: Vec::new(),
         }
+    }
+
+    pub fn get_source(&self) -> String {
+        self.source_file_path
+            .as_ref()
+            .map_or("default generation".to_string(), |p| p.to_str().unwrap_or("invalid path").to_string())
     }
 
     pub fn get_capacity(&self, date: NaiveDate) -> f32 {

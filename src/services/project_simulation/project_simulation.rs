@@ -167,7 +167,7 @@ fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
     let mut project_end_dates = Vec::with_capacity(iterations);
     let mut max_processed_nodes = 0usize;
     let calendar_option = if project.has_story_points() {
-        println!("Project contains story points, using calendar the calendar.");
+        println!("Project contains story points, using calendar from: {}.", calendar.get_source());
         Some(calendar)
     } else {
         println!("Project does not contain story points, ignoring calendar.");

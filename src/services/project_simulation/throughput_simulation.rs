@@ -252,6 +252,7 @@ mod tests {
 
         // Capacity on Monday = 0.5 by averaging 2 calendars.
         let calendar = TeamCalendar {
+            source_file_path: None,
             calendars: vec![
                 Calendar {
                     free_weekdays: vec![],
