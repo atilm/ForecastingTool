@@ -35,6 +35,22 @@ async fn test_get_project_data() {
                     "summary": "A first task"
                 },
                 "key": "ABC-123"
+            },
+            {
+                "fields": {
+                    "created": "2026-01-13T10:13:04.983+0100",
+                    "actualStartDate": "2026-01-23T10:57:00.000+0100",
+                    "discardedDate": "2026-01-27T08:42:00.000+0100",
+                    "description": "Discarded work.",
+                    "status": {
+                        "name": "Discarded",
+                        "statusCategory": {
+                            "name": "Done"
+                        }
+                    },
+                    "summary": "A discarded task"
+                },
+                "key": "ABC-789"
             }
         ]
     });
@@ -59,13 +75,20 @@ async fn test_get_project_data() {
     assert!(output.contains("done_date: 2026-01-26"));
     assert!(output.contains("id: ABC-456"));
     assert!(output.contains("summary: A second task"));
+    assert!(output.contains("id: ABC-789"));
+    assert!(output.contains("summary: A discarded task"));
+    assert!(output.contains("status: Discarded"));
+    assert!(output.contains("discarded_date: 2026-01-27"));
 
     let done_pos = output.find("id: ABC-123").unwrap();
+    let discarded_pos = output.find("id: ABC-789").unwrap();
     let in_progress_pos = output.find("id: ABC-456").unwrap();
     assert!(done_pos < in_progress_pos); // Done issue should be ordered first.
+    assert!(done_pos < discarded_pos);
+    assert!(discarded_pos < in_progress_pos);
 
     assert_eq!(output.matches("dependencies: null").count(), 2);
-    assert!(!output.contains("dependencies: []"));
+    assert_eq!(output.matches("dependencies: []").count(), 1);
 }
 
 async fn run_get_project(
@@ -82,6 +105,7 @@ estimation_field_id: estimate
 start_date_field_id: startDate
 actual_start_date_field_id: actualStartDate
 actual_end_date_field_id: actualEndDate
+discarded_date_field_id: discardedDate
 "#
     );
 

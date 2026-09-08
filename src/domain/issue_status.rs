@@ -3,4 +3,5 @@ pub enum IssueStatus {
     ToDo,
     InProgress,
     Done,
+    Discarded,
 }

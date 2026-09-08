@@ -104,6 +104,8 @@ pub fn simulate_project_with_creation_rate(
     if iterations == 0 {
         return Err(ProjectSimulationError::InvalidIterations);
     }
+    let forecast_project = project_without_discarded(project);
+    let project = &forecast_project;
     if project.work_packages.is_empty() {
         return Err(ProjectSimulationError::EmptyProject);
     }
@@ -127,6 +129,25 @@ pub fn simulate_project_with_creation_rate(
         story_point_creation_rate,
     )?;
     Ok(output)
+}
+
+fn project_without_discarded(project: &Project) -> Project {
+    let discarded_ids = project
+        .work_packages
+        .iter()
+        .filter(|issue| issue.status == Some(IssueStatus::Discarded))
+        .filter_map(|issue| issue.issue_id.as_ref().map(|id| id.id.as_str()))
+        .collect::<std::collections::HashSet<_>>();
+    let mut project = project.clone();
+    project
+        .work_packages
+        .retain(|issue| issue.status != Some(IssueStatus::Discarded));
+    for issue in &mut project.work_packages {
+        if let Some(dependencies) = issue.dependencies.as_mut() {
+            dependencies.retain(|dependency| !discarded_ids.contains(dependency.id.as_str()));
+        }
+    }
+    project
 }
 
 fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
@@ -167,7 +188,10 @@ fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
     let mut project_end_dates = Vec::with_capacity(iterations);
     let mut max_processed_nodes = 0usize;
     let calendar_option = if project.has_story_points() {
-        println!("Project contains story points, using calendar from: {}.", calendar.get_source());
+        println!(
+            "Project contains story points, using calendar from: {}.",
+            calendar.get_source()
+        );
         Some(calendar)
     } else {
         println!("Project does not contain story points, ignoring calendar.");
@@ -292,6 +316,9 @@ fn work_package_type_for_issue(issue: &crate::domain::issue::Issue) -> WorkPacka
         Some(IssueStatus::Done) => WorkPackageType::Done,
         Some(IssueStatus::InProgress) => WorkPackageType::InProgress,
         Some(IssueStatus::ToDo) | None => WorkPackageType::ToDo,
+        Some(IssueStatus::Discarded) => {
+            unreachable!("discarded issues must be filtered before simulation")
+        }
     }
 }
 
@@ -361,7 +388,7 @@ fn calculate_days(start_date: chrono::NaiveDate, end_date: chrono::NaiveDate) ->
 mod tests {
     use super::*;
     use crate::domain::estimate::Estimate;
-    use crate::domain::issue::IssueId;
+    use crate::domain::issue::{Issue, IssueId};
     use crate::domain::issue_status::IssueStatus;
     use crate::test_support::{MockSampler, build_in_progress_story_point_issue};
     use crate::test_support::{
@@ -467,6 +494,51 @@ mod tests {
         let converted = convert_in_progress_story_points(&project);
 
         assert_eq!(converted.work_packages, project.work_packages);
+    }
+
+    #[test]
+    fn simulation_excludes_discarded_issues_and_satisfies_their_dependencies() {
+        let mut discarded = Issue::new();
+        discarded.issue_id = Some(IssueId {
+            id: "DISCARDED-1".to_string(),
+        });
+        discarded.status = Some(IssueStatus::Discarded);
+        discarded.discarded_date = Some(on_date(2026, 1, 1));
+
+        let mut active = build_constant_three_point_issue("ACTIVE-1", 2.0, &[]);
+        active.dependencies = Some(vec![IssueId {
+            id: "DISCARDED-1".to_string(),
+        }]);
+        let project = Project {
+            name: "Demo".to_string(),
+            work_packages: vec![discarded, active],
+        };
+
+        let output =
+            simulate_project(&project, 1, on_date(2026, 1, 10), TeamCalendar::new()).unwrap();
+        let work_packages = output.report.work_packages.unwrap();
+
+        assert_eq!(output.report.simulated_items, 1);
+        assert!(!work_packages.iter().any(|item| item.id == "DISCARDED-1"));
+        assert!(work_packages.iter().any(|item| item.id == "ACTIVE-1"));
+    }
+
+    #[test]
+    fn discarded_story_points_do_not_enable_velocity_mode() {
+        let mut discarded = build_story_point_issue("DISCARDED-1", 8.0, &[]);
+        discarded.status = Some(IssueStatus::Discarded);
+        discarded.discarded_date = Some(on_date(2026, 1, 1));
+        let active = build_constant_three_point_issue("ACTIVE-1", 2.0, &[]);
+        let project = Project {
+            name: "Demo".to_string(),
+            work_packages: vec![discarded, active],
+        };
+
+        let output =
+            simulate_project(&project, 1, on_date(2026, 1, 10), TeamCalendar::new()).unwrap();
+
+        assert_eq!(output.report.velocity, None);
+        assert_eq!(output.report.simulated_items, 1);
     }
 
     #[test]

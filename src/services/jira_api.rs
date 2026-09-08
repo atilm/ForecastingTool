@@ -25,6 +25,7 @@ pub struct JiraProjectMetaData {
     pub start_date_field_id: String,
     pub actual_start_date_field_id: String,
     pub actual_end_date_field_id: String,
+    pub discarded_date_field_id: String,
 }
 
 impl Default for JiraProjectMetaData {
@@ -38,6 +39,7 @@ impl Default for JiraProjectMetaData {
             start_date_field_id: String::new(),
             actual_start_date_field_id: String::new(),
             actual_end_date_field_id: String::new(),
+            discarded_date_field_id: String::new(),
         }
     }
 }
@@ -133,12 +135,16 @@ impl JiraApiClient {
 
     fn get_issues_by_jql(&self, jql: &str) -> Result<Vec<Issue>, DataSourceError> {
         let url = format!("{}/search/jql", self.jira_project.base_url);
-        let fields = format!(
-            "summary,description,statusCategory,created,{},{},{}",
+        let mut fields = format!(
+            "summary,description,status,statusCategory,created,{},{},{}",
             self.jira_project.actual_start_date_field_id,
             self.jira_project.actual_end_date_field_id,
             self.jira_project.estimation_field_id
         );
+        if !self.jira_project.discarded_date_field_id.is_empty() {
+            fields.push(',');
+            fields.push_str(&self.jira_project.discarded_date_field_id);
+        }
         let mut params = HashMap::new();
         params.insert("jql", jql.to_string());
         params.insert("fields", fields);
@@ -219,7 +225,7 @@ impl JiraApiClient {
         });
         mapped.summary = get_field_string(fields, "summary");
         mapped.description = get_field_description(fields, "description");
-        mapped.status = get_field_status_category(fields);
+        mapped.status = get_field_status(fields);
         mapped.created_date = parse_date_opt(get_field_string(fields, "created").as_deref());
         mapped.estimate =
             get_field_f32(fields, &self.jira_project.estimation_field_id).map(|value| {
@@ -232,6 +238,9 @@ impl JiraApiClient {
         );
         mapped.done_date = parse_date_opt(
             get_field_string(fields, &self.jira_project.actual_end_date_field_id).as_deref(),
+        );
+        mapped.discarded_date = parse_date_opt(
+            get_field_string(fields, &self.jira_project.discarded_date_field_id).as_deref(),
         );
         Ok(mapped)
     }
@@ -273,12 +282,21 @@ fn get_field_description(fields: &serde_json::Map<String, Value>, key: &str) -> 
     })
 }
 
-fn get_field_status_category(fields: &serde_json::Map<String, Value>) -> Option<IssueStatus> {
-    let status_name = fields
-        .get("statusCategory")
+fn get_field_status(fields: &serde_json::Map<String, Value>) -> Option<IssueStatus> {
+    let status = fields.get("status");
+    let status_name = status
         .and_then(|value| value.get("name"))
         .and_then(|value| value.as_str());
-    match status_name.map(|value| value.to_ascii_lowercase()) {
+    if status_name.is_some_and(|value| value.eq_ignore_ascii_case("discarded")) {
+        return Some(IssueStatus::Discarded);
+    }
+
+    let category_name = status
+        .and_then(|value| value.get("statusCategory"))
+        .or_else(|| fields.get("statusCategory"))
+        .and_then(|value| value.get("name"))
+        .and_then(|value| value.as_str());
+    match category_name.map(|value| value.to_ascii_lowercase()) {
         Some(value) if value == "to do" => Some(IssueStatus::ToDo),
         Some(value) if value == "in progress" => Some(IssueStatus::InProgress),
         Some(value) if value == "done" => Some(IssueStatus::Done),
@@ -321,4 +339,43 @@ fn adf_to_text(value: &Value) -> String {
     }
 
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn jira_config_defaults_discarded_date_field_id() {
+        let metadata: JiraProjectMetaData = serde_yaml::from_str("project_key: TEST").unwrap();
+
+        assert_eq!(metadata.discarded_date_field_id, "");
+    }
+
+    #[test]
+    fn concrete_discarded_status_overrides_done_category() {
+        let fields = serde_json::json!({
+            "status": {
+                "name": "Discarded",
+                "statusCategory": { "name": "Done" }
+            }
+        });
+
+        assert_eq!(
+            get_field_status(fields.as_object().unwrap()),
+            Some(IssueStatus::Discarded)
+        );
+    }
+
+    #[test]
+    fn status_uses_standalone_category_as_fallback() {
+        let fields = serde_json::json!({
+            "statusCategory": { "name": "In Progress" }
+        });
+
+        assert_eq!(
+            get_field_status(fields.as_object().unwrap()),
+            Some(IssueStatus::InProgress)
+        );
+    }
 }

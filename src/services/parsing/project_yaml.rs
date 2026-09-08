@@ -64,6 +64,7 @@ struct IssueRecord {
     created_date: Option<String>,
     start_date: Option<String>,
     done_date: Option<String>,
+    discarded_date: Option<String>,
     dependencies: Option<Vec<String>>,
     subgraph: Option<String>,
 }
@@ -124,6 +125,7 @@ pub fn deserialize_project_from_yaml_str(
         issue.created_date = parse_date_opt(issue_record.created_date.as_deref())?;
         issue.start_date = parse_date_opt(issue_record.start_date.as_deref())?;
         issue.done_date = parse_date_opt(issue_record.done_date.as_deref())?;
+        issue.discarded_date = parse_date_opt(issue_record.discarded_date.as_deref())?;
         issue.subgraph = issue_record.subgraph;
         issue.dependencies = match issue_record.dependencies {
             None => None,
@@ -179,6 +181,9 @@ fn issue_to_record(issue: &Issue) -> IssueRecord {
             .map(|date| date.format("%Y-%m-%d").to_string()),
         done_date: issue
             .done_date
+            .map(|date| date.format("%Y-%m-%d").to_string()),
+        discarded_date: issue
+            .discarded_date
             .map(|date| date.format("%Y-%m-%d").to_string()),
         dependencies: issue
             .dependencies
@@ -338,6 +343,7 @@ fn parse_status(value: Option<&str>) -> Result<Option<IssueStatus>, ProjectYamlE
         "todo" | "to do" => IssueStatus::ToDo,
         "inprogress" | "in progress" => IssueStatus::InProgress,
         "done" => IssueStatus::Done,
+        "discarded" => IssueStatus::Discarded,
         _ => return Err(ProjectYamlError::InvalidStatus(status.to_string())),
     };
     Ok(Some(status))
@@ -348,6 +354,7 @@ fn status_to_string(status: &IssueStatus) -> String {
         IssueStatus::ToDo => "ToDo".to_string(),
         IssueStatus::InProgress => "InProgress".to_string(),
         IssueStatus::Done => "Done".to_string(),
+        IssueStatus::Discarded => "Discarded".to_string(),
     }
 }
 
@@ -428,6 +435,31 @@ work_packages:
                 estimate: Some(5.0)
             }))
         ));
+        assert_eq!(issue.discarded_date, None);
+    }
+
+    #[test]
+    fn discarded_issue_round_trips_with_canonical_status_and_date() {
+        let yaml = r#"
+name: Demo
+work_packages:
+  - id: DISCARD-1
+    status: discarded
+    start_date: 2026-01-02
+    discarded_date: 2026-01-05
+    dependencies: null
+"#;
+
+        let project = deserialize_project_from_yaml_str(yaml, &PROJECT_START_DATE).unwrap();
+        let issue = &project.work_packages[0];
+        assert_eq!(issue.status, Some(IssueStatus::Discarded));
+        assert_eq!(issue.discarded_date, NaiveDate::from_ymd_opt(2026, 1, 5));
+
+        let mut output = Vec::new();
+        serialize_project_to_yaml(&mut output, &project).unwrap();
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("status: Discarded"));
+        assert!(output.contains("discarded_date: 2026-01-05"));
     }
 
     #[test]
@@ -462,6 +494,20 @@ name: Demo
 work_packages:
   - id: ABC-3
     start_date: 2026-99-01
+"#;
+
+        let error = deserialize_project_from_yaml_str(yaml, &PROJECT_START_DATE).unwrap_err();
+        assert!(matches!(error, ProjectYamlError::InvalidDate(_)));
+    }
+
+    #[test]
+    fn deserialize_project_rejects_invalid_discarded_date() {
+        let yaml = r#"
+name: Demo
+work_packages:
+  - id: ABC-3
+    status: Discarded
+    discarded_date: 2026-99-01
 "#;
 
         let error = deserialize_project_from_yaml_str(yaml, &PROJECT_START_DATE).unwrap_err();

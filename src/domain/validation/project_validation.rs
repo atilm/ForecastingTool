@@ -11,6 +11,7 @@ use thiserror::Error;
 pub enum DateType {
     StartDate,
     DoneDate,
+    DiscardedDate,
 }
 
 impl fmt::Display for DateType {
@@ -18,6 +19,7 @@ impl fmt::Display for DateType {
         match self {
             DateType::StartDate => write!(f, "start_date"),
             DateType::DoneDate => write!(f, "done_date"),
+            DateType::DiscardedDate => write!(f, "discarded_date"),
         }
     }
 }
@@ -40,6 +42,8 @@ pub enum ProjectValidationError {
         status: IssueStatus,
         date_type: DateType,
     },
+    #[error("Issue {id} has {date_type} set but no status.")]
+    UnexpectedIssueDateWithoutStatus { id: String, date_type: DateType },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,16 +146,24 @@ fn validate_issue_statuses(
             .as_ref()
             .map(|value| value.id.clone())
             .unwrap_or_default();
-        if let Some(status) = &issue.status {
-            validate_status_dates(
-                &id,
-                status,
-                project_start_date,
-                &issue.start_date,
-                &issue.done_date,
-                errors,
-            );
-        }
+        let Some(status) = &issue.status else {
+            if issue.discarded_date.is_some() {
+                errors.push(ProjectValidationError::UnexpectedIssueDateWithoutStatus {
+                    id,
+                    date_type: DateType::DiscardedDate,
+                });
+            }
+            continue;
+        };
+        validate_status_dates(
+            &id,
+            status,
+            project_start_date,
+            &issue.start_date,
+            &issue.done_date,
+            &issue.discarded_date,
+            errors,
+        );
     }
 }
 
@@ -161,10 +173,12 @@ fn validate_status_dates(
     project_start_date: &NaiveDate,
     issue_start_date: &Option<NaiveDate>,
     issue_done_date: &Option<NaiveDate>,
+    issue_discarded_date: &Option<NaiveDate>,
     errors: &mut Vec<ProjectValidationError>,
 ) {
     let has_start_date = issue_start_date.is_some();
     let has_done_date = issue_done_date.is_some();
+    let has_discarded_date = issue_discarded_date.is_some();
 
     match status {
         IssueStatus::ToDo => {
@@ -182,6 +196,13 @@ fn validate_status_dates(
                     date_type: DateType::DoneDate,
                 });
             }
+            if has_discarded_date {
+                errors.push(ProjectValidationError::UnexpectedIssueDate {
+                    id: id.to_string(),
+                    status: IssueStatus::ToDo,
+                    date_type: DateType::DiscardedDate,
+                });
+            }
         }
         IssueStatus::InProgress => {
             if !has_start_date {
@@ -196,6 +217,13 @@ fn validate_status_dates(
                     id: id.to_string(),
                     status: IssueStatus::InProgress,
                     date_type: DateType::DoneDate,
+                });
+            }
+            if has_discarded_date {
+                errors.push(ProjectValidationError::UnexpectedIssueDate {
+                    id: id.to_string(),
+                    status: IssueStatus::InProgress,
+                    date_type: DateType::DiscardedDate,
                 });
             }
         }
@@ -219,6 +247,29 @@ fn validate_status_dates(
                     id: id.to_string(),
                     status: IssueStatus::Done,
                     date_type: DateType::DoneDate,
+                });
+            }
+            if has_discarded_date {
+                errors.push(ProjectValidationError::UnexpectedIssueDate {
+                    id: id.to_string(),
+                    status: IssueStatus::Done,
+                    date_type: DateType::DiscardedDate,
+                });
+            }
+        }
+        IssueStatus::Discarded => {
+            if has_done_date {
+                errors.push(ProjectValidationError::UnexpectedIssueDate {
+                    id: id.to_string(),
+                    status: IssueStatus::Discarded,
+                    date_type: DateType::DoneDate,
+                });
+            }
+            if !has_discarded_date || issue_discarded_date.unwrap() > *project_start_date {
+                errors.push(ProjectValidationError::InvalidIssueStatus {
+                    id: id.to_string(),
+                    status: IssueStatus::Discarded,
+                    date_type: DateType::DiscardedDate,
                 });
             }
         }
@@ -391,5 +442,114 @@ mod tests {
                 } if id == "DONE-1"
             )
         }));
+    }
+
+    #[test]
+    fn validate_project_accepts_discarded_item_with_historical_date() {
+        let mut issue = make_issue("DISCARDED-1");
+        issue.status = Some(IssueStatus::Discarded);
+        issue.start_date = NaiveDate::from_ymd_opt(2026, 1, 1);
+        issue.discarded_date = NaiveDate::from_ymd_opt(2026, 1, 9);
+        let project = Project {
+            name: "Demo".to_string(),
+            work_packages: vec![issue],
+        };
+
+        assert!(validate_project(&project, &PROJECT_START_DATE).is_ok());
+    }
+
+    #[test]
+    fn validate_project_rejects_invalid_discarded_dates() {
+        let mut missing = make_issue("DISCARDED-MISSING");
+        missing.status = Some(IssueStatus::Discarded);
+
+        let mut future = make_issue("DISCARDED-FUTURE");
+        future.status = Some(IssueStatus::Discarded);
+        future.discarded_date = NaiveDate::from_ymd_opt(2026, 1, 11);
+
+        let mut completed = make_issue("DISCARDED-DONE");
+        completed.status = Some(IssueStatus::Discarded);
+        completed.done_date = NaiveDate::from_ymd_opt(2026, 1, 8);
+        completed.discarded_date = NaiveDate::from_ymd_opt(2026, 1, 9);
+
+        let project = Project {
+            name: "Demo".to_string(),
+            work_packages: vec![missing, future, completed],
+        };
+        let errors = validate_project(&project, &PROJECT_START_DATE).unwrap_err();
+
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            ProjectValidationError::InvalidIssueStatus {
+                id,
+                status: IssueStatus::Discarded,
+                date_type: DateType::DiscardedDate,
+            } if id == "DISCARDED-MISSING"
+        )));
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            ProjectValidationError::InvalidIssueStatus {
+                id,
+                status: IssueStatus::Discarded,
+                date_type: DateType::DiscardedDate,
+            } if id == "DISCARDED-FUTURE"
+        )));
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            ProjectValidationError::UnexpectedIssueDate {
+                id,
+                status: IssueStatus::Discarded,
+                date_type: DateType::DoneDate,
+            } if id == "DISCARDED-DONE"
+        )));
+    }
+
+    #[test]
+    fn validate_project_rejects_discarded_date_for_other_or_missing_status() {
+        let statuses = [
+            Some(IssueStatus::ToDo),
+            Some(IssueStatus::InProgress),
+            Some(IssueStatus::Done),
+            None,
+        ];
+        let work_packages = statuses
+            .into_iter()
+            .enumerate()
+            .map(|(index, status)| {
+                let mut issue = make_issue(&format!("ISSUE-{index}"));
+                issue.status = status;
+                issue.discarded_date = NaiveDate::from_ymd_opt(2026, 1, 9);
+                if issue.status == Some(IssueStatus::InProgress) {
+                    issue.start_date = NaiveDate::from_ymd_opt(2026, 1, 1);
+                }
+                if issue.status == Some(IssueStatus::Done) {
+                    issue.start_date = NaiveDate::from_ymd_opt(2026, 1, 1);
+                    issue.done_date = NaiveDate::from_ymd_opt(2026, 1, 2);
+                }
+                issue
+            })
+            .collect();
+        let project = Project {
+            name: "Demo".to_string(),
+            work_packages,
+        };
+
+        let errors = validate_project(&project, &PROJECT_START_DATE).unwrap_err();
+        assert_eq!(
+            errors
+                .iter()
+                .filter(|error| matches!(
+                    error,
+                    ProjectValidationError::UnexpectedIssueDate {
+                        date_type: DateType::DiscardedDate,
+                        ..
+                    } | ProjectValidationError::UnexpectedIssueDateWithoutStatus {
+                        date_type: DateType::DiscardedDate,
+                        ..
+                    }
+                ))
+                .count(),
+            4
+        );
     }
 }

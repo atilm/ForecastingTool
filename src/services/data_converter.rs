@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::domain::issue_status::IssueStatus;
 use crate::domain::throughput::Throughput;
 use crate::services::data_source::{DataQuery, DataSource, DataSourceError};
 use chrono::{Datelike, NaiveDate};
@@ -19,8 +20,11 @@ impl DataConverter {
     ) -> Result<Vec<Throughput>, DataSourceError> {
         let issues = self.data_source.get_issues(data_query)?;
 
-        let done_dates: Vec<NaiveDate> =
-            issues.iter().filter_map(|issue| issue.done_date).collect();
+        let done_dates: Vec<NaiveDate> = issues
+            .iter()
+            .filter(|issue| issue.status == Some(IssueStatus::Done))
+            .filter_map(|issue| issue.done_date)
+            .collect();
         let min_date = *done_dates.iter().min().ok_or(DataSourceError::NotFound)?;
         let max_date = *done_dates.iter().max().ok_or(DataSourceError::NotFound)?;
 
@@ -83,6 +87,7 @@ mod tests {
             .iter()
             .map(|&date| {
                 let mut issue = Issue::new();
+                issue.status = Some(IssueStatus::Done);
                 issue.done_date = Some(date);
                 issue
             })
@@ -116,5 +121,26 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(result, expected_throughput);
+    }
+
+    #[test]
+    fn discarded_issues_do_not_contribute_to_throughput() {
+        let date = NaiveDate::from_ymd_opt(2026, 1, 5).unwrap();
+        let mut done = Issue::new();
+        done.status = Some(IssueStatus::Done);
+        done.done_date = Some(date);
+        let mut discarded = Issue::new();
+        discarded.status = Some(IssueStatus::Discarded);
+        discarded.done_date = Some(date);
+
+        let converter = DataConverter::new(Box::new(MockDataSource {
+            issues: vec![done, discarded],
+        }));
+        let result = converter
+            .get_throughput_data(DataQuery::StringQuery("unused".to_string()))
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].completed_issues, 1);
     }
 }

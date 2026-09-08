@@ -35,9 +35,10 @@ fn sort_issues_by_status(issues: &mut [Issue]) {
 fn status_rank(status: Option<&IssueStatus>) -> u8 {
     match status {
         Some(IssueStatus::Done) => 0,
-        Some(IssueStatus::InProgress) => 1,
-        Some(IssueStatus::ToDo) => 2,
-        None => 3,
+        Some(IssueStatus::Discarded) => 1,
+        Some(IssueStatus::InProgress) => 2,
+        Some(IssueStatus::ToDo) => 3,
+        None => 4,
     }
 }
 
@@ -46,10 +47,12 @@ fn clear_dependencies_for_boundary_issues(issues: &mut [Issue]) {
         first_issue.dependencies = None;
     }
 
-    if let Some(first_not_done) = issues
-        .iter_mut()
-        .find(|issue| issue.status.as_ref() != Some(&IssueStatus::Done))
-    {
+    if let Some(first_not_done) = issues.iter_mut().find(|issue| {
+        !matches!(
+            issue.status,
+            Some(IssueStatus::Done | IssueStatus::Discarded)
+        )
+    }) {
         first_not_done.dependencies = None;
     }
 }
@@ -83,6 +86,7 @@ mod tests {
             mode: MockMode::Success(vec![
                 issue_with_status("TODO-1", Some(IssueStatus::ToDo), true),
                 issue_with_status("DONE-1", Some(IssueStatus::Done), true),
+                issue_with_status("DISCARDED-1", Some(IssueStatus::Discarded), true),
                 issue_with_status("IP-1", Some(IssueStatus::InProgress), true),
                 issue_with_status("NONE-1", None, true),
             ]),
@@ -101,10 +105,14 @@ mod tests {
             .iter()
             .map(|issue| issue.issue_id.as_ref().unwrap().id.as_str())
             .collect();
-        assert_eq!(ids, vec!["DONE-1", "IP-1", "TODO-1", "NONE-1"]);
+        assert_eq!(
+            ids,
+            vec!["DONE-1", "DISCARDED-1", "IP-1", "TODO-1", "NONE-1"]
+        );
         assert_eq!(project.work_packages[0].dependencies, None);
-        assert_eq!(project.work_packages[1].dependencies, None);
-        assert!(project.work_packages[2].dependencies.is_some());
+        assert!(project.work_packages[1].dependencies.is_some());
+        assert_eq!(project.work_packages[2].dependencies, None);
+        assert!(project.work_packages[3].dependencies.is_some());
     }
 
     #[test]
@@ -121,6 +129,27 @@ mod tests {
             .create_project(
                 "Project Done".to_string(),
                 DataQuery::StringQuery("project = DONE".to_string()),
+            )
+            .unwrap();
+
+        assert_eq!(project.work_packages[0].dependencies, None);
+        assert!(project.work_packages[1].dependencies.is_some());
+    }
+
+    #[test]
+    fn create_project_treats_done_and_discarded_as_terminal() {
+        let source = MockDataSource {
+            mode: MockMode::Success(vec![
+                issue_with_status("DISCARDED-1", Some(IssueStatus::Discarded), true),
+                issue_with_status("DONE-1", Some(IssueStatus::Done), true),
+            ]),
+        };
+        let factory = ProjectFactory::new(&source);
+
+        let project = factory
+            .create_project(
+                "Project Terminal".to_string(),
+                DataQuery::StringQuery("project = TERMINAL".to_string()),
             )
             .unwrap();
 

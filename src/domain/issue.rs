@@ -21,6 +21,7 @@ pub struct Issue {
     pub created_date: Option<NaiveDate>,
     pub start_date: Option<NaiveDate>,
     pub done_date: Option<NaiveDate>,
+    pub discarded_date: Option<NaiveDate>,
 }
 
 impl Issue {
@@ -63,6 +64,7 @@ mod tests {
         assert_eq!(issue.created_date, None);
         assert_eq!(issue.start_date, None);
         assert_eq!(issue.done_date, None);
+        assert_eq!(issue.discarded_date, None);
     }
 
     #[test]

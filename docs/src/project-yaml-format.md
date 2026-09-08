@@ -2,8 +2,8 @@
 
 General structure expectations:
 
-- Put done tasks first.
-- The first done task must have `dependencies: null`.
+- Put terminal tasks first: `Done`, then `Discarded`.
+- The first terminal task must have `dependencies: null`.
 - Each task implicitly depends on the previous task if dependencies are not specified.
 - If you need a special start date for the first TODO task, set it explicitly.
 
@@ -16,10 +16,12 @@ Each work package supports these common fields:
 - `id`: required unique identifier.
 - `summary`: optional short label.
 - `description`: optional free text.
-- `status`: optional, one of `ToDo`, `InProgress`, or `Done`.
-- `created_date`, `start_date`, `done_date`: optional dates in `YYYY-MM-DD` format.
+- `status`: optional, one of `ToDo`, `InProgress`, `Done`, or `Discarded`.
+- `created_date`, `start_date`, `done_date`, `discarded_date`: optional dates in `YYYY-MM-DD` format.
 - `dependencies`: optional list of work package ids. Use `null` for the first done item. Use `[]` to make an item depend on the previous one implicitly.
 - `estimate`: optional estimate definition.
+
+A `Discarded` work package requires `discarded_date`, may retain `start_date`, and must not have `done_date`. Its discarded date must not be later than the project simulation start date. Other statuses, including a missing status, must not set `discarded_date`. Discarded work packages remain in project YAML and dependency diagrams, but are excluded from simulations, velocity, and throughput calculations. Dependencies on discarded work are treated as already satisfied during simulation.
 
 ## Estimate Types
 
@@ -86,6 +88,11 @@ work_packages:
     estimate:
       type: story_points
       value: 3
+  - id: DISCARDED-1
+    summary: Superseded approach
+    status: Discarded
+    start_date: 2026-01-07
+    discarded_date: 2026-01-09
   - id: ISSUE-2
     summary: Implementation
     status: ToDo

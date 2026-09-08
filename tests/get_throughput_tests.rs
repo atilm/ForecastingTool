@@ -63,6 +63,22 @@ async fn test_get_throughput_data() {
                     "summary": "A second task"
                 },
                 "key": "ABC-124"
+            },
+            {
+                "fields": {
+                    "created": "2026-01-10T10:13:04.983+0100",
+                    "actualStartDate": "2026-01-20T10:57:00.000+0100",
+                    "actualEndDate": "2026-01-26T08:42:00.000+0100",
+                    "discardedDate": "2026-01-25T08:42:00.000+0100",
+                    "status": {
+                        "name": "Discarded",
+                        "statusCategory": {
+                            "name": "Done"
+                        }
+                    },
+                    "summary": "Discarded task"
+                },
+                "key": "ABC-125"
             }
         ]
     });
@@ -171,6 +187,7 @@ estimation_field_id: estimate
 start_date_field_id: startDate
 actual_start_date_field_id: actualStartDate
 actual_end_date_field_id: actualEndDate
+discarded_date_field_id: discardedDate
 "#
     );
 

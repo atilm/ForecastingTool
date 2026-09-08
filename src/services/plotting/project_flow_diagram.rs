@@ -39,6 +39,7 @@ pub fn generate_flow_diagram(project: &Project) -> String {
     lines.push("flowchart TD".to_string());
     lines.push("classDef class_done fill:#aae,stroke:#88a".to_string());
     lines.push("classDef class_progress fill:#eaa,stroke:#a88".to_string());
+    lines.push("classDef class_discarded fill:#ddd,stroke:#888,stroke-dasharray: 5 5".to_string());
 
     for issue in &project.work_packages {
         let id = issue
@@ -51,6 +52,7 @@ pub fn generate_flow_diagram(project: &Project) -> String {
         let style = match issue.status {
             Some(IssueStatus::Done) => ":::class_done",
             Some(IssueStatus::InProgress) => ":::class_progress",
+            Some(IssueStatus::Discarded) => ":::class_discarded",
             _ => "",
         };
         if issue.is_milestone() {
@@ -130,6 +132,7 @@ pub fn generate_markdown_descriptions(project: &Project) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::issue::{Issue, IssueId};
     use crate::services::parsing::project_yaml::deserialize_project_from_yaml_str;
     use chrono::NaiveDate;
 
@@ -190,6 +193,7 @@ mod tests {
             "flowchart TD\n",
             "classDef class_done fill:#aae,stroke:#88a\n",
             "classDef class_progress fill:#eaa,stroke:#a88\n",
+            "classDef class_discarded fill:#ddd,stroke:#888,stroke-dasharray: 5 5\n",
             "    WP1[WP1\n",
             "    Work package 1]:::class_done\n",
             "    WP2[WP2\n",
@@ -213,6 +217,23 @@ mod tests {
             "    end\n",
         );
         assert_eq!(diagram, expected);
+    }
+
+    #[test]
+    fn generate_flow_diagram_styles_discarded_issues() {
+        let mut issue = Issue::new();
+        issue.issue_id = Some(IssueId {
+            id: "DISCARDED-1".to_string(),
+        });
+        issue.status = Some(IssueStatus::Discarded);
+        let project = Project {
+            name: "Demo".to_string(),
+            work_packages: vec![issue],
+        };
+
+        let diagram = generate_flow_diagram(&project);
+
+        assert!(diagram.contains("DISCARDED-1[DISCARDED-1\n    DISCARDED-1]:::class_discarded"));
     }
 
     #[test]
