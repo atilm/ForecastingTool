@@ -165,7 +165,11 @@ pub(crate) fn run_simulation_with_rng<R: Rng + ?Sized>(
         work_packages: None,
     };
 
-    Ok(SimulationOutput { report, results })
+    Ok(SimulationOutput {
+        report,
+        results,
+        milestone_summaries: Default::default(),
+    })
 }
 
 fn simulate_single_run<R: Rng + ?Sized>(

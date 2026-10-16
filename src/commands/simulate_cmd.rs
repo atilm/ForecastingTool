@@ -1,9 +1,9 @@
 use crate::commands::base_commands::SimulateProjectArgs;
 use crate::commands::report_format::format_simulation_report;
 use crate::commands::{CommandError, CommandResult};
+use crate::services::milestone_tracking::update_milestones_file;
 use crate::services::parsing::histogram_yaml::serialize_histogram_to_yaml_file;
 use crate::services::plotting::histogram::write_histogram_png;
-use crate::services::plotting::milestone_plot::write_milestone_plot_png;
 use crate::services::project_simulation::project_simulation::simulate_project_from_yaml_file_with_creation_rate;
 use crate::services::util::histogram::Histogram;
 use std::ffi::OsString;
@@ -42,6 +42,7 @@ pub fn simulate_command(args: SimulateProjectArgs) -> CommandResult {
         start_date,
         calendar_dir,
         story_point_creation_rate,
+        milestones_file,
     } = args;
 
     let simulation = simulate_project_from_yaml_file_with_creation_rate(
@@ -52,6 +53,14 @@ pub fn simulate_command(args: SimulateProjectArgs) -> CommandResult {
         story_point_creation_rate,
     )
     .map_err(CommandError::SimulateProject)?;
+
+    let milestones_path =
+        milestones_file.unwrap_or_else(|| Path::new(&input).with_file_name("milestones.yaml"));
+    update_milestones_file(
+        &milestones_path,
+        &simulation,
+        chrono::Local::now().date_naive(),
+    )?;
 
     let (histogram_path, histogram_yaml_path) = histogram_paths_from_output(&output);
     let mut messages = Vec::new();
@@ -81,17 +90,15 @@ pub fn simulate_command(args: SimulateProjectArgs) -> CommandResult {
         )),
     }
 
-    let milestone_plot_path = format!("{output}.milestones.png");
-    match write_milestone_plot_png(&milestone_plot_path, &simulation) {
-        Ok(()) => messages.push(format!("Milestone plot written to {milestone_plot_path}")),
-        Err(error) => messages.push(format!("Warning: failed to write milestone plot: {error}")),
-    }
-
     let yaml =
         serde_yaml::to_string(&simulation.report).map_err(CommandError::SerializeSimulation)?;
     std::fs::write(&output, yaml).map_err(CommandError::WriteOutput)?;
 
     messages.insert(0, format!("Simulation result written to {output}"));
+    messages.push(format!(
+        "Milestone tracking written to {}",
+        milestones_path.display()
+    ));
     messages.insert(0, format_simulation_report(&simulation.report));
 
     Ok(messages)

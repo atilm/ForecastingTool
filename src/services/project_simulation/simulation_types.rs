@@ -61,6 +61,7 @@ pub struct WorkPackageSimulation {
 pub struct SimulationOutput {
     pub report: SimulationReport,
     pub results: Vec<f32>,
+    pub milestone_summaries: std::collections::BTreeMap<String, Option<String>>,
 }
 
 #[cfg(test)]

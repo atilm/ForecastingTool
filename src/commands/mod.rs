@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 use crate::services::data_source::DataSourceError;
+use crate::services::milestone_tracking::MilestoneTrackingError;
 use crate::services::plotting::burndown_plot::BurndownPlotError;
 use crate::services::plotting::estimate_gantt::EstimateGanttError;
 use crate::services::plotting::project_flow_diagram::ProjectDiagramError;
@@ -53,6 +54,8 @@ pub enum CommandError {
     PlotThroughput(#[source] ThroughputPlotError),
     #[error("failed to simulate project: {0}")]
     SimulateProject(#[source] ProjectSimulationError),
+    #[error("failed to update milestone tracking: {0}")]
+    MilestoneTracking(#[from] MilestoneTrackingError),
     #[error("failed to serialize simulation output: {0}")]
     SerializeSimulation(#[source] serde_yaml::Error),
     #[error("failed to simulate by throughput: {0}")]

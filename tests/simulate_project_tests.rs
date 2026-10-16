@@ -3,6 +3,9 @@ use predicates::prelude::*;
 use std::fs;
 use std::path::Path;
 
+#[path = "simulate_project/milestones.rs"]
+mod milestones;
+
 #[test]
 fn simulate_project_writes_output_and_histogram() {
     let report_yaml = r#"

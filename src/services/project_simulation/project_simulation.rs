@@ -287,7 +287,18 @@ fn run_simulation_with_creation_rate<R: ThreePointSampler + ?Sized>(
         .map(|date| calculate_days(start_date, *date))
         .collect();
 
-    Ok(SimulationOutput { report, results })
+    let milestone_summaries = project
+        .work_packages
+        .iter()
+        .filter(|issue| issue.is_milestone())
+        .filter_map(|issue| Some((issue.issue_id.as_ref()?.id.clone(), issue.summary.clone())))
+        .collect();
+
+    Ok(SimulationOutput {
+        report,
+        results,
+        milestone_summaries,
+    })
 }
 
 fn work_package_simulation(

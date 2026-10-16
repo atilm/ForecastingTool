@@ -175,6 +175,9 @@ pub struct SimulateProjectArgs {
     /// Daily rate with which story points are created. Per calendar day, without taking into account weekends or holidays.
     #[arg(short = 'r', long, default_value_t = 0.0, value_parser = parse_story_point_creation_rate)]
     pub story_point_creation_rate: f32,
+    /// Milestone tracking YAML file (defaults to milestones.yaml beside the input)
+    #[arg(long)]
+    pub milestones_file: Option<std::path::PathBuf>,
 }
 
 #[derive(Args)]
@@ -244,9 +247,35 @@ mod tests {
             assert_eq!(simulate.start_date, default_start_date());
             assert_eq!(simulate.iterations, 10000);
             assert_eq!(simulate.story_point_creation_rate, 0.0);
+            assert_eq!(simulate.milestones_file, None);
         } else {
             panic!("expected simulate project command");
         }
+    }
+
+    #[test]
+    fn simulate_project_parses_milestones_file() {
+        let args = CliArgs::parse_from([
+            "forecasts",
+            "simulate",
+            "project",
+            "-i",
+            "input.yaml",
+            "-o",
+            "output.yaml",
+            "--milestones-file",
+            "relative/tracking.yaml",
+        ]);
+        let Commands::Simulate {
+            command: SimulateCommands::Project(simulate),
+        } = args.command
+        else {
+            panic!("expected simulate project command");
+        };
+        assert_eq!(
+            simulate.milestones_file,
+            Some("relative/tracking.yaml".into())
+        );
     }
 
     #[test]
