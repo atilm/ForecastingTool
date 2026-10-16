@@ -679,8 +679,8 @@ mod tests {
         let wp2 = work_packages.iter().find(|wp| wp.id == "SP-2").unwrap();
 
         assert_eq!(wp0.percentiles.p0.end_date, on_date(2026, 1, 8));
-        assert_eq!(wp1.percentiles.p0.end_date, on_date(2026, 1, 13));
-        assert_eq!(wp2.percentiles.p0.end_date, on_date(2026, 1, 19));
+        assert_eq!(wp1.percentiles.p0.end_date, on_date(2026, 1, 12));
+        assert_eq!(wp2.percentiles.p0.end_date, on_date(2026, 1, 16));
     }
 
     #[test]

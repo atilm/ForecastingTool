@@ -75,6 +75,16 @@ pub fn critical_path_method_with_creation<R: ThreePointSampler + ?Sized>(
         HashMap::with_capacity(nodes_count);
     let mut result_nodes: HashMap<String, ResultNode> = HashMap::with_capacity(nodes_count);
 
+    // Capacity left over on a node's earliest_finish date, so a sole successor can
+    // resume on the same day instead of always starting on the next calendar day.
+    let mut leftover_capacity_by_id: HashMap<String, f32> = HashMap::with_capacity(nodes_count);
+    let mut successor_counts: HashMap<String, usize> = HashMap::with_capacity(nodes_count);
+    for node in &sorted_nodes {
+        for dep in &node.dependencies {
+            *successor_counts.entry(dep.clone()).or_insert(0) += 1;
+        }
+    }
+
     let mut high_water_date = project_start;
     let mut accumulated_points = 0.0;
     let mut generated_count = 0usize;
@@ -97,13 +107,37 @@ pub fn critical_path_method_with_creation<R: ThreePointSampler + ?Sized>(
                 .unwrap_or(project_start)
         };
 
-        let earliest_finish = if let Some(end_date) = node.end_date {
-            end_date
+        // This is only done for nodes that have exactly one dependency and no fixed start date.
+        // Here we calculate how much of the capacity on the current node'sstart date has already been consumed by the sole dependency.
+        let already_consumed_on_start = calendar
+            .filter(|_| node.start_date.is_none() && node.dependencies.len() == 1)
+            .and_then(|cal| {
+                let dep_id = &node.dependencies[0];
+                if successor_counts.get(dep_id).copied().unwrap_or(0) != 1 {
+                    return None;
+                }
+                let dep_finish = *earliest_finish_dates.get(dep_id)?;
+                (dep_finish == earliest_start).then(|| {
+                    let leftover = leftover_capacity_by_id.get(dep_id).copied().unwrap_or(0.0);
+                    (cal.get_capacity(earliest_start) - leftover).max(0.0)
+                })
+            })
+            .unwrap_or(0.0);
+
+        let (earliest_finish, leftover_capacity) = if let Some(end_date) = node.end_date {
+            let leftover = calendar.map(|cal| cal.get_capacity(end_date)).unwrap_or(0.0);
+            (end_date, leftover)
         } else {
-            calculate_end_date(earliest_start, node.duration, calendar)?
+            calculate_end_date(
+                earliest_start,
+                node.duration,
+                already_consumed_on_start,
+                calendar,
+            )?
         };
 
         earliest_finish_dates.insert(node.id.clone(), earliest_finish);
+        leftover_capacity_by_id.insert(node.id.clone(), leftover_capacity);
 
         result_nodes.insert(
             node.id.clone(),
@@ -139,6 +173,9 @@ pub fn critical_path_method_with_creation<R: ThreePointSampler + ?Sized>(
                     } else {
                         vec![generated_id(generated_count - 1, &original_ids)]
                     };
+                    for dep in &dependencies {
+                        *successor_counts.entry(dep.clone()).or_insert(0) += 1;
+                    }
                     let estimate = Estimate::StoryPoint(StoryPointEstimate {
                         estimate: Some(points),
                     });
@@ -250,20 +287,31 @@ fn generated_id(sequence: usize, original_ids: &std::collections::HashSet<String
     }
 }
 
+// Returns the earliest finish date together with the calendar capacity still
+// unused on that date, so a sole successor can carry it over.
 fn calculate_end_date(
     start_date: chrono::NaiveDate,
     duration_days: f32,
+    already_consumed_on_start_date: f32,
     calendar: Option<&TeamCalendar>,
-) -> Result<chrono::NaiveDate, CriticalPathMethodError> {
+) -> Result<(chrono::NaiveDate, f32), CriticalPathMethodError> {
     if duration_days <= 0.0 {
-        return Ok(start_date);
+        let leftover = calendar
+            .map(|cal| (cal.get_capacity(start_date) - already_consumed_on_start_date).max(0.0))
+            .unwrap_or(0.0);
+        return Ok((start_date, leftover));
     }
 
     if let Some(calendar) = calendar {
-        end_date_from_capacity_days(start_date, duration_days, calendar)
+        end_date_from_capacity_days(
+            start_date,
+            duration_days,
+            already_consumed_on_start_date,
+            calendar,
+        )
     } else {
         let whole_days = duration_days.ceil() as i64;
-        Ok(start_date + chrono::Duration::days(whole_days))
+        Ok((start_date + chrono::Duration::days(whole_days), 0.0))
     }
 }
 
@@ -287,33 +335,46 @@ fn calculate_start_date(
 fn end_date_from_capacity_days(
     start_date: chrono::NaiveDate,
     days_at_full_capacity: f32,
+    already_consumed_on_start_date: f32,
     calendar: &TeamCalendar,
-) -> Result<chrono::NaiveDate, CriticalPathMethodError> {
-    if days_at_full_capacity <= 0.0 {
-        return Ok(start_date);
-    }
-
+) -> Result<(chrono::NaiveDate, f32), CriticalPathMethodError> {
     let mut remaining_capacity = days_at_full_capacity;
     let mut date = start_date;
+    let mut already_consumed = already_consumed_on_start_date;
     for _ in 0..(365 * 200) {
-        let todays_capacity_fraction = calendar.get_capacity(date);
-        if todays_capacity_fraction > 0.0 {
-            remaining_capacity -= todays_capacity_fraction;
+        // Only the start date can have capacity already claimed by a predecessor.
+        let available_today = (calendar.get_capacity(date) - already_consumed).max(0.0);
+        already_consumed = 0.0;
+
+        if available_today > 0.0 {
+            if remaining_capacity <= available_today {
+                let leftover = available_today - remaining_capacity;
+                // A day that is fully used up keeps the historical "next working day"
+                // convention; only a meaningfully unused remainder is carried over.
+                if leftover <= f32::EPSILON * 8.0 {
+                    let next_date =
+                        next_non_zero_capacity_date(date + chrono::Duration::days(1), calendar)?;
+                    return Ok((next_date, calendar.get_capacity(next_date)));
+                }
+                return Ok((date, leftover));
+            }
+            remaining_capacity -= available_today;
         }
 
         date += chrono::Duration::days(1);
-
-        if remaining_capacity <= 0.0 {
-            let next_non_zero_capacity_date = (0..365 * 200)
-                .map(|i| date + chrono::Duration::days(i))
-                .find(|d| calendar.get_capacity(*d) > 0.0)
-                .unwrap_or(date); // If we can't find a non-zero capacity date within a reasonable time frame, just return the current date
-
-            return Ok(next_non_zero_capacity_date);
-        }
     }
 
     Err(CriticalPathMethodError::InsufficientCalendarCapacity)
+}
+
+fn next_non_zero_capacity_date(
+    from: chrono::NaiveDate,
+    calendar: &TeamCalendar,
+) -> Result<chrono::NaiveDate, CriticalPathMethodError> {
+    (0..365 * 200)
+        .map(|i| from + chrono::Duration::days(i))
+        .find(|d| calendar.get_capacity(*d) > 0.0)
+        .ok_or(CriticalPathMethodError::InsufficientCalendarCapacity)
 }
 
 fn start_date_from_capacity_days(
